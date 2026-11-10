@@ -51,7 +51,7 @@ The events lane's verdict and phase for each contract it owns (events-integratio
 | Several SCFD subscriptions per catalog, managed through a sources API | feature | P2; sources are settings today (`Events:Intake:Sources:N:*`, two on dev) |
 | Webhook push from SCFD | feature | P2, waits for a consumer that needs it; events-integration #6 |
 | Widen the stored mapping version past 64 characters | engineering | with SCFD's AI step: a model stamp added to `{schema, norm, rules, parser}` would be cut (`ScfdEventMapper.MappingVersion`); services sweep #9 |
-| Swap Events' BFF session reader for the fe sdk's strategy | engineering | waits for the fe sdk's `BffOrganization` to carry `name` and `slug`; with the shared console shell (events-integration #59) |
+| Swap Events' BFF session reader for the fe sdk's strategy | engineering | unblocked by fe sdk `0.0.44` (`BffOrganization` carries `name` and `slug`; a hand-built `BffUser` in a fake session adds both); done with the console's UI round, which adopts the shared `AppFrame` (events-integration #59; fe sdk `engineering/architecture/app-frame-migration.md`) |
 | Operator pause, resume, replay from a cursor and resync | feature | P2; P1 exposes cursor lag and quarantine; events-integration #33 |
 
 ## Catalog
