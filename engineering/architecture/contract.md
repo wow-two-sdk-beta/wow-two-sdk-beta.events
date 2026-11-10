@@ -81,7 +81,7 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 | Form | Implementation | Wire |
 |---|---|---|
 | 1 | `Module*Broker` (Module), over PostgreSQL schema `events` | in process |
-| 2/3 | `Api*Broker` (Client), `AddEventsClient()` plus the be sdk's `AddOAuth2TokenExchange` or `AddOAuth2ClientCredentials` on the returned builder | the HTTP mirror above |
+| 2/3 | `Api*Broker` (Client), `AddEventsClient()` with `Identity` set (the person's token exchanged, else the service's own; `EventsClientCalls.AsService()`), or without it plus the be sdk's `AddOAuth2TokenExchange` or `AddOAuth2ClientCredentials` on the returned builder | the HTTP mirror above |
 | fe | `createEventsClient` (`fe-events/kit`) | the same routes, under the host's proxy prefix |
 
 - Conformance: one suite per broker in `packages/Testing`, run against the module, the client against the service

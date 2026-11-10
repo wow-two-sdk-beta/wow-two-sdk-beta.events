@@ -11,25 +11,29 @@ dotnet add package WoW2.Sdk.Beta.Be.Events.Client --prerelease
 ```
 
 ```csharp
-// A backend acting for the person on the current request (RFC 8693 token exchange)
-services.AddEventsClient(options => options.BaseAddress = new Uri("https://events.example.com/"))
-    .AddOAuth2TokenExchange(token =>
+// One call: the person's token exchanged for Events' audience when a person is on the call (RFC 8693; under the
+// Identity BFF, the signed-in session's token), else the service's own client-credentials token
+services.AddEventsClient(options =>
+{
+    options.BaseAddress = new Uri("https://events.example.com/");
+    options.Identity = new()
     {
-        token.TokenEndpoint = new Uri("https://identity.example.com/connect/token");
-        token.ClientId = "desk";
-        token.ClientSecret = configuration["Events:ClientSecret"];
-        token.Resource = "https://events.example.com/";            // the service root, with its trailing slash
-        token.Scope = "events.read events.track";
-    });
+        TokenEndpoint = new Uri("https://identity.example.com/connect/token"),
+        ClientId = "desk",
+        ClientSecret = configuration["Identity:Client:ClientSecret"]!,
+        // Resource defaults to the service root with its trailing slash; Scope to what Identity grants the client
+    };
+});
 
-// A job acting as the service itself
-services.AddEventsClient(options => options.BaseAddress = new Uri("https://events.example.com/"))
-    .AddOAuth2ClientCredentials(token => { /* the same settings */ });
+// Work a person started that runs later acts as the service, never with their token
+using (EventsClientCalls.AsService())
+    await catalogs.GetAsync("ocharo-fashion", cancellationToken);
 ```
 
-- one named `HttpClient` (`EventsClientConstants.HttpClientName`, `events`) carries every call; the client sends no
-  credential of its own, so the returned builder takes the be sdk's token handler, resilience handlers or a test
-  server's handler
+- one named `HttpClient` (`EventsClientConstants.HttpClientName`, `events`) carries every call; with `Identity`, the
+  token clients `events-person` and `events-service` end in its pipeline, so its handlers serve every call
+- without `Identity` the client sends no credential of its own: chain the be sdk's `AddOAuth2TokenExchange` or
+  `AddOAuth2ClientCredentials` on the returned builder, as before
 - the wire is the contract's HTTP mirror: `{ "data": … }` answers, web JSON with camelCase string enums (`movedOnline`,
   `inviteOnly`), query names as the query records' properties in camelCase, days as `yyyy-MM-dd`
 - a failure comes back by its status: 400 `Validation`, 401 `Unauthorized`, 403 `Forbidden`, 404 `NotFound`, 409

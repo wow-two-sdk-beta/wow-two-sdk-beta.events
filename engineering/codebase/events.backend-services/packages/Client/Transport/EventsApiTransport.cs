@@ -1,9 +1,11 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using WoW.Two.Sdk.Beta.Be.Foundation.Errors;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 using WoW.Two.Sdk.Beta.Be.Foundation.Serialization;
 using WoW.Two.Sdk.Beta.Be.Http.Auth.OAuth2;
+using WoW.Two.Sdk.Beta.Be.Http.Auth.OAuth2TokenExchange;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Client.Transport;
 
@@ -12,7 +14,9 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Client.Transport;
 /// <remarks>An unreachable service returns <see cref="AppErrorType.ExternalUnavailable"/>; a token Identity refuses to the
 /// consumer's token handler returns <see cref="AppErrorType.ExternalUnauthorized"/>.</remarks>
 /// <param name="clients">Creates the named client.</param>
-internal sealed class EventsApiTransport(IHttpClientFactory clients)
+/// <param name="options">The client's settings: whether it takes Identity tokens itself.</param>
+/// <param name="subjects">Finds the person on the current call.</param>
+internal sealed class EventsApiTransport(IHttpClientFactory clients, IOptions<EventsClientOptions> options, IOAuth2SubjectTokenSource subjects)
 {
     /// <summary>Gets the wire's JSON options: the be sdk preset the service writes with — web defaults, camelCase string
     /// enums, nulls left out.</summary>
@@ -46,6 +50,24 @@ internal sealed class EventsApiTransport(IHttpClientFactory clients)
         return await ReadAsync<T>(request, cancellationToken);
     }
 
+    /// <summary>Picks the client a call goes through: the bare client without Identity, for the consumer's own token
+    /// handler; with it, the person's exchanged token when a person is on the call, else the service's own token, always
+    /// under <see cref="EventsClientCalls.AsService"/>.</summary>
+    /// <remarks>The subject token is only checked for here; the be sdk's exchange handler reads it again and owns caching.</remarks>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>The named client's name.</returns>
+    internal async ValueTask<string> ChooseClientAsync(CancellationToken cancellationToken)
+    {
+        if (options.Value.Identity is null)
+            return EventsClientConstants.HttpClientName;
+        if (EventsClientCalls.IsService)
+            return EventsClientConstants.ServiceHttpClientName;
+
+        return await subjects.GetAsync(cancellationToken) is null
+            ? EventsClientConstants.ServiceHttpClientName
+            : EventsClientConstants.PersonHttpClientName;
+    }
+
     /// <summary>Sends a call and hands back a successful answer, which the caller disposes.</summary>
     /// <param name="request">The request.</param>
     /// <param name="cancellationToken">The token that cancels the call.</param>
@@ -55,7 +77,7 @@ internal sealed class EventsApiTransport(IHttpClientFactory clients)
         ArgumentNullException.ThrowIfNull(request);
         try
         {
-            var response = await clients.CreateClient(EventsClientConstants.HttpClientName)
+            var response = await clients.CreateClient(await ChooseClientAsync(cancellationToken))
                 .SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken);
             if (response.IsSuccessStatusCode)
                 return Result<HttpResponseMessage>.Ok(response);

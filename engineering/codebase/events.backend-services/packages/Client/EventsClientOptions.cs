@@ -7,6 +7,11 @@ public sealed class EventsClientOptions
     /// audience Events accepts, so a token handler asks for it as the resource.</summary>
     public Uri? BaseAddress { get; set; }
 
+    /// <summary>Gets or sets the Identity client the Events client gets its tokens from: the person's token exchanged
+    /// for one with Events' audience when a person is on the call, else the service's own client-credentials token; none
+    /// sends no credential, for a handler the consumer adds to the returned builder.</summary>
+    public EventsClientIdentityOptions? Identity { get; set; }
+
     /// <summary>Returns the service's root URL with its trailing slash, as calls resolve against it.</summary>
     /// <param name="baseAddress">The configured root URL.</param>
     /// <returns>The root URL ending in <c>/</c>.</returns>
