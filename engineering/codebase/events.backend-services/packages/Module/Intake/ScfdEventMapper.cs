@@ -246,16 +246,23 @@ internal static partial class ScfdEventMapper
             : new EventPlace { Venue = venue, Address = address, City = city, Region = region, Country = country, Latitude = latitude, Longitude = longitude };
     }
 
+    /// <summary>Reads a holder's coordinates, as numbers or as numeric text (schema.org's GeoCoordinates allows both;
+    /// Afisha's reader writes text).</summary>
     private static (double? Latitude, double? Longitude) Geo(JsonElement holder)
     {
         if (!holder.TryGetProperty("geo", out var geo) || geo.ValueKind != JsonValueKind.Object
-            || !geo.TryGetProperty("latitude", out var latitude) || latitude.ValueKind != JsonValueKind.Number
-            || !geo.TryGetProperty("longitude", out var longitude) || longitude.ValueKind != JsonValueKind.Number)
+            || Coordinate(geo, "latitude") is not { } lat || Coordinate(geo, "longitude") is not { } lon)
             return (null, null);
 
-        var (lat, lon) = (latitude.GetDouble(), longitude.GetDouble());
         return lat is >= -90 and <= 90 && lon is >= -180 and <= 180 ? (lat, lon) : (null, null);
     }
+
+    private static double? Coordinate(JsonElement geo, string name) =>
+        !geo.TryGetProperty(name, out var value) ? null
+        : value.ValueKind == JsonValueKind.Number ? value.GetDouble()
+        : value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            && double.IsFinite(parsed) ? parsed
+        : null;
 
     private static List<EventOffer> Offers(JsonElement data)
     {

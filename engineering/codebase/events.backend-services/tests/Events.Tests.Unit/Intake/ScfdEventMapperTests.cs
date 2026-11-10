@@ -24,58 +24,88 @@ public sealed class ScfdEventMapperTests
         facts.Ends.Should().Be(new EventWhen { Value = "2026-11", Precision = DatePrecision.Month, Certainty = DateCertainty.Announced });
     }
 
-    /// <summary>The live Afisha record on dev (2026-11-10), before and after SCFD turned its enums into strings (harvest
-    /// v0.1.12), in its real shape: SCFD's mentions name the venue and the address, the city lives only in schema.org's
-    /// addressLocality, and nothing names a country; second precision with an offset, no organizer.</summary>
-    /// <param name="venueKind">The venue mention's kind: LocationKind's number, or its label.</param>
-    /// <param name="addressKind">The address mention's kind.</param>
-    [Theory]
-    [InlineData("4", "5")]
-    [InlineData("\"venue\"", "\"address\"")]
-    public void TryMap_ShouldReadTheLiveAfishaRecord_WithNumberOrStringEnums(string venueKind, string addressKind)
+    /// <summary>The live Afisha place on dev before SCFD's city fix (parser afisha-html@3, sent by the scfd lane on
+    /// 2026-11-10): the mentions name the venue and the whole address, schema.org's address is one plain string, and
+    /// nothing names a city or a country. The mentions keep <c>geo: null</c>; schema.org's coordinates are strings.</summary>
+    internal const string LivePlaceBefore = """
+        "place":{"mentions":[{"text":"Дворец творчества молодёжи","kind":"venue","geo":null},{"text":"Ташкент, просп. Мустакиллик, 2","kind":"address","geo":null}],"geo":{"latitude":41.3153,"longitude":69.2727}},
+        "schemaOrg":{"@type":"Event","location":{"@type":"Place","name":"Дворец творчества молодёжи","address":"Ташкент, просп. Мустакиллик, 2","geo":{"@type":"GeoCoordinates","latitude":"41.3153000","longitude":"69.2727000"}}}
+        """;
+
+    /// <summary>The same place after SCFD's fix (parser afisha-html@4, from the adapter's code and tests, not yet seen on
+    /// dev): city and street mentions replace the address mention, and schema.org's address becomes a PostalAddress.</summary>
+    internal const string LivePlaceAfter = """
+        "place":{"mentions":[{"text":"Дворец творчества молодёжи","kind":"venue","geo":null},{"text":"Ташкент","kind":"city","geo":null},{"text":"просп. Мустакиллик, 2","kind":"street","geo":null}],"geo":{"latitude":41.3153,"longitude":69.2727}},
+        "schemaOrg":{"@type":"Event","location":{"@type":"Place","name":"Дворец творчества молодёжи","address":{"@type":"PostalAddress","addressLocality":"Ташкент","streetAddress":"просп. Мустакиллик, 2"},"geo":{"@type":"GeoCoordinates","latitude":"41.3153000","longitude":"69.2727000"}}}
+        """;
+
+    /// <summary>The live record before the fix stores no city, and the address is never split to find one; no country
+    /// is invented either: the source's <c>DefaultCountry</c> adds UZ later.</summary>
+    [Fact]
+    public void TryMap_ShouldReadTheLiveAfishaPlace_BeforeTheCityFix()
     {
-        var facts = Map($$$$"""
-            {"schema":"wow2.event.v1","title":"Показ мод The Fashion Show Line 2026",
-             "starts":{"value":"2026-11-21T17:00+05:00","precision":"second"},
-             "postedAt":{"value":"2026-10-14","precision":"day"},
-             "organizer":null,
-             "place":{"mentions":[
-               {"kind":{{{{venueKind}}}},"text":"Дворец творчества молодёжи"},
-               {"kind":{{{{addressKind}}}},"text":"ул. Мустакиллик, 2"}],
-               "geo":{"latitude":41.31,"longitude":69.28}},
-             "offers":[{"min":100000,"currency":"UZS"}],
-             "schemaOrg":{"@type":"Event","location":{"@type":"Place","name":"Дворец творчества молодёжи",
-               "address":{"@type":"PostalAddress","addressLocality":"Ташкент","streetAddress":"ул. Мустакиллик, 2"}}},
-             "mapping":{"schema":"wow2.event.v1","norm":"norm@1","rules":"rules@4","parser":"schema.org.event"}}
-            """);
+        var facts = Map(LiveRecord(LivePlaceBefore));
 
         facts.Starts.Should().Be(new EventWhen { Value = "2026-11-21T17:00", Precision = DatePrecision.Minute, Certainty = DateCertainty.Announced });
         facts.Organizer.Should().BeNull();
         facts.Place.Should().BeEquivalentTo(new EventPlace
         {
-            Venue = "Дворец творчества молодёжи", Address = "ул. Мустакиллик, 2", City = "Ташкент", Latitude = 41.31, Longitude = 69.28,
-        }, "the city comes from schema.org, and no country is invented: the source's DefaultCountry adds UZ later");
+            Venue = "Дворец творчества молодёжи", Address = "Ташкент, просп. Мустакиллик, 2", Latitude = 41.3153, Longitude = 69.2727,
+        });
         facts.Images.Should().BeEmpty("sourced media stays evidence (events-integration #50)");
     }
 
-    /// <summary>Afisha's reader puts the city only in schema.org's addressLocality; SCFD's mentions carry the venue and
-    /// the street (events-dev, 2026-11-10: the published event lost its city).</summary>
     [Fact]
-    public void TryMap_ShouldTakeTheCity_FromSchemaOrgsLocation_WhenNoMentionNamesIt()
+    public void TryMap_ShouldReadTheLiveAfishaPlace_AfterTheCityFix()
+    {
+        var facts = Map(LiveRecord(LivePlaceAfter));
+
+        facts.Place.Should().BeEquivalentTo(new EventPlace
+        {
+            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Ташкент", Latitude = 41.3153, Longitude = 69.2727,
+        });
+    }
+
+    /// <summary>SCFD's older wire wrote a mention's kind as LocationKind's number (City 0, Street 3, Venue 4, Address 5).</summary>
+    [Fact]
+    public void TryMap_ShouldReadMentionKinds_AsNumbers()
     {
         var facts = Map("""
-            {"schema":"wow2.event.v1","title":"Показ мод The Fashion Show Line 2026",
-             "place":{"mentions":[{"kind":"venue","text":"Дворец творчества молодёжи"},{"kind":"address","text":"ул. Мустакиллик, 2"}]},
+            {"schema":"wow2.event.v1","title":"Show",
+             "place":{"mentions":[{"kind":4,"text":"Venue"},{"kind":0,"text":"Ташкент"},{"kind":3,"text":"Street 2"},{"kind":5,"text":"Whole address"}]}}
+            """);
+
+        facts.Place.Should().BeEquivalentTo(new EventPlace { Venue = "Venue", Address = "Whole address", City = "Ташкент" });
+    }
+
+    /// <summary>A source's own schema.org location fills what no mention names: the city from addressLocality, and its
+    /// coordinates, which schema.org may write as text.</summary>
+    [Fact]
+    public void TryMap_ShouldFillTheCityAndCoordinates_FromSchemaOrgsLocation()
+    {
+        var facts = Map("""
+            {"schema":"wow2.event.v1","title":"Show",
+             "place":{"mentions":[{"kind":"venue","text":"Дворец творчества молодёжи"}]},
              "schemaOrg":{"@type":"Event","location":{"@type":"Place","name":"Дворец творчества молодёжи",
-               "address":{"@type":"PostalAddress","addressLocality":"Ташкент","streetAddress":"ул. Мустакиллик, 2"},
-               "geo":{"latitude":41.31,"longitude":69.28}}}}
+               "address":{"@type":"PostalAddress","addressLocality":"Ташкент","streetAddress":"просп. Мустакиллик, 2"},
+               "geo":{"@type":"GeoCoordinates","latitude":"41.3153000","longitude":"69.2727000"}}}}
             """);
 
         facts.Place.Should().BeEquivalentTo(new EventPlace
         {
-            Venue = "Дворец творчества молодёжи", Address = "ул. Мустакиллик, 2", City = "Ташкент", Latitude = 41.31, Longitude = 69.28,
+            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Ташкент", Latitude = 41.3153, Longitude = 69.2727,
         });
     }
+
+    private static string LiveRecord(string place) => $$$"""
+        {"schema":"wow2.event.v1","title":"Показ мод The Fashion Show Line 2026",
+         "starts":{"value":"2026-11-21T17:00+05:00","precision":"second"},
+         "postedAt":{"value":"2026-10-14","precision":"day"},
+         "organizer":null,
+         "offers":[{"min":100000,"currency":"UZS"}],
+         {{{place}}},
+         "mapping":{"schema":"wow2.event.v1","norm":"norm@1","rules":"rules@4","parser":"afisha-html@3"}}
+        """;
 
     [Theory]
     [InlineData("""{"value":"2026","precision":"year"}""", "2026", DatePrecision.Year)]

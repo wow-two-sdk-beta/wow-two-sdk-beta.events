@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
@@ -69,6 +70,34 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         var published = (await EventsAsync(slug, new EventQuery())).Single();
         published.Facts.Title.Values.Should().ContainSingle().Which.Should().Be("Show, corrected title");
         published.PendingChanges.Should().Be(0);
+    }
+
+    /// <summary>The live Afisha event (events-dev, 2026-11-10): its classifier published it from a record that names no
+    /// city; SCFD's next revision adds a city mention, and the event takes it with no person's step and nothing pending.
+    /// The place parts are the live record's, before and after SCFD's fix, as the scfd lane sent them.</summary>
+    [Fact]
+    public async Task Intake_ShouldTakeANewRevisionsCity_WhenTheClassifierPublishedTheEvent()
+    {
+        var (slug, source) = await SourceAsync(auto => { auto.Review = "auto"; auto.DefaultCountry = "UZ"; });
+        var post = Guid.NewGuid();
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Показ мод The Fashion Show Line 2026", edit: data => Place(data, LivePlaceBefore)));
+        await fixture.PollAsync(source);
+        var before = (await EventsAsync(slug, new EventQuery())).Single();
+
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 2, "Показ мод The Fashion Show Line 2026", type: "post.changed", edit: data => Place(data, LivePlaceAfter)));
+        await fixture.PollAsync(source);
+
+        before.Facts.Place!.City.Should().BeNull();
+        before.Facts.Place.Address.Should().Be("Ташкент, просп. Мустакиллик, 2");
+        var after = (await EventsAsync(slug, new EventQuery())).Single();
+        after.Id.Should().Be(before.Id);
+        after.Review.Should().Be(EventReviewState.Published);
+        after.ReviewedBy.Should().StartWith(IntakeVerdict.ClassifierActor);
+        after.PendingChanges.Should().Be(0);
+        after.Facts.Place.Should().BeEquivalentTo(new EventPlace
+        {
+            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Ташкент", Country = "UZ", Latitude = 41.3153, Longitude = 69.2727,
+        });
     }
 
     [Fact]
@@ -202,6 +231,23 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
 
         (await EventsAsync(slug, new EventQuery())).Should().BeEmpty();
         (await EventsAsync(slug, new EventQuery { Review = EventReviewState.Candidate })).Single().ReviewedBy.Should().BeNull();
+    }
+
+    private const string LivePlaceBefore = """
+        {"place":{"mentions":[{"text":"Дворец творчества молодёжи","kind":"venue","geo":null},{"text":"Ташкент, просп. Мустакиллик, 2","kind":"address","geo":null}],"geo":{"latitude":41.3153,"longitude":69.2727}},
+         "schemaOrg":{"@type":"Event","location":{"@type":"Place","name":"Дворец творчества молодёжи","address":"Ташкент, просп. Мустакиллик, 2","geo":{"@type":"GeoCoordinates","latitude":"41.3153000","longitude":"69.2727000"}}}}
+        """;
+
+    private const string LivePlaceAfter = """
+        {"place":{"mentions":[{"text":"Дворец творчества молодёжи","kind":"venue","geo":null},{"text":"Ташкент","kind":"city","geo":null},{"text":"просп. Мустакиллик, 2","kind":"street","geo":null}],"geo":{"latitude":41.3153,"longitude":69.2727}},
+         "schemaOrg":{"@type":"Event","location":{"@type":"Place","name":"Дворец творчества молодёжи","address":{"@type":"PostalAddress","addressLocality":"Ташкент","streetAddress":"просп. Мустакиллик, 2"},"geo":{"@type":"GeoCoordinates","latitude":"41.3153000","longitude":"69.2727000"}}}}
+        """;
+
+    private static void Place(Dictionary<string, object?> data, string parts)
+    {
+        using var document = JsonDocument.Parse(parts);
+        data["place"] = document.RootElement.GetProperty("place").Clone();
+        data["schemaOrg"] = document.RootElement.GetProperty("schemaOrg").Clone();
     }
 
     private async Task<(string Slug, EventsIntakeSourceOptions Source)> SourceAsync(Action<EventsIntakeSourceOptions>? configure = null)
