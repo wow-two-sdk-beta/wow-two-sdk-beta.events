@@ -14,7 +14,8 @@ dotnetEnvironment: true
 # The dev check: once a dev rollout succeeds, the service's own image asks it for its health and its status over the
 # platform network. A pass lets auto-promote take the release. Each request carries the probe Host (localhost): a
 # target's AllowedHosts names its public hosts plus localhost, so the service's platform-network name in the URL
-# would answer 400 from host filtering.
+# would answer 400 from host filtering. The status carries the SCFD intake's health: a source whose last poll failed
+# (a refused token, a subscription that does not match its source) fails the check.
 verify:
   service: events
   command:
@@ -23,9 +24,9 @@ verify:
     - >-
       curl --fail --silent --show-error --max-time 10 --header "Host: localhost" --output /dev/null
       "$VERIFY_SERVICE_EVENTS/health"
-      && curl --fail --silent --show-error --max-time 10 --header "Host: localhost" --output /dev/null
-      "$VERIFY_SERVICE_EVENTS/api/system/status"
-      && echo "health and status answered"
+      && curl --fail --silent --show-error --max-time 10 --header "Host: localhost"
+      "$VERIFY_SERVICE_EVENTS/api/system/status" | grep -Eq '"intake":[{]"status":"(ok|off)"'
+      && echo "health, status and intake answered"
   timeout: 1m
 # One host role: the front door for the API and the review console, which signs reviewers in through Identity's BFF
 # (events-integration #30); a private console site would need a tailnet node, so the console shares `app`.
@@ -60,8 +61,8 @@ services:
         DatabaseSettings:ConnectionString: { required: true }
         Events:Auth:Audience: { type: url, required: true }
         Events:Auth:Issuers:0:Issuer: { type: url, required: true }
-        Events:Auth:Issuers:0:Audiences:0: { type: url, required: true }
-        Events:Console:Authority: { type: url }
+        Events:Auth:Issuers:0:Audiences:0: { from: Events:Auth:Audience }
+        Events:Console:Authority: { from: Events:Auth:Issuers:0:Issuer }
         Events:Console:ClientId: { default: events-console }
         Events:Console:ClientSecret: { secret: true }
         # The console's sign-in sessions live in the service's database (the be sdk's `distributed_cache` set) and its
@@ -123,3 +124,12 @@ services:
 migrate:
   - service: events
     command: [dotnet, Events.Api.dll, migrate]
+    timeout: 10m
+# The config check step (descriptor convention, § Config check): the image's own `config check` runs in a one-off
+# container with the settings the deploy applies, after migrate and before the first wave, and on every settings-only
+# apply, so a bad setting (an automatic source without its filter, an invalid intake value) stops the deploy with the
+# old release still serving. It starts no listener and writes nothing.
+configCheck:
+  - service: events
+    command: [dotnet, Events.Api.dll, config, check]
+    timeout: 2m

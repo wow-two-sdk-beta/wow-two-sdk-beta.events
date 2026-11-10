@@ -30,5 +30,6 @@ public sealed class SystemStatusTests(EventsApiFixture fixture)
         status.GetProperty("service").GetString().Should().Be("events");
         status.GetProperty("status").GetString().Should().Be("ok");
         status.GetProperty("version").GetString().Should().NotBeNullOrWhiteSpace().And.NotBe("unknown");
+        status.GetProperty("intake").GetProperty("status").GetString().Should().Be("off", "the test host configures no intake source");
     }
 }

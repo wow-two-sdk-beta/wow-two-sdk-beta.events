@@ -1,33 +1,13 @@
 using Events.Api.Configurations;
-using Events.Api.IntakeCheck;
-using Events.Api.Provisioning;
-using WoW.Two.Sdk.Beta.Be.Data;
+using WoW.Two.Sdk.Beta.Be.Meta;
 
-// The intake check: configuration only, before any web host is built (the dev done-when of the SCFD pull).
-if (IntakeCheckCommand.IsCommand(args))
-    return await IntakeCheckCommand.RunAsync(args, Console.Out);
-
-// Provisioning as the deploy's operator, before anyone signs in: `catalog ensure`, `workflow put` and `import`;
-// `event show` reads one stored event back.
-if (ProvisionCommand.IsCommand(args))
-    return await ProvisionCommand.RunAsync(args, Console.Out);
-if (ImportCommand.IsCommand(args))
-    return await ImportCommand.RunAsync(args, Console.Out);
-if (EventShowCommand.IsCommand(args))
-    return await EventShowCommand.RunAsync(args, Console.Out);
-
-// Build and configure the host.
-var builder = WebApplication.CreateBuilder(args);
-builder.Configure();
-
-// Build and configure the app.
-var app = builder.Build();
-if (MigrateCommand.IsCommand(args))
-    return await app.RunMigrateCommandAsync(args);
-await app.ConfigureAsync();
-
-// Run.
-await app.RunAsync();
-return 0;
+// Answer a verb, or build, configure and serve the host. The operator verbs run before any host boots, over the
+// configuration and the database only: `intake check`, `catalog ensure`, `workflow put`, `import` and `event show`;
+// `migrate` and `config check` are the be sdk's own.
+return await ServiceHost.RunAsync(
+    args,
+    builder => builder.Configure(),
+    app => app.ConfigureAsync(),
+    verbs => verbs.AddEventsVerbs());
 
 public partial class Program;

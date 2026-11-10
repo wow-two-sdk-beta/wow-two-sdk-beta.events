@@ -47,6 +47,7 @@ public static class EventsIntakeServiceCollectionExtensions
         services.AddHttpClient();
         services.TryAddSingleton<IObservationFeed, ScfdObservationFeed>();
         services.TryAddScoped<IntakeProcessor>();
+        services.TryAddScoped<IEventsIntakeHealth, IntakeHealthReader>();
         services.TryAddSingleton<IntakeSourcePoller>();
         services.AddHostedService<IntakePoller>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<EventsIntakeOptions>, EventsIntakeOptionsValidator>());

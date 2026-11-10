@@ -26,6 +26,11 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   `3` busy and a last `migrate-result` line. A deploy runs the bare `migrate` (apply, then seed) from the release image
   before the first service restarts, as `deploy.yml`'s `migrate:` item declares (pipelines v0.12.0); a deployed boot
   only verifies the levels and refuses to serve a database behind it. `migrate sets --json` needs no database.
+- Verbs and config check: `Program.cs` runs the be sdk's `ServiceHost`. Events' own verbs (`intake`, `catalog`,
+  `workflow`, `import`, `event`) run before any host boots; `migrate` and `config check` are the be sdk's. A deploy runs
+  `config check` (`deploy.yml`'s `configCheck:` item) after `migrate` and before the restart: exit `0` consistent, `1`
+  refused (an invalid setting, such as an `auto` source with the `filter` classifier and no `Filter`), `2` failed; the
+  last line is `config-result {json}`. A deployed boot runs the same checks and refuses to serve on a finding.
 - Callers: `Events:Auth:Audience` is the `app` site's URL with its trailing slash; `Events:Auth:Issuers:N:Issuer` and
   `Events:Auth:Issuers:N:Audiences:M` name each trusted Identity issuer (`MetadataAddress` or `Jwks` optional). Every
   route needs a token: a person's needs the scope and the permission, a service's the scope alone; no API keys.
@@ -46,19 +51,28 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   unreviewed and classifier-reviewed events again from their latest payload, so a better mapping reaches stored events
   once. `OwnerOrg` (required) pins the organization that must own the source's catalog: a catalog anyone else owns, or a
   source pinning none, pulls nothing. Intake status and `intake/poll` cover only sources whose catalogs the caller's
-  organization owns. The token request names exactly one `resource`, as
+  organization owns. Before each pull a source reads its subscription (`GET api/subscriptions/{id}`) and pulls nothing
+  unless it carries the source's `Filter` (when one is set), schema `wow2.event.v1` and state `active`; the mismatch is
+  recorded on the source's cursor row and logged (4107). A post's lifecycle follows SCFD's records: a listing gone
+  before its event holds an automatic, untracked event for a person (`source:{instance}`, "the source listing is gone
+  before the event") and releases it when the listing returns; a post merged into another carries its event to the
+  survivor, or merges into the survivor's own event when no person decided it and no organization tracks it. The token
+  request names exactly one `resource`, as
   Identity requires: `Resource`, else `BaseUrl` with its slash. The worker logs `Events intake: polling N source(s)` at
   start, one Information line per page polled (records stored, quarantined, more pages) and, for an `auto` source,
   one per backlog pass (held events checked, re-mapped, published); a failed page logs a
   Warning naming its kind (`token-refused:<oauth error>`, `scfd-status-<code>`, `scfd-unreachable`, `timeout`). The image answers `dotnet Events.Api.dll intake check [--source <name>]
   [--foreign-subscription <id>]` from configuration only (no database): per enabled source, its own token pulls its
-  subscription (`check=pull`, 200, with `records` and `event-records` of `wow2.event.v1`), is refused the tenants list
+  subscription (`check=pull`, 200, with `records` and `event-records` of `wow2.event.v1`), reads it and finds the
+  source's filter, schema and state (`check=subscription`, 200; `reason=filter-mismatch`, `schema-mismatch` or
+  `state-<state>` otherwise), is refused the tenants list
   (`check=tenants`, 403) and, with `--foreign-subscription`, finds no other tenant's subscription (`check=foreign`, 404,
   never 403). One `intake-check source=… check=… status=… expected=… ok=…` line per check, `reason=not-configured` for a
   source missing its base URL, subscription or token client, and a last `intake-check-result ok=…`; exit 0 when every
   check matches, else 1. The last line repeats every status, for runners that keep only it:
   `intake-check-result ok=… source=… token=<ok|token-refused:<oauth error>|unreachable|timeout|not-configured> pull=…
-  records=… event-records=… tenants=… foreign=…`. It prints no token, header, body, URL or host name.
+  records=… event-records=… subscription=<ok|mismatch|status> tenants=… foreign=…`. It prints no token, header, body,
+  URL or host name.
 - Provisioning, as the deploy's operator for the owner organization, through Wheelhouse Run after `migrate` (no web
   host, no token; idempotent; the last line carries the outcome):
   - `dotnet Events.Api.dll catalog ensure <slug> --owner-org <org id> [--owner-issuer <issuer>] [--name <name>]
@@ -85,7 +99,10 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   host, so its session needs no token for Events: the session carries the five `events.*` scopes, and the person's
   `events:*` permissions from the sign-in gate each action.
 - Dev check: after a dev rollout, `verify` curls `$VERIFY_SERVICE_EVENTS/health` and `/api/system/status` with
-  `Host: localhost`; `HostFilteringTests` replays the descriptor's requests.
+  `Host: localhost`, and refuses unless the status's `intake.status` is `ok` or `off`: a source whose last poll failed
+  (a refused token, a subscription that does not match) fails the check. The status names each active source as `ok`,
+  `failing` or `waiting` (before its first poll), never an error text or a host. `HostFilteringTests` replays the
+  descriptor's requests.
 - After each main image publish, `conformance.yml` boots the released image on PostgreSQL, migrates it and checks its
   status, its pages, a 401 from the API without a token and `migrate check`; the full conformance suite (module and
   client, tokens minted in process) runs with the tests on every build.
