@@ -53,11 +53,11 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   source pinning none, pulls nothing. Intake status and `intake/poll` cover only sources whose catalogs the caller's
   organization owns. Before each pull a source reads its subscription (`GET api/subscriptions/{id}`) and pulls nothing
   unless it carries the source's `Filter` (when one is set), schema `wow2.event.v1` and state `active`; the mismatch is
-  recorded on the source's cursor row and logged (4107). A post's lifecycle follows SCFD's records: a listing gone
-  before its event holds an automatic, untracked event for a person (`source:{instance}`, "the source listing is gone
-  before the event") and releases it when the listing returns; a post merged into another carries its event to the
-  survivor, or merges into the survivor's own event when no person decided it and no organization tracks it. The token
-  request names exactly one `resource`, as
+  recorded on the source's cursor row and logged (4107). Under `auto` review a post's lifecycle follows SCFD's records:
+  a listing gone before its event, or a post SCFD merged into another, sends an event no person decided and no
+  organization tracks back to review, held by `source:{instance}` with the reason; it returns to its classifier when
+  the listing is live again or the post is unmerged. Nothing is merged or moved, so SCFD's unmerge undoes it whole;
+  `post.unmerged` applies each post's restored content as a revision. The token request names exactly one `resource`, as
   Identity requires: `Resource`, else `BaseUrl` with its slash. The worker logs `Events intake: polling N source(s)` at
   start, one Information line per page polled (records stored, quarantined, more pages) and, for an `auto` source,
   one per backlog pass (held events checked, re-mapped, published); a failed page logs a

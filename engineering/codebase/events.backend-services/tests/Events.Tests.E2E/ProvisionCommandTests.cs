@@ -242,6 +242,6 @@ public sealed class ProvisionCommandTests : IAsyncLifetime
         return services.BuildServiceProvider();
     }
 
-    private static T Value<T>(Result<T> result) =>
+    private static T Value<T>(Result<T> result) where T : notnull =>
         result is Result<T>.Success success ? success.Value : throw new Xunit.Sdk.XunitException(((Result<T>.Failure)result).Error.Message);
 }

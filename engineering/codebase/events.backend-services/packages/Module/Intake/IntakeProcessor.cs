@@ -33,7 +33,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private const string LockCursorSql = "SELECT * FROM " + CursorTable + " WHERE source_name = {0} FOR UPDATE";
     private const string NotPrivate = "catalog not private";
 
-    private static readonly HashSet<string> PostTypes = new(StringComparer.Ordinal) { "post.new", "post.changed", "post.extracted", "post.relisted" };
+    // post.unmerged carries each split post's restored content at a new revision (SCFD's golden lifecycle page).
+    private static readonly HashSet<string> PostTypes = new(StringComparer.Ordinal) { "post.new", "post.changed", "post.extracted", "post.relisted", "post.unmerged" };
     private static readonly string Scfd = EventsLabels.Of(EventSourceKind.Scfd);
     private static readonly string Private = EventsLabels.Of(CatalogVisibility.Private);
     private static readonly string Candidate = EventsLabels.Of(EventReviewState.Candidate);
@@ -52,6 +53,9 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
     /// <summary>Holds the reason an event waits for a person after its source listing went away before the event.</summary>
     internal const string GoneReason = "the source listing is gone before the event (SCFD)";
+
+    /// <summary>Holds the reason an event waits for a person after SCFD merged its post into another: a duplicate.</summary>
+    internal const string MergedReason = "SCFD merged its post into another: a duplicate of that post's event";
     private const string PurgeSql =
         "UPDATE " + EventsModuleConstants.SchemaName + ".events_observations SET payload = NULL, proposed = NULL, " +
         "links = COALESCE((SELECT jsonb_agg(link - 'sourceFields') FROM jsonb_array_elements(links) AS link), '[]'::jsonb) " +
@@ -409,19 +413,19 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     }
 
     /// <summary>Follows the post's lifecycle as SCFD reports it on any record that renders the post (the services sweep):
-    /// a post merged into another, and a listing gone or back.</summary>
+    /// a listing gone or back, and a post merged into another or split from it again.</summary>
     /// <remarks>
-    ///   - merged (<c>mergedInto</c>): the survivor's revisions land on this event; when the survivor already has its
-    ///     own event, an automatic, untracked event merges into it as a person's merge would; otherwise a person merges
-    ///   - gone, under automatic review: an event no person decided, that no organization tracks and whose dates have not
-    ///     passed, goes back to review, held by <c>source:{instance}</c>; a listing gone after its event is how sources end,
-    ///     and changes nothing; under manual review every candidate already waits for a person
-    ///   - live again: an event the source held returns to its classifier, which the backlog pass runs after the poll
+    ///   - under automatic review only: a manual source's candidates already wait for a person
+    ///   - gone, or merged into another post (<c>mergedInto</c>): an event no person decided, that no organization tracks
+    ///     and (for a gone listing) whose dates have not passed, goes back to review, held by <c>source:{instance}</c>
+    ///     with the reason; a listing gone after its event is how sources end, and changes nothing
+    ///   - live again, or no longer merged: an event the source held for that reason returns to its classifier, which
+    ///     the backlog pass runs after the poll; nothing is merged or moved, so SCFD's unmerge undoes it whole
     ///   - a person's decision always stands; a stale record (an older revision than stored) changes nothing
     /// </remarks>
     private async Task ApplyLifecycleAsync(IntakePageState page, ObservationEntity observation, JsonElement? data, CancellationToken cancellationToken)
     {
-        if (observation.State == Quarantined || observation.PostId is not { } postId)
+        if (!page.Source.ReviewsAutomatically || observation.State == Quarantined || observation.PostId is not { } postId)
             return;
 
         var state = ScfdEventMapper.PostState(data);
@@ -440,22 +444,21 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         observation.EventId ??= eventId;
         var actor = SourceActor + instance;
-        if (survivor is { } into && into != postId)
+        var merged = survivor is { } into && into != postId;
+        var heldBySource = item.ReviewedBy == actor;
+        if (merged || state == "gone")
         {
-            await FollowMergeAsync(page, observation, post, item, into, actor, cancellationToken);
-            return;
-        }
+            if (heldBySource || !Automatic(item) || (!merged && Ended(item)) || await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken))
+                return;
 
-        if (state == "gone" && page.Source.ReviewsAutomatically && Automatic(item) && !Ended(item) && !await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken))
-        {
             item.Review = Candidate;
             item.ReviewedBy = actor;
-            item.ReviewReason = GoneReason;
+            item.ReviewReason = merged ? MergedReason : GoneReason;
             item.ReviewedAt = page.Now;
             item.Revision++;
             item.UpdatedAt = page.Now;
         }
-        else if (state is "live" && item.ReviewedBy == actor && item.ReviewReason == GoneReason)
+        else if (heldBySource && (item.ReviewReason == MergedReason || (item.ReviewReason == GoneReason && state == "live")))
         {
             item.ReviewedBy = null;
             item.ReviewReason = null;
@@ -463,56 +466,6 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             item.Revision++;
             item.UpdatedAt = page.Now;
         }
-    }
-
-    /// <summary>Follows SCFD's merge of this post into the survivor: the survivor's post and identity point at this
-    /// event when it has none; when it has its own event, an automatic, untracked event merges into it.</summary>
-    private async Task FollowMergeAsync(
-        IntakePageState page, ObservationEntity observation, SourcePostEntity post, CatalogEventEntity item, Guid into, string actor,
-        CancellationToken cancellationToken)
-    {
-        var instance = page.Source.Instance;
-        var kept = await db.SourcePosts.FirstOrDefaultAsync(row => row.SourceInstance == instance && row.CatalogId == page.Catalog.Id && row.PostId == into, cancellationToken);
-        if (kept is null)
-        {
-            db.SourcePosts.Add(new SourcePostEntity
-            {
-                SourceInstance = instance, PostId = into, CatalogId = page.Catalog.Id, EventId = item.Id, SubscriptionId = page.Subscription, UpdatedAt = page.Now,
-            });
-            var sourceId = $"{instance}/{into:D}";
-            if (!await db.Sources.AnyAsync(row => row.CatalogId == page.Catalog.Id && row.Kind == Scfd && row.SourceId == sourceId, cancellationToken))
-                db.Sources.Add(new EventSourceEntity { CatalogId = page.Catalog.Id, Kind = Scfd, SourceId = sourceId, EventId = item.Id, FirstSeenAt = page.Now, LastSeenAt = page.Now });
-            return;
-        }
-
-        if (kept.EventId is null)
-        {
-            kept.EventId = item.Id;
-            return;
-        }
-
-        if (kept.EventId == item.Id)
-            return;
-
-        var target = await db.Events.FirstOrDefaultAsync(row => row.Id == kept.EventId, cancellationToken);
-        if (target is null || target.Review == Archived || !Automatic(item) || await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken))
-            return;
-
-        // As a person's merge: this event's identities, posts and evidence now speak for the survivor's event.
-        await db.Sources.Where(row => row.EventId == item.Id).ExecuteUpdateAsync(set => set.SetProperty(row => row.EventId, target.Id), cancellationToken);
-        await db.SourcePosts.Where(row => row.EventId == item.Id).ExecuteUpdateAsync(set => set.SetProperty(row => row.EventId, (Guid?)target.Id), cancellationToken);
-        await db.Observations.Where(row => row.EventId == item.Id).ExecuteUpdateAsync(set => set.SetProperty(row => row.EventId, (Guid?)target.Id), cancellationToken);
-        post.EventId = target.Id;
-        observation.EventId = target.Id;
-        item.Review = Archived;
-        item.MergedInto = target.Id;
-        item.ReviewedBy = actor;
-        item.ReviewReason = $"SCFD merged its post into {into:D}";
-        item.ReviewedAt = page.Now;
-        item.Revision++;
-        item.UpdatedAt = page.Now;
-        target.Revision++;
-        target.UpdatedAt = page.Now;
     }
 
     /// <summary>Tells whether no person decided the event: unreviewed, or reviewed by a classifier.</summary>
