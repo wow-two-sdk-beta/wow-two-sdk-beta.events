@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The Events contract: the Greetings broker, its model, constants and error catalogue. It references the kernel
+    The Events contract: the brokers of catalogs, events, review, tracking, workflows, imports, calendar and intake, their models, constants, scopes and error catalogue. It references the kernel
     WoW2.Sdk.Beta.Be.Abstractions only (Result, AppError, IEvent) — no core, no framework reference, no third-party
     package — and holds no options binding, DI registration or I/O.
   -->
   <PropertyGroup>
     <RootNamespace>WoW.Two.Sdk.Beta.Be.Events</RootNamespace>
-    <Description>Events contract: the Greetings broker, model, constants and error catalogue every form implements.</Description>
+    <Description>Events contract: the catalog, review, tracking, import, calendar and intake brokers, models, scopes and errors every form implements.</Description>
   </PropertyGroup>
 
   <ItemGroup>

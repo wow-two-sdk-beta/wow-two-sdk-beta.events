@@ -7,8 +7,23 @@ using WoW.Two.Sdk.Beta.Be.Data.Abstractions;
 using WoW.Two.Sdk.Beta.Be.Data.EntityFrameworkCore;
 using WoW.Two.Sdk.Beta.Be.Data.Migrations.Bespoke;
 using WoW.Two.Sdk.Beta.Be.Observability.HealthChecks;
-using WoW.Two.Sdk.Beta.Be.Events.Greetings;
-using WoW.Two.Sdk.Beta.Be.Events.Module.Greetings;
+using WoW.Two.Sdk.Beta.Be.Events.Calendar;
+using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
+using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
+using WoW.Two.Sdk.Beta.Be.Events.Imports;
+using WoW.Two.Sdk.Beta.Be.Events.Intake;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Calendar;
+using WoW.Two.Sdk.Beta.Be.Events.Module.CatalogEvents;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Catalogs;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Imports;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Review;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Tracking;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Workflows;
+using WoW.Two.Sdk.Beta.Be.Events.Review;
+using WoW.Two.Sdk.Beta.Be.Events.Tracking;
+using WoW.Two.Sdk.Beta.Be.Events.Workflows;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Module;
@@ -16,7 +31,7 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Module;
 /// <summary>Registers the in-process Events module (Form 1).</summary>
 public static class EventsModuleServiceCollectionExtensions
 {
-    /// <summary>Registers <see cref="IGreetingsBroker"/>, the module's store on its own keyed Npgsql data source, its migration
+    /// <summary>Registers every Events broker, the caller read from the kernel's <c>ICurrentPrincipal</c>, the module's store on its own keyed Npgsql data source, its migration
     /// set (<see cref="EventsModuleConstants.MigrationSetName"/>, in schema <see cref="EventsModuleConstants.SchemaName"/>)
     /// and the store's readiness check.</summary>
     /// <remarks>
@@ -56,7 +71,16 @@ public static class EventsModuleServiceCollectionExtensions
             migrations.SchemaOwner = schemaOwner;
         });
 
-        services.AddScoped<IGreetingsBroker, ModuleGreetingsBroker>();
+        // Every call acts for the current principal: the host's ICurrentPrincipal, or anonymous when it registers none.
+        services.TryAddScoped<IEventsCallerService, PrincipalEventsCallerService>();
+        services.AddScoped<IEventCatalogsBroker, ModuleCatalogsBroker>();
+        services.AddScoped<ICatalogEventsBroker, ModuleCatalogEventsBroker>();
+        services.AddScoped<IEventReviewBroker, ModuleReviewBroker>();
+        services.AddScoped<IEventIntakeBroker, ModuleIntakeBroker>();
+        services.AddScoped<IEventTrackingBroker, ModuleTrackingBroker>();
+        services.AddScoped<IEventWorkflowsBroker, ModuleWorkflowsBroker>();
+        services.AddScoped<IEventImportsBroker, ModuleImportsBroker>();
+        services.AddScoped<IEventCalendarBroker, ModuleCalendarBroker>();
         services.AddHealthChecks().AddDatabaseReadinessCheck<EventsDbContext>();
 
         return services.AddOptions<EventsModuleOptions>()
