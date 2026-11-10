@@ -17,6 +17,11 @@
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
 
+  <!-- SCFD's golden pages live in the unit tier (Intake/Contract/); this tier replays them through the real intake. -->
+  <ItemGroup>
+    <Compile Include="..\Events.Tests.Unit\Intake\Contract\ContractPages.cs" Link="Intake\Contract\ContractPages.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\packages\Module\WoW.Two.Sdk.Beta.Be.Events.Module.csproj" />
     <ProjectReference Include="..\..\packages\Testing\WoW.Two.Sdk.Beta.Be.Events.Testing.csproj" />
