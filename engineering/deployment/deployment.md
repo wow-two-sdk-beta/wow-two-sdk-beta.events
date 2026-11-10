@@ -63,8 +63,13 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
     runway,trade-fair,market,exhibition,competition,festival,conference,other`, then `workflow put --owner-org <id>
     --default candidate --stages candidate:open,shortlisted:open,applying:active,applied:active,confirmed:active,
     attended:won,skipped:lost,rejected:lost`. Intake pulls nothing until the catalog exists.
-- Imports: a signed-in owner or admin uploads a `wow2.events-import.v1` bundle on the console's `/imports` page, dry
-  runs it, then imports; the console asks for `events.read events.review events.track events.import events.admin`.
+  - `dotnet Events.Api.dll import <catalog> --owner-org <org id> [--owner-issuer <issuer>] [--dry-run] [--file <path>]`
+    onboards a tenant's own `wow2.events-import.v1` bundle, read from the file or from standard input, with the import
+    API's rules (whole bundle validated first, the id map stable on every rerun): one `import-report {json}` line (counts
+    and the old → new id map), then `import-result ok=… dry-run=… rows=… created=… updated=… unchanged=… failed=…`.
+- Imports by people: a signed-in owner or admin uploads a bundle on the console's `/imports` page, dry runs it, then
+  imports; the console asks for `events.read events.review events.track events.import events.admin` by default
+  (`Events:Console:Scopes` narrows it to what the issuer grants its client).
 - Dev check: after a dev rollout, `verify` curls `$VERIFY_SERVICE_EVENTS/health` and `/api/system/status` with
   `Host: localhost`; `HostFilteringTests` replays the descriptor's requests.
 - After each main image publish, `conformance.yml` boots the released image on PostgreSQL, migrates it and checks its

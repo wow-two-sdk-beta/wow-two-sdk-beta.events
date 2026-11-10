@@ -60,6 +60,46 @@ public sealed class ProvisionCommandTests : IAsyncLifetime
         workflow.Stages.Single(stage => stage.Key == "attended").Class.Should().Be(StageClass.Won);
     }
 
+    private const string Bundle = """
+        {"format":"wow2.events-import.v1","source":"ocharo-desk","rows":[
+          {"legacyId":"0193f3a4-0000-7000-8000-0000000000a1",
+           "facts":{"key":"tashkent-fashion-week-2026","title":{"und":"Tashkent Fashion Week"},"kind":"runway",
+                    "starts":{"value":"2026-10","precision":"month","certainty":"estimated"}},
+           "tracking":{"stage":"candidate","priority":"high","notes":"Fit for the SS27 line.","fields":{"participation":"apply","cost":"unknown"}},
+           "legacy":{"id":"0193f3a4-0000-7000-8000-0000000000a1","status":"candidate"}},
+          {"legacyId":"0193f3a4-0000-7000-8000-0000000000a2",
+           "facts":{"title":{"und":"Craft fair, dates not announced"},"kind":"market","starts":{"precision":"unknown"}},
+           "tracking":{"stage":"skipped","notes":"Too far."}}]}
+        """;
+
+    /// <summary>An operator imports a tenant's own bundle from standard input: a dry run first, then the import, then a
+    /// rerun that finds every row through the id map and changes nothing.</summary>
+    [Fact]
+    public async Task Import_ShouldDryRunImportAndRerun_FromStandardInput()
+    {
+        await RunAsync("catalog", "ensure", "ocharo-fashion", "--owner-org", Ocharo, "--kinds", "runway,market,other");
+        await RunAsync("workflow", "put", "--owner-org", Ocharo, "--default", "candidate", "--stages", DeskStages);
+
+        var dry = await ImportAsync(Bundle, "import", "ocharo-fashion", "--owner-org", Ocharo, "--dry-run");
+        var real = await ImportAsync(Bundle, "import", "ocharo-fashion", "--owner-org", Ocharo);
+        var again = await ImportAsync(Bundle, "import", "ocharo-fashion", "--owner-org", Ocharo);
+
+        dry.Exit.Should().Be(0);
+        dry.Last.Should().Be("import-result ok=true dry-run=true rows=2 created=2 updated=0 unchanged=0 failed=0");
+        real.Last.Should().Be("import-result ok=true dry-run=false rows=2 created=2 updated=0 unchanged=0 failed=0");
+        again.Last.Should().Be("import-result ok=true dry-run=false rows=2 created=0 updated=0 unchanged=2 failed=0");
+        Map(again.Report).Should().Equal(Map(real.Report), "the id map is stable on every rerun");
+    }
+
+    [Fact]
+    public async Task Import_ShouldRefuse_ABundleThatIsNotJson()
+    {
+        var (exit, _, last) = await ImportAsync("not json", "import", "ocharo-fashion", "--owner-org", Ocharo);
+
+        exit.Should().Be(1);
+        last.Should().Be("import-result ok=false reason=bundle-not-json");
+    }
+
     [Theory]
     [InlineData("catalog", "ensure")]
     [InlineData("catalog", "ensure", "ocharo-fashion")]
@@ -92,6 +132,27 @@ public sealed class ProvisionCommandTests : IAsyncLifetime
         using var output = new StringWriter();
         var exit = await ProvisionCommand.RunAsync(args, configuration, output);
         return (exit, output.ToString().Trim());
+    }
+
+    private async Task<(int Exit, string Report, string Last)> ImportAsync(string bundle, params string[] args)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["DatabaseSettings:ConnectionString"] = postgres.ConnectionString,
+            ["Events:Auth:Issuers:0:Issuer"] = Issuer,
+        }).Build();
+        using var input = new StringReader(bundle);
+        using var output = new StringWriter();
+        var exit = await ImportCommand.RunAsync(args, configuration, input, output);
+        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        return (exit, lines.FirstOrDefault(line => line.StartsWith("import-report ", StringComparison.Ordinal)) ?? string.Empty, lines[^1]);
+    }
+
+    private static IEnumerable<string> Map(string reportLine)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(reportLine["import-report ".Length..]);
+        return [.. document.RootElement.GetProperty("map").EnumerateArray()
+            .Select(entry => $"{entry.GetProperty("legacyId").GetString()}={entry.GetProperty("eventId").GetString()}")];
     }
 
     private async Task<IServiceProvider> AsOwner()
