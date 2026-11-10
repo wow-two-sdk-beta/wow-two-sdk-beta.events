@@ -68,8 +68,10 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
     API's rules (whole bundle validated first, the id map stable on every rerun): one `import-report {json}` line (counts
     and the old → new id map), then `import-result ok=… dry-run=… rows=… created=… updated=… unchanged=… failed=…`.
 - Imports by people: a signed-in owner or admin uploads a bundle on the console's `/imports` page, dry runs it, then
-  imports; the console asks for `events.read events.review events.track events.import events.admin` by default
-  (`Events:Console:Scopes` narrows it to what the issuer grants its client).
+  imports. The console's sign-in asks for the BFF's defaults only (`openid profile email phone offline_access`; Identity
+  grants `events.*` to client `events-console` only through token exchange). The console is Events' own app on the same
+  host, so its session needs no token for Events: the session carries the five `events.*` scopes, and the person's
+  `events:*` permissions from the sign-in gate each action.
 - Dev check: after a dev rollout, `verify` curls `$VERIFY_SERVICE_EVENTS/health` and `/api/system/status` with
   `Host: localhost`; `HostFilteringTests` replays the descriptor's requests.
 - After each main image publish, `conformance.yml` boots the released image on PostgreSQL, migrates it and checks its

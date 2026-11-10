@@ -28,7 +28,7 @@ internal sealed class EventsConsoleClaimsTransformation(EventsConsoleSettings co
         var identity = completed.Identities.ElementAt(index);
         if (identity.FindFirst(JwtRegisteredClaimNames.Iss) is null)
             identity.AddClaim(new Claim(JwtRegisteredClaimNames.Iss, Issuer()));
-        identity.AddClaim(new Claim(ServiceClaimTypeConstants.Scope, string.Join(' ', console.EffectiveScopes)));
+        identity.AddClaim(new Claim(ServiceClaimTypeConstants.Scope, string.Join(' ', EventsConsoleSettings.ApiScopes)));
         return Task.FromResult(completed);
     }
 

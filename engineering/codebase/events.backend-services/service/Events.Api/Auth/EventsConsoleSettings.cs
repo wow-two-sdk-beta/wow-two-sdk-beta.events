@@ -1,3 +1,5 @@
+using WoW.Two.Sdk.Beta.Be.Events;
+
 namespace Events.Api.Auth;
 
 /// <summary>Holds the review console's sign-in: the confidential client <c>events-console</c> at the catalog owner's
@@ -9,8 +11,14 @@ public sealed class EventsConsoleSettings
     /// <summary>Holds the section the settings bind from.</summary>
     public const string SectionName = "Events:Console";
 
-    /// <summary>Holds the scopes the console asks for when <see cref="Scopes"/> is empty.</summary>
-    public static readonly IReadOnlyList<string> DefaultScopes = ["openid", "profile", "events.read", "events.review", "events.track", "events.import", "events.admin"];
+    /// <summary>Holds the API scopes a console session holds. The console is Events' own app, served by the same host, so
+    /// its session needs no token for Events: the session carries these scopes, and the person's <c>events:*</c>
+    /// permissions from the sign-in gate each action, as on a token (events-integration #23).</summary>
+    public static readonly IReadOnlyList<string> ApiScopes =
+    [
+        EventsScopeConstants.Read, EventsScopeConstants.Review, EventsScopeConstants.Track, EventsScopeConstants.Import,
+        EventsScopeConstants.Admin,
+    ];
 
     /// <summary>Gets or sets the Identity instance's issuer URL, such as <c>https://id.example.com/</c>.</summary>
     public string? Authority { get; set; }
@@ -21,11 +29,10 @@ public sealed class EventsConsoleSettings
     /// <summary>Gets or sets the client secret; a vault secret, never committed.</summary>
     public string? ClientSecret { get; set; }
 
-    /// <summary>Gets the scopes to request; empty requests <see cref="DefaultScopes"/>.</summary>
+    /// <summary>Gets the scopes the sign-in requests; empty requests Identity BFF's defaults (<c>openid profile email
+    /// phone offline_access</c>). Never <c>events.*</c>: Identity grants those only through token exchange, and a
+    /// sign-in asking for them is refused.</summary>
     public List<string> Scopes { get; } = [];
-
-    /// <summary>Gets the scopes to request: <see cref="Scopes"/>, or <see cref="DefaultScopes"/> when empty.</summary>
-    public IReadOnlyList<string> EffectiveScopes => Scopes.Count > 0 ? Scopes : DefaultScopes;
 
     /// <summary>Gets whether the console signs people in: an absolute authority and a client id are set.</summary>
     public bool IsConfigured =>

@@ -1,7 +1,12 @@
 using System.Net;
+using System.Security.Claims;
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using WoW.Two.Sdk.Beta.Be.Events;
+using WoW.Two.Sdk.Beta.Be.Identity.Bff;
 using static Events.Tests.E2E.EventsApiRequests;
 
 namespace Events.Tests.E2E;
@@ -42,6 +47,32 @@ public sealed class EventsConsoleTests(EventsApiFixture fixture)
         using var response = await client.GetAsync(Catalogs);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    /// <summary>Identity grants <c>events.*</c> to the console's client only through token exchange, and refuses a
+    /// sign-in that asks for them (ocharo-dev, 2026-11-10), so the sign-in asks for the BFF's defaults only.</summary>
+    [Fact]
+    public void SignIn_ShouldRequestNoEventsScope()
+    {
+        var bff = fixture.ConsoleHost.Services.GetRequiredService<IOptions<IdentityBffOptions>>().Value;
+
+        bff.Scopes.Should().NotContain(scope => scope.StartsWith("events.", StringComparison.Ordinal));
+    }
+
+    /// <summary>A console session is Events' own app: it carries the five API scopes, and the person's permissions from
+    /// the sign-in still gate each action.</summary>
+    [Fact]
+    public async Task Session_ShouldCarryTheConsolesApiScopes()
+    {
+        using var scope = fixture.ConsoleHost.Services.CreateScope();
+        var transformations = scope.ServiceProvider.GetServices<IClaimsTransformation>();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "person-1")], BffAuthenticationSchemeConstants.Cookie));
+
+        foreach (var transformation in transformations)
+            principal = await transformation.TransformAsync(principal);
+
+        principal.FindFirst("scope")!.Value.Split(' ').Should().BeEquivalentTo(
+            EventsScopeConstants.Read, EventsScopeConstants.Review, EventsScopeConstants.Track, EventsScopeConstants.Import, EventsScopeConstants.Admin);
     }
 
     [Fact]

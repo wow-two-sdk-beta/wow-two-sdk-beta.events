@@ -150,7 +150,8 @@ public static class EventsAuthServiceCollectionExtensions
             bff.Authority = console.Authority!;
             bff.ClientId = console.ClientId!;
             bff.ClientSecret = string.IsNullOrWhiteSpace(console.ClientSecret) ? null : console.ClientSecret;
-            bff.Scopes = [.. console.EffectiveScopes];
+            if (console.Scopes.Count > 0)
+                bff.Scopes = [.. console.Scopes];
             bff.CookieName = ".events.session";
             bff.IsHttpsMetadataRequired = !(authority.Scheme == Uri.UriSchemeHttp && authority.IsLoopback);
             if (bff.SignalUrl is null && !string.IsNullOrWhiteSpace(audience))
