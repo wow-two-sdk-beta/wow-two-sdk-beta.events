@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\packages\Module\WoW.Two.Sdk.Beta.Be.Events.Module.csproj" />
+    <ProjectReference Include="..\..\packages\Testing\WoW.Two.Sdk.Beta.Be.Events.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The Events test kit: a fake over the contract and the conformance suite every implementation must pass. -->
+  <!-- The Events test kit: the conformance suites every implementation must pass, and a settable test principal. -->
   <PropertyGroup>
-    <Description>Events test kit: a fake greetings broker and the conformance suite every implementation must pass.</Description>
+    <Description>Events test kit: the conformance suite of every Events broker and a settable test principal.</Description>
   </PropertyGroup>
 
   <ItemGroup>
