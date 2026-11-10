@@ -160,6 +160,26 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         after.Revision.Should().Be(before.Revision + 1, "a second poll with nothing new changes nothing");
     }
 
+    /// <summary>The backlog pass pages by a stable order (the rollout's EF warning: paging with no order can skip or repeat
+    /// rows), so a backlog larger than one read is checked whole and each held event once; it counts what it re-mapped.</summary>
+    [Fact]
+    public async Task ReviewBacklog_ShouldCheckEveryHeldEventOnce_AcrossSeveralReads()
+    {
+        var (slug, source) = await SourceAsync(manual => manual.Filter = "ocharo-fashion-v1");
+        for (var index = 0; index < 5; index++)
+            fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, $"Show {index}"));
+        await fixture.PollAsync(source);
+        source.Review = "auto";
+        source.DefaultCountry = "UZ";
+
+        var first = await BacklogAsync(source, batch: 2);
+        var second = await BacklogAsync(source, batch: 2);
+
+        first.Should().Be(new BacklogPass(Checked: 5, Remapped: 5, Published: 5));
+        second.Should().Be(new BacklogPass(Checked: 5, Remapped: 0, Published: 0), "a second pass finds nothing new");
+        (await EventsAsync(slug, new EventQuery())).Should().HaveCount(5).And.OnlyContain(item => item.Facts.Place!.Country == "UZ");
+    }
+
     [Fact]
     public async Task Intake_ShouldTakeTheClassifiersKind_WhenItIsACatalogKind()
     {
@@ -196,6 +216,12 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
     {
         await using var scope = fixture.Scope();
         return (await scope.ServiceProvider.GetRequiredService<ICatalogEventsBroker>().ListAsync(slug, query)).ValueOrThrow().Items;
+    }
+
+    private async Task<BacklogPass> BacklogAsync(EventsIntakeSourceOptions source, int batch)
+    {
+        await using var scope = fixture.Scope();
+        return await scope.ServiceProvider.GetRequiredService<IntakeProcessor>().ReviewBacklogAsync(source, CancellationToken.None, batch);
     }
 
     private async Task<T> Review<T>(Func<IEventReviewBroker, Task<T>> call)

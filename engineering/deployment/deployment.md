@@ -48,7 +48,8 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   source pinning none, pulls nothing. Intake status and `intake/poll` cover only sources whose catalogs the caller's
   organization owns. The token request names exactly one `resource`, as
   Identity requires: `Resource`, else `BaseUrl` with its slash. The worker logs `Events intake: polling N source(s)` at
-  start and one Information line per page polled (records stored, quarantined, more pages); a failed page logs a
+  start, one Information line per page polled (records stored, quarantined, more pages) and, for an `auto` source,
+  one per backlog pass (held events checked, re-mapped, published); a failed page logs a
   Warning naming its kind (`token-refused:<oauth error>`, `scfd-status-<code>`, `scfd-unreachable`, `timeout`). The image answers `dotnet Events.Api.dll intake check [--source <name>]
   [--foreign-subscription <id>]` from configuration only (no database): per enabled source, its own token pulls its
   subscription (`check=pull`, 200, with `records` and `event-records` of `wow2.event.v1`), is refused the tenants list
@@ -74,6 +75,10 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
     onboards a tenant's own `wow2.events-import.v1` bundle, read from the file or from standard input, with the import
     API's rules (whole bundle validated first, the id map stable on every rerun): one `import-report {json}` line (counts
     and the old → new id map), then `import-result ok=… dry-run=… rows=… created=… updated=… unchanged=… failed=…`.
+  - `dotnet Events.Api.dll event show <catalog> --owner-org <org id> [--owner-issuer <issuer>] (--id <event id> | --key
+    <facts key> | --post <SCFD post id>)` reads one stored event back, in any review state: one `event {json}` line
+    (facts, review, sources), then `event-show-result ok=true id=… review=… revision=… reviewed-by=… facts={json}`, or
+    `ok=false reason=…` (usage, the catalog or the event not found; another organization sees neither).
 - Imports by people: a signed-in owner or admin uploads a bundle on the console's `/imports` page, dry runs it, then
   imports. The console's sign-in asks for the BFF's defaults only (`openid profile email phone offline_access`; Identity
   grants `events.*` to client `events-console` only through token exchange). The console is Events' own app on the same

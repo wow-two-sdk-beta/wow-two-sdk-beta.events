@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Events.Api.Configurations;
 using WoW.Two.Sdk.Beta.Be.Events;
 using WoW.Two.Sdk.Beta.Be.Events.Imports;
@@ -20,8 +19,6 @@ namespace Events.Api.Provisioning;
 /// </remarks>
 public static class ImportCommand
 {
-    private static readonly JsonSerializerOptions Wire = CreateWire();
-
     /// <summary>Tells whether the arguments name the import verb.</summary>
     /// <param name="args">The process arguments.</param>
     public static bool IsCommand(IReadOnlyList<string> args) => args is { Count: >= 1 } && args[0] == "import";
@@ -57,7 +54,7 @@ public static class ImportCommand
         if (string.IsNullOrWhiteSpace(issuer))
             return await RefuseAsync(output, "no-issuer");
 
-        var connectionString = configuration["DB_CONNECTION"] is { Length: > 0 } alias ? alias : configuration["DatabaseSettings:ConnectionString"];
+        var connectionString = OperatorWire.ConnectionString(configuration);
         if (string.IsNullOrWhiteSpace(connectionString))
             return await RefuseAsync(output, "no-database");
 
@@ -65,7 +62,7 @@ public static class ImportCommand
         try
         {
             var json = file is null ? await input.ReadToEndAsync(cancellationToken) : await File.ReadAllTextAsync(file, cancellationToken);
-            bundle = JsonSerializer.Deserialize<EventImportBundle>(json, Wire);
+            bundle = JsonSerializer.Deserialize<EventImportBundle>(json, OperatorWire.Options);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -84,14 +81,14 @@ public static class ImportCommand
         var result = await scope.ServiceProvider.GetRequiredService<IEventImportsBroker>().ImportAsync(catalog, bundle, dryRun, cancellationToken);
         if (result is Result<EventImportReport>.Failure { Error: var error })
         {
-            await output.WriteLineAsync("import-error " + JsonSerializer.Serialize(new { error.Message }, Wire));
-            return await RefuseAsync(output, Reason(error.Message));
+            await output.WriteLineAsync("import-error " + JsonSerializer.Serialize(new { error.Message }, OperatorWire.Options));
+            return await RefuseAsync(output, OperatorWire.Reason(error.Message));
         }
 
         var report = ((Result<EventImportReport>.Success)result).Value;
-        await output.WriteLineAsync("import-report " + JsonSerializer.Serialize(report, Wire));
+        await output.WriteLineAsync("import-report " + JsonSerializer.Serialize(report, OperatorWire.Options));
         await output.WriteLineAsync(
-            $"import-result ok={Bool(report.Failed == 0)} dry-run={Bool(report.DryRun)} rows={report.Map.Count} created={report.Created} " +
+            $"import-result ok={OperatorWire.Bool(report.Failed == 0)} dry-run={OperatorWire.Bool(report.DryRun)} rows={report.Map.Count} created={report.Created} " +
             $"updated={report.Updated} unchanged={report.Unchanged} failed={report.Failed}");
         return report.Failed == 0 ? 0 : 1;
     }
@@ -132,21 +129,5 @@ public static class ImportCommand
     {
         await output.WriteLineAsync($"import-result ok=false reason={reason}");
         return 1;
-    }
-
-    private static string Reason(string message)
-    {
-        var words = new string([.. message.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) ? c : '-')]);
-        var collapsed = string.Join('-', words.Split('-', StringSplitOptions.RemoveEmptyEntries));
-        return collapsed.Length > 60 ? collapsed[..60] : collapsed;
-    }
-
-    private static string Bool(bool value) => value ? "true" : "false";
-
-    private static JsonSerializerOptions CreateWire()
-    {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
-        return options;
     }
 }

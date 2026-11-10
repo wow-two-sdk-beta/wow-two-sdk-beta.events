@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Events.Api.Provisioning;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Testcontainers.PostgreSql;
 using WoW.Two.Sdk.Beta.Be.Data;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
@@ -100,6 +101,57 @@ public sealed class ProvisionCommandTests : IAsyncLifetime
         last.Should().Be("import-result ok=false reason=bundle-not-json");
     }
 
+    /// <summary>An operator reads a stored event back, in one line, by its id, its facts' key or an SCFD post among its
+    /// sources: Wheelhouse's check of what intake or an import stored.</summary>
+    [Fact]
+    public async Task EventShow_ShouldPrintTheStoredEvent_ByItsIdKeyOrPost()
+    {
+        await RunAsync("catalog", "ensure", "ocharo-fashion", "--owner-org", Ocharo, "--kinds", "runway,market,other");
+        await RunAsync("workflow", "put", "--owner-org", Ocharo, "--default", "candidate", "--stages", DeskStages);
+        var imported = await ImportAsync(Bundle, "import", "ocharo-fashion", "--owner-org", Ocharo);
+        var id = Map(imported.Report).Single(entry => entry.StartsWith("0193f3a4-0000-7000-8000-0000000000a1=", StringComparison.Ordinal)).Split('=')[1];
+        var post = Guid.NewGuid();
+        await SqlAsync(
+            $"INSERT INTO {EventsModuleConstants.SchemaName}.events_event_sources (catalog_id, kind, source_id, event_id, first_seen_at, last_seen_at) " +
+            $"SELECT catalog_id, 'scfd', 'scfd/{post:D}', id, now(), now() FROM {EventsModuleConstants.SchemaName}.events_catalog_events WHERE id = '{id}'");
+
+        var byId = await ShowAsync("event", "show", "ocharo-fashion", "--owner-org", Ocharo, "--id", id);
+        var byKey = await ShowAsync("event", "show", "ocharo-fashion", "--owner-org", Ocharo, "--key", "tashkent-fashion-week-2026");
+        var byPost = await ShowAsync("event", "show", "ocharo-fashion", "--owner-org", Ocharo, "--post", post.ToString());
+
+        byId.Exit.Should().Be(0);
+        byId.Last.Should().StartWith($"event-show-result ok=true id={id} review=published revision=");
+        byId.Last.Should().Contain("facts={").And.Contain("\"key\":\"tashkent-fashion-week-2026\"");
+        byKey.Should().Be(byId);
+        byPost.Should().Be(byId);
+    }
+
+    [Fact]
+    public async Task EventShow_ShouldShowNothing_ToAnotherOrganizationOrForAMissingEvent()
+    {
+        await RunAsync("catalog", "ensure", "ocharo-fashion", "--owner-org", Ocharo, "--kinds", "runway,market,other");
+        await RunAsync("workflow", "put", "--owner-org", Ocharo, "--default", "candidate", "--stages", DeskStages);
+        await ImportAsync(Bundle, "import", "ocharo-fashion", "--owner-org", Ocharo);
+
+        var foreign = await ShowAsync("event", "show", "ocharo-fashion", "--owner-org", "org-other", "--key", "tashkent-fashion-week-2026");
+        var missing = await ShowAsync("event", "show", "ocharo-fashion", "--owner-org", Ocharo, "--key", "no-such-event");
+
+        foreign.Exit.Should().Be(1);
+        foreign.Last.Should().StartWith("event-show-result ok=false reason=").And.NotContain("tashkent");
+        missing.Should().Be((1, "event-show-result ok=false reason=the-event-was-not-found"));
+    }
+
+    [Theory]
+    [InlineData("event", "show", "--owner-org", Ocharo, "--key", "a")]
+    [InlineData("event", "show", "ocharo-fashion", "--owner-org", Ocharo)]
+    [InlineData("event", "show", "ocharo-fashion", "--owner-org", Ocharo, "--id", "not-a-guid")]
+    [InlineData("event", "show", "ocharo-fashion", "--owner-org", Ocharo, "--key", "a", "--id", "0193f3a4-0000-7000-8000-0000000000a1")]
+    [InlineData("event", "show", "ocharo-fashion", "--key", "a")]
+    public async Task EventShow_ShouldRefuseIncompleteArguments(params string[] args)
+    {
+        (await ShowAsync(args)).Should().Be((1, "event-show-result ok=false reason=usage"));
+    }
+
     [Theory]
     [InlineData("catalog", "ensure")]
     [InlineData("catalog", "ensure", "ocharo-fashion")]
@@ -146,6 +198,26 @@ public sealed class ProvisionCommandTests : IAsyncLifetime
         var exit = await ImportCommand.RunAsync(args, configuration, input, output);
         var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         return (exit, lines.FirstOrDefault(line => line.StartsWith("import-report ", StringComparison.Ordinal)) ?? string.Empty, lines[^1]);
+    }
+
+    private async Task<(int Exit, string Last)> ShowAsync(params string[] args)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["DatabaseSettings:ConnectionString"] = postgres.ConnectionString,
+            ["Events:Auth:Issuers:0:Issuer"] = Issuer,
+        }).Build();
+        using var output = new StringWriter();
+        var exit = await EventShowCommand.RunAsync(args, configuration, output);
+        return (exit, output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)[^1]);
+    }
+
+    private async Task SqlAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(postgres.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static IEnumerable<string> Map(string reportLine)

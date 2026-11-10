@@ -55,64 +55,94 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     /// gets its classifier's verdict. Nothing under manual review; a person's decision stands.</summary>
     /// <param name="source">The source.</param>
     /// <param name="cancellationToken">The token that cancels the call.</param>
-    /// <returns>How many candidates it published.</returns>
-    public async Task<int> ReviewBacklogAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken)
+    /// <param name="batch">How many held events one read takes.</param>
+    /// <returns>What the pass did; nothing under manual review, or when the source's catalog is missing or not its
+    /// pinned owner's.</returns>
+    public async Task<BacklogPass> ReviewBacklogAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken, int batch = BacklogBatch)
     {
         if (!source.ReviewsAutomatically)
-            return 0;
+            return BacklogPass.None;
 
         var catalog = await db.Catalogs.AsNoTracking().FirstOrDefaultAsync(row => row.Slug == source.Catalog, cancellationToken);
         if (catalog is null || catalog.Visibility != Private || OwnerProblem(source, catalog) is not null)
-            return 0;
-
-        var instance = source.Instance;
-        var classifier = IntakeVerdict.ClassifierActor;
-        var backlog = await (
-                from post in db.SourcePosts
-                join item in db.Events on post.EventId equals item.Id
-                join observation in db.Observations on post.LatestObservationId equals observation.Id
-                where post.SourceInstance == instance && post.CatalogId == catalog.Id && observation.Payload != null
-                      && ((item.Review == Candidate && item.ReviewedBy == null)
-                          || ((item.Review == Candidate || item.Review == Published) && item.ReviewedBy!.StartsWith(classifier)))
-                select new { Event = item, observation.Payload })
-            .Take(500)
-            .ToListAsync(cancellationToken);
-        if (backlog.Count == 0)
-            return 0;
+            return BacklogPass.None;
 
         var kinds = CatalogAccess.KindKeys(catalog);
         var now = time.StoredUtcNow();
-        var published = 0;
-        foreach (var held in backlog)
+        var pass = BacklogPass.None;
+        // Keyset pages by the latest observation's sequence, unique per post: every held event once per pass, in a stable order.
+        for (var after = 0L; ;)
         {
-            using var document = JsonDocument.Parse(held.Payload!);
-            var verdict = IntakeVerdict.Of(source, document.RootElement);
-            var changed = false;
-            if (Facts(source, document.RootElement, kinds, verdict) is { } facts
-                && !Tracking.JsonComparison.Same(EventsJson.Write(facts), held.Event.Facts))
-            {
-                await EventWrites.ApplyAsync(db, held.Event, facts, isNew: false, cancellationToken);
-                changed = true;
-            }
+            var held = await BacklogBatchAsync(source.Instance, catalog.Id, after, batch, cancellationToken);
+            if (held.Count == 0)
+                break;
 
-            if (held.Event.ReviewedBy is null)
-            {
-                Review(held.Event, verdict, now);
-                changed = true;
-                if (verdict.Relevant == true)
-                    published++;
-            }
-
-            if (!changed)
-                continue;
-
-            held.Event.Revision++;
-            held.Event.UpdatedAt = now;
+            foreach (var one in held)
+                pass = await ReviewHeldAsync(source, kinds, one.Event, one.Payload!, now, pass, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            after = held[^1].Seq;
+            if (held.Count < batch)
+                break;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
-        return published;
+        return pass;
     }
+
+    private const int BacklogBatch = 500;
+
+    private async Task<List<HeldEvent>> BacklogBatchAsync(string instance, Guid catalogId, long after, int batch, CancellationToken cancellationToken)
+    {
+        var classifier = IntakeVerdict.ClassifierActor;
+        return await (
+                from post in db.SourcePosts
+                join item in db.Events on post.EventId equals item.Id
+                join observation in db.Observations on post.LatestObservationId equals observation.Id
+                where post.SourceInstance == instance && post.CatalogId == catalogId && observation.Payload != null
+                      && observation.Seq > after
+                      && ((item.Review == Candidate && item.ReviewedBy == null)
+                          || ((item.Review == Candidate || item.Review == Published) && item.ReviewedBy!.StartsWith(classifier)))
+                orderby observation.Seq
+                select new HeldEvent(item, observation.Payload, observation.Seq))
+            .Take(batch)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<BacklogPass> ReviewHeldAsync(
+        EventsIntakeSourceOptions source, IReadOnlyCollection<string> kinds, CatalogEventEntity held, string payload, DateTimeOffset now,
+        BacklogPass pass, CancellationToken cancellationToken)
+    {
+        using var document = JsonDocument.Parse(payload);
+        var verdict = IntakeVerdict.Of(source, document.RootElement);
+        var remapped = false;
+        if (Facts(source, document.RootElement, kinds, verdict) is { } facts
+            && !Tracking.JsonComparison.Same(EventsJson.Write(facts), held.Facts))
+        {
+            await EventWrites.ApplyAsync(db, held, facts, isNew: false, cancellationToken);
+            remapped = true;
+        }
+
+        var reviewed = false;
+        if (held.ReviewedBy is null)
+        {
+            Review(held, verdict, now);
+            reviewed = true;
+        }
+
+        if (remapped || reviewed)
+        {
+            held.Revision++;
+            held.UpdatedAt = now;
+        }
+
+        return pass with
+        {
+            Checked = pass.Checked + 1,
+            Remapped = pass.Remapped + (remapped ? 1 : 0),
+            Published = pass.Published + (reviewed && verdict.Relevant == true ? 1 : 0),
+        };
+    }
+
+    private sealed record HeldEvent(CatalogEventEntity Event, string? Payload, long Seq);
 
     /// <summary>Reads one page from the committed cursor and commits what it delivered with the next cursor.</summary>
     /// <param name="source">The source.</param>

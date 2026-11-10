@@ -7,11 +7,14 @@ using WoW.Two.Sdk.Beta.Be.Data;
 if (IntakeCheckCommand.IsCommand(args))
     return await IntakeCheckCommand.RunAsync(args, Console.Out);
 
-// Provisioning as the deploy's operator, before anyone signs in: `catalog ensure`, `workflow put` and `import`.
+// Provisioning as the deploy's operator, before anyone signs in: `catalog ensure`, `workflow put` and `import`;
+// `event show` reads one stored event back.
 if (ProvisionCommand.IsCommand(args))
     return await ProvisionCommand.RunAsync(args, Console.Out);
 if (ImportCommand.IsCommand(args))
     return await ImportCommand.RunAsync(args, Console.Out);
+if (EventShowCommand.IsCommand(args))
+    return await EventShowCommand.RunAsync(args, Console.Out);
 
 // Build and configure the host.
 var builder = WebApplication.CreateBuilder(args);

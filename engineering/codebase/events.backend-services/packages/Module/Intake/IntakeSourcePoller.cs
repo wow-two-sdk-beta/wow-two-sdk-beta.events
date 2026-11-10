@@ -71,9 +71,8 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
         try
         {
             await using var scope = scopes.CreateAsyncScope();
-            var published = await scope.ServiceProvider.GetRequiredService<IntakeProcessor>().ReviewBacklogAsync(source, cancellationToken);
-            if (published > 0)
-                LogBacklogPublished(logger, source.Name, published);
+            var pass = await scope.ServiceProvider.GetRequiredService<IntakeProcessor>().ReviewBacklogAsync(source, cancellationToken);
+            LogBacklogPass(logger, source.Name, pass.Checked, pass.Remapped, pass.Published);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -115,8 +114,8 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
         _ => exception.GetType().Name,
     };
 
-    [LoggerMessage(EventId = 4106, Level = LogLevel.Information, Message = "Events intake: source {Source} published {Count} held candidate(s) by its automatic review.")]
-    private static partial void LogBacklogPublished(ILogger logger, string source, int count);
+    [LoggerMessage(EventId = 4106, Level = LogLevel.Information, Message = "Events intake: source {Source} backlog pass: {Checked} held event(s) checked, {Remapped} re-mapped, {Published} published by its automatic review.")]
+    private static partial void LogBacklogPass(ILogger logger, string source, int @checked, int remapped, int published);
 
     [LoggerMessage(EventId = 4104, Level = LogLevel.Information, Message = "Events intake: source {Source} page {Page} polled: SCFD 200, {Received} new records stored, {Quarantined} quarantined, more pages {HasMore}; the cursor committed.")]
     private static partial void LogPagePolled(ILogger logger, string source, int page, int received, int quarantined, bool hasMore);
