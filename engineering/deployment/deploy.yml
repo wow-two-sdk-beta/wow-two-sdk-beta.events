@@ -109,7 +109,7 @@ services:
         Events:Intake:Sources:1:Filter: { from: Events:Intake:Sources:0:Filter }
         Events:Intake:Sources:1:DefaultCountry: { from: Events:Intake:Sources:0:DefaultCountry }
         Events:Intake:Sources:1:OwnerOrg: { from: Events:Intake:Sources:0:OwnerOrg }
-        Events:Intake:Sources:1:OwnerIssuer: { from: Events:Intake:Sources:0:OwnerIssuer }
+        Events:Intake:Sources:1:OwnerIssuer: { from: Events:Auth:Issuers:0:Issuer }
     # The console's data-protection key ring (DataProtection:KeysPath).
     volumes:
       keys: /var/lib/events/keys
