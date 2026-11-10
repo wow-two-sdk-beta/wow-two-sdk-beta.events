@@ -51,8 +51,10 @@ services:
     # {Uri}signals/identity, the resource's SignalUrl.
     # Console (#30): confidential client `events-console` at the same issuer; Identity registers
     # {site}/api/identity/callback, {site}/ and {site}/api/identity/signal for it.
-    # Intake (#15): source 0 pulls SCFD's subscription for catalog `ocharo-fashion` with client `events` and scope
-    # `harvest.events-read`; with no BaseUrl or SubscriptionId the source stays off and nothing is pulled.
+    # Intake (#15): two sources pull Afisha's two SCFD subscriptions (fashion, exhibitions) of tenant `ocharo` into
+    # catalog `ocharo-fashion`, polled one after the other, each with its own cursor; source 1 takes source 0's SCFD
+    # address, token endpoint and client (`events`, scope `harvest.events-read`) through `from`. A source with no BaseUrl
+    # or SubscriptionId stays off and pulls nothing.
     settings:
       keys:
         DatabaseSettings:ConnectionString: { required: true }
@@ -62,7 +64,7 @@ services:
         Events:Console:Authority: { type: url }
         Events:Console:ClientId: { default: events-console }
         Events:Console:ClientSecret: { secret: true }
-        Events:Intake:Sources:0:Name: { default: afisha }
+        Events:Intake:Sources:0:Name: { default: afisha-fashion }
         Events:Intake:Sources:0:Catalog: { default: ocharo-fashion }
         Events:Intake:Sources:0:Instance: { default: scfd }
         Events:Intake:Sources:0:BaseUrl: { type: url }
@@ -72,6 +74,16 @@ services:
         Events:Intake:Sources:0:ClientSecret: { secret: true }
         Events:Intake:Sources:0:Scope: { default: harvest.events-read }
         Events:Intake:Sources:0:PollInterval: { default: "00:05:00" }
+        Events:Intake:Sources:1:Name: { default: afisha-exhibitions }
+        Events:Intake:Sources:1:Catalog: { default: ocharo-fashion }
+        Events:Intake:Sources:1:Instance: { default: scfd }
+        Events:Intake:Sources:1:BaseUrl: { from: Events:Intake:Sources:0:BaseUrl }
+        Events:Intake:Sources:1:SubscriptionId: {}
+        Events:Intake:Sources:1:TokenEndpoint: { from: Events:Intake:Sources:0:TokenEndpoint }
+        Events:Intake:Sources:1:ClientId: { from: Events:Intake:Sources:0:ClientId }
+        Events:Intake:Sources:1:ClientSecret: { from: Events:Intake:Sources:0:ClientSecret }
+        Events:Intake:Sources:1:Scope: { from: Events:Intake:Sources:0:Scope }
+        Events:Intake:Sources:1:PollInterval: { default: "00:05:00" }
     needs: [postgres]
     # The pages and the signal route at /, the contract's HTTP mirror and the BFF under the same host's /api.
     sites:

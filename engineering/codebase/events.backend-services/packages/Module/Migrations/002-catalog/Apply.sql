@@ -125,17 +125,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_events_observations_delivery
 CREATE INDEX IF NOT EXISTS ix_events_observations_catalog ON events_observations (catalog_id, state, seq);
 CREATE INDEX IF NOT EXISTS ix_events_observations_event ON events_observations (event_id) WHERE event_id IS NOT NULL;
 
--- The newest revision intake has applied per post, so an older revision arriving late is superseded.
+-- The newest revision intake has applied per post, so an older revision arriving late is superseded. A post is one
+-- SCFD instance's: two subscriptions delivering the same post feed one event, and its revisions order across both;
+-- `subscription_id` records the last subscription that delivered it.
 CREATE TABLE IF NOT EXISTS events_source_posts (
     source_instance       varchar(128) NOT NULL,
-    subscription_id       varchar(64)  NOT NULL,
     post_id               uuid         NOT NULL,
+    subscription_id       varchar(64)  NOT NULL,
     catalog_id            uuid         NOT NULL,
     event_id              uuid         NULL,
     latest_revision       integer      NOT NULL,
     latest_observation_id uuid         NOT NULL,
     updated_at            timestamptz  NOT NULL,
-    CONSTRAINT pk_events_source_posts PRIMARY KEY (source_instance, subscription_id, post_id),
+    CONSTRAINT pk_events_source_posts PRIMARY KEY (source_instance, post_id),
     CONSTRAINT fk_events_source_posts_catalog FOREIGN KEY (catalog_id) REFERENCES events_catalogs (id)
 );
 
