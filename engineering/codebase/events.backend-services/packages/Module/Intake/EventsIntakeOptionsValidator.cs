@@ -29,6 +29,8 @@ internal sealed partial class EventsIntakeOptionsValidator : IValidateOptions<Ev
                 failures.Add($"{at}:Name '{source.Name}' is used twice");
             if (!EventFactsValidator.KeyPattern().IsMatch(source.Catalog ?? string.Empty))
                 failures.Add($"{at}:Catalog must be a catalog slug");
+            if (!IntakeSources.IsConfigured(source))
+                continue; // declared, not yet typed: stays off
             if (string.IsNullOrWhiteSpace(source.Instance) || source.Instance.Length > 128)
                 failures.Add($"{at}:Instance must be 1 to 128 characters");
             if (string.IsNullOrWhiteSpace(source.SubscriptionId) || IntakeSources.Subscription(source).Length > 64)

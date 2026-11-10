@@ -15,6 +15,18 @@ public sealed class EventsIntakeOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_ShouldKeepASourceOff_WhenItsSubscriptionIsNotTypedYet()
+    {
+        // deploy.yml declares both Afisha sources with defaults before Wheelhouse types their subscription ids.
+        var declared = new EventsIntakeSourceOptions { Name = "afisha-exhibitions", Catalog = "ocharo-fashion", BaseUrl = "https://scfd.test/" };
+
+        var result = Validate(Source("afisha-fashion"), declared);
+
+        result.Succeeded.Should().BeTrue(result.FailureMessage);
+        IntakeSources.IsActive(declared).Should().BeFalse();
+    }
+
+    [Fact]
     public void Validate_ShouldRefuseDuplicateOrMalformedNames()
     {
         var result = Validate(Source("afisha"), Source("afisha"), Source("Not Valid"));

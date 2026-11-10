@@ -9,4 +9,12 @@ internal static class IntakeSources
 
     /// <summary>Gets the name of the source's HTTP client.</summary>
     public static string ClientName(string sourceName) => "events-intake:" + sourceName;
+
+    /// <summary>Tells whether a source names both its SCFD address and its subscription; a deploy declares sources before
+    /// their subscription ids are typed, and such a source stays off instead of failing the host's start.</summary>
+    public static bool IsConfigured(EventsIntakeSourceOptions source) =>
+        !string.IsNullOrWhiteSpace(source.BaseUrl) && !string.IsNullOrWhiteSpace(source.SubscriptionId);
+
+    /// <summary>Tells whether a source polls: enabled and configured.</summary>
+    public static bool IsActive(EventsIntakeSourceOptions source) => source.Enabled && IsConfigured(source);
 }

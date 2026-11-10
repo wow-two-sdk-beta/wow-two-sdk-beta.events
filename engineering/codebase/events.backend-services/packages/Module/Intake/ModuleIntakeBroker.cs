@@ -43,7 +43,7 @@ internal sealed class ModuleIntakeBroker(EventsDbContext db, IOptionsSnapshot<Ev
                     Name = source.Name,
                     Catalog = source.Catalog,
                     SubscriptionId = IntakeSources.Subscription(source),
-                    Enabled = source.Enabled,
+                    Enabled = IntakeSources.IsActive(source),
                     Cursor = row?.Cursor,
                     LastPolledAtUtc = row?.LastPolledAt,
                     LastReceivedAtUtc = row?.LastReceivedAt,
@@ -70,7 +70,7 @@ internal sealed class ModuleIntakeBroker(EventsDbContext db, IOptionsSnapshot<Ev
         // One source after another, never in parallel, so two subscriptions never race on one post.
         if (poller is not null)
         {
-            foreach (var source in options.Value.Sources.Where(source => source.Enabled))
+            foreach (var source in options.Value.Sources.Where(IntakeSources.IsActive))
                 await poller.PollAsync(source, cancellationToken);
         }
 

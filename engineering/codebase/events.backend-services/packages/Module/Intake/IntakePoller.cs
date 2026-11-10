@@ -28,7 +28,7 @@ internal sealed partial class IntakePoller(
             var wait = MaxIdle;
             try
             {
-                foreach (var source in options.CurrentValue.Sources.Where(source => source.Enabled))
+                foreach (var source in options.CurrentValue.Sources.Where(IntakeSources.IsActive))
                 {
                     var now = time.GetUtcNow();
                     if (due.TryGetValue(source.Name, out var at) && at > now)
