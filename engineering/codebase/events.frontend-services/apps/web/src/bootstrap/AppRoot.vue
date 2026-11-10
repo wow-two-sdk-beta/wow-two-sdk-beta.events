@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { RouteAnnouncer } from '@wow-two-beta/fe/router';
 import { RouterView } from 'vue-router';
+import { provideConsole } from '../application/console/UseConsole';
+import ConsoleShell from '../presentation/console/components/ConsoleShell.vue';
 
-/** Composes the Events service's one app: its hosted pages and its console, each a route. */
+/** Composes the Events console: the shared session and client, the frame, and one route per screen. */
 defineOptions({ name: 'AppRoot' });
+
+provideConsole();
 </script>
 
 <template>
   <RouteAnnouncer />
-  <RouterView />
+  <ConsoleShell>
+    <RouterView />
+  </ConsoleShell>
 </template>

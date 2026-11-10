@@ -6,10 +6,13 @@ Defer to `wow-two-ws/conventions/development/frontend/`.
 
 - Frontend root: `engineering/codebase/events.frontend-services/`; Node `24.11.0` from `.nvmrc`, `pnpm@10.33.2`.
 - `packages/fe-events` is `@wow-two-beta/fe-events`, published to npm: `./contracts` (the TypeScript mirror of the be
-  contract), `./kit` (`GreetingWidget`, `createGreetingsClient`, `forwardToHostedGreeting`) and `./admin`
-  (`GreetingsStatusPanel`, the management screens). It peers `@wow-two-beta/fe` at `>=0.0.n <0.1.0`, `n` the pinned
+  contract and route builders), `./kit` (`createEventsClient`, date helpers honest about precision, `EventsFeed`,
+  `EventCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm`) and `./admin` (`ReviewQueue`,
+  `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`). Sourced images and text show
+  only in `./admin`, labelled source evidence (events-integration #50). It peers `@wow-two-beta/fe` at `>=0.0.n <0.1.0`, `n` the pinned
   version; `check:package` enforces it and fails when one of the three exports is missing.
-- `apps/web` is `@events/web`, private: the hosted pages (`/greet`) and the console (`/`). It takes `fe-events` by
+- `apps/web` is `@events/web`, private: the review console (`/`, `/observations`, `/events`, `/intake`), signed in
+  through Identity's BFF at `/api/identity/*`. It takes `fe-events` by
   `workspace:*`, through its `exports` only — the way a product would; the package never imports `apps/`.
 - App source uses `bootstrap`, `presentation`, `application`, `domain`, and `integration` layers.
 - Routes live in `src/bootstrap/router/Routes.ts` on the fe sdk router (`createAppRouter`, `lazyPage`); a new hosted

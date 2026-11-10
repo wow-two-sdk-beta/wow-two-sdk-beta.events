@@ -27,7 +27,7 @@ engineering/             ← the HOW
 
 - Shape: wow-two-ws/conventions/development/repo/structure/domain-structure.md; repo-specific deltas only in `engineering/development/`.
 - The contract lives in `packages/Abstractions`; Module (Form 1) and Client (Forms 2/3) implement it, and
-  `Events.Tests.Conformance` runs the one suite (`GreetingsBrokerConformance`, in `packages/Testing`) against both.
+  `Events.Tests.Conformance` runs the suites (one per broker, in `packages/Testing`) against both.
 - A package references only what its layer row allows; the service takes the packages by `ProjectReference` and adds
   only hosting, the HTTP mirror of the contract and the hosted pages.
 - Management screens ship in `fe-events`'s `./admin` export; `apps/web`'s console composes them and builds none itself.

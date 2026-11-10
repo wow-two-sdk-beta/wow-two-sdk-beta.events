@@ -17,6 +17,7 @@
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts"],
   "vueCompilerOptions": {
-    "strictTemplates": true
+    "strictTemplates": true,
+    "dataAttributes": ["data-*"]
   }
 }

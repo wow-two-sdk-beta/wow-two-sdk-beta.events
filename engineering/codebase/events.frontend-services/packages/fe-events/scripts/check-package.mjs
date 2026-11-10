@@ -33,6 +33,57 @@ const fail = (message) => {
 // the management screens a console composes.
 const requiredExports = ['./contracts', './kit', './admin'];
 
+// The names each entry must export: the Events contract mirror and route builders, the client, date helpers and
+// product components, and the reviewer's screens. A consumer type-checks against exactly these.
+const requiredNames = {
+  './contracts': [
+    'EventsRoutes',
+    'EventsRouteConstants',
+    'EventsConstants',
+    'EventsPermissionConstants',
+    'EventsScopeConstants',
+    'eventQueryParams',
+    'trackingQueryParams',
+    'observationQueryParams',
+    'reviewQueryParams',
+    'DatePrecisionValues',
+    'ObservationStateValues',
+    'type EventModel',
+    'type EventFacts',
+    'type EventWhen',
+    'type EventSpec',
+    'type CatalogModel',
+    'type ReviewItemModel',
+    'type ObservationModel',
+    'type TrackingModel',
+    'type WorkflowModel',
+    'type EventImportBundle',
+    'type EventImportRow',
+    'type IntakeStatusModel',
+  ],
+  './kit': [
+    'createEventsClient',
+    'EventsFailureReason',
+    'formatEventWhen',
+    'formatEventSpan',
+    'groupEventsByMonth',
+    'sortEventsByDate',
+    'compareEventWhen',
+    'downloadEventsCalendar',
+    'eventsText',
+    'EventsFeed',
+    'EventCard',
+    'EventsDeadlines',
+    'EventDetail',
+    'EventProposalForm',
+    'TrackingForm',
+    'type EventsClient',
+    'type EventsFailure',
+    'type EventsLocale',
+  ],
+  './admin': ['ReviewQueue', 'ObservationsList', 'ObservationEvidence', 'IntakeStatusPanel', 'CatalogEventsTable'],
+};
+
 try {
   for (const key of requiredExports) {
     if (!manifest.exports?.[key]) fail(`The package must export ${key} (domain-structure § Frontend)`);
@@ -81,12 +132,21 @@ try {
   // Runtime: the contracts entry has no component or CSS, so plain Node imports it from the archive.
   run(process.execPath, ['--input-type=module', '-e', `await import('${manifest.name}/contracts');`]);
 
-  // Types: every export compiles through the manifest, with no source alias.
+  // Types: every export compiles through the manifest, with no source alias, and names what a consumer imports.
+  const namedImports = Object.entries(requiredNames).map(([key, names], index) => {
+    const values = names.filter((name) => !name.startsWith('type '));
+    const types = names.filter((name) => name.startsWith('type ')).map((name) => name.slice(5));
+    const typeUses = types.map((name) => `export type Use${index}${name} = ${name};`).join('\n');
+    return `import { ${[...values, ...types.map((name) => `type ${name}`)].join(', ')} } from '${manifest.name}${key.slice(1)}';\nvoid [${values.join(', ')}];\n${typeUses}`;
+  });
   writeFileSync(
     join(scratch, 'consumer.mts'),
-    exportsMap
-      .map(([key], index) => `import * as Entry${index} from '${manifest.name}${key.slice(1)}';\nvoid Entry${index};`)
-      .join('\n'),
+    [
+      ...exportsMap.map(
+        ([key], index) => `import * as Entry${index} from '${manifest.name}${key.slice(1)}';\nvoid Entry${index};`,
+      ),
+      ...namedImports,
+    ].join('\n'),
   );
   writeFileSync(
     join(scratch, 'tsconfig.json'),
@@ -111,7 +171,7 @@ try {
     copyFileSync(join(scratch, packed.filename), output);
   }
   console.log(
-    `[check:package] ${manifest.name}@${manifest.version}: ${packed.files.length} files, ${exportsMap.length} exports verified.`,
+    `[check:package] ${manifest.name}@${manifest.version}: ${packed.files.length} files, ${exportsMap.length} exports and ${Object.values(requiredNames).flat().length} names verified.`,
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });

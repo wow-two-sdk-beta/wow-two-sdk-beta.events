@@ -1,23 +1,31 @@
-import { createAppRouter, lazyPage, lazyRoute, RouterHistoryMode, type RouteConfig } from '@wow-two-beta/fe/router';
-import { GreetingRouteConstants } from '@wow-two-beta/fe-events/contracts';
-import { readHostedGreetingRequest } from '../../application/greetings/ReadHostedGreetingRequest';
+import { createAppRouter, lazyRoute, RouterHistoryMode, type RouteConfig } from '@wow-two-beta/fe/router';
+import { ConsolePaths } from '../../domain/console/ConsolePaths';
 
-/** Holds the route table: the console at the root, then one route per hosted page a consumer forwards to. */
+/** Holds the console's route table: the review queue at the root, then observations, catalog events and intake. */
 export const routes: RouteConfig = [
   {
-    path: '/',
-    id: 'console',
-    handle: { title: 'Console' },
-    lazy: lazyRoute(() => import('../../presentation/console/pages/ConsolePage.vue')),
+    path: ConsolePaths.review,
+    id: 'review',
+    handle: { title: 'Review' },
+    lazy: lazyRoute(() => import('../../presentation/review/pages/ReviewPage.vue')),
   },
   {
-    path: GreetingRouteConstants.hostedPage,
-    id: 'hosted-greeting',
-    handle: { title: 'Greetings' },
-    lazy: lazyPage(
-      () => import('../../presentation/greetings/pages/HostedGreetingPage.vue'),
-      (route) => ({ request: readHostedGreetingRequest(route.query) }),
-    ),
+    path: ConsolePaths.observations,
+    id: 'observations',
+    handle: { title: 'Observations' },
+    lazy: lazyRoute(() => import('../../presentation/observations/pages/ObservationsPage.vue')),
+  },
+  {
+    path: ConsolePaths.events,
+    id: 'events',
+    handle: { title: 'Events' },
+    lazy: lazyRoute(() => import('../../presentation/events/pages/EventsPage.vue')),
+  },
+  {
+    path: ConsolePaths.intake,
+    id: 'intake',
+    handle: { title: 'Intake' },
+    lazy: lazyRoute(() => import('../../presentation/intake/pages/IntakePage.vue')),
   },
 ];
 

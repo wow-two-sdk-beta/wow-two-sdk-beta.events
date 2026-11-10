@@ -37,7 +37,7 @@
 ### `codebase/events.backend-services/`
 | Project | What it is |
 |---|---|
-| `packages/Abstractions` | the contract: `IGreetingsBroker`, model, constants, error catalogue |
+| `packages/Abstractions` | the contract: the catalogs, events, review, tracking, workflows, imports, calendar and intake brokers, models, scopes, routes, errors |
 | `packages/Module` | Form 1: the broker in process, `AddEvents()`, the named PostgreSQL set `events` of embedded SQL migrations |
 | `packages/Client` | Forms 2/3: the broker over the service's HTTP API, `AddEventsClient()` |
 | `packages/Testing` | fake broker and the conformance suite |
@@ -47,5 +47,5 @@
 ### `codebase/events.frontend-services/`
 | Project | What it is |
 |---|---|
-| `packages/fe-events` | `@wow-two-beta/fe-events`: `./contracts` mirror, `./kit` (`GreetingWidget`, forward to the hosted page), `./admin` (`GreetingsStatusPanel`) |
-| `apps/web` | hosted pages (`/greet`) and the console (`/`, composing `./admin`), served by `Events.Api` |
+| `packages/fe-events` | `@wow-two-beta/fe-events`: `./contracts` mirror, `./kit` (client, dates, feed and tracking components), `./admin` (review queue, observations, intake status) |
+| `apps/web` | the review console (`/`, composing `./admin`), served by `Events.Api` |

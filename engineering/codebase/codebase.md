@@ -11,7 +11,7 @@ The code lives in `events.backend-services/` (.NET) and `events.frontend-service
   conformance suite).
   `Directory.Build.props` makes them packable by path; the core pin in `Directory.Packages.props` is their floor.
 - `service/Events.Api` hosts the module by `ProjectReference`: `AddApiDefaults()` / `UseApiDefaults()`, the module's
-  set claimed as `service`, `GreetingsController` (the HTTP mirror of the contract), `SystemController`, and the pages in
+  set claimed as `service`, the controllers of the contract's HTTP mirror, `SystemController`, and the pages in
   `wwwroot/` (filled by the `BuildSpa` target; `-p:BuildSpa=false` skips it). `Program.cs` answers `migrate <verb>`
   (`check`, `apply`, `sets --json`, …) before any startup work: the deploy's migrate step. A local run applies at
   boot; any other boot only verifies the levels.

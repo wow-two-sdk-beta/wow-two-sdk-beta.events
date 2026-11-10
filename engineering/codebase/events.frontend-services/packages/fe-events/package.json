@@ -1,7 +1,7 @@
 {
   "name": "@wow-two-beta/fe-events",
   "version": "0.0.0",
-  "description": "Events domain UI: the Greetings contract, an embeddable greeting widget, the forward to the hosted page and the console's status panel.",
+  "description": "Events domain UI: the TypeScript mirror of the Events contract, the client, honest date helpers and product components, and the reviewer's screens.",
   "type": "module",
   "license": "MIT",
   "repository": {
