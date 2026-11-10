@@ -68,6 +68,7 @@ The events lane's verdict and phase for each contract it owns (events-integratio
 |---|---|---|
 | Custom field schemas per workflow, validated | feature | P2; P1 stores fields as JSON |
 | Reminders on deadlines | feature | P2; EV4, events-integration #11 |
+| `VTIMEZONE` blocks in the calendar export for zoned local times | feature | P2; P1 writes `TZID` with no block, which most clients resolve from IANA |
 | Feed links inside the owner organization | feature | P2; no anonymous or token URLs for sourced catalogs (events-integration #50) |
 
 ## Access

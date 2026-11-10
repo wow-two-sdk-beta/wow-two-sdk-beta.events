@@ -13,6 +13,9 @@ public static class EventsRouteConstants
     /// <summary>Holds a catalog's events, relative to the catalog.</summary>
     public const string Events = "events";
 
+    /// <summary>Holds a catalog's proposals by members, relative to the catalog.</summary>
+    public const string Candidates = "candidates";
+
     /// <summary>Holds a catalog's review queue, relative to the catalog.</summary>
     public const string Review = "review";
 

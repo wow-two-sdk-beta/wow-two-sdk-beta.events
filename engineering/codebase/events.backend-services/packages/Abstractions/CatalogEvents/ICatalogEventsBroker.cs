@@ -29,6 +29,15 @@ public interface ICatalogEventsBroker
     /// <see cref="EventsErrors.KeyTaken"/> for a key already used.</returns>
     Task<Result<EventModel>> CreateAsync(string catalog, EventSpec spec, CancellationToken cancellationToken = default);
 
+    /// <summary>Proposes an event: a member of the owner organization enters it, and it waits for a reviewer as a
+    /// candidate (nothing a member proposes publishes unreviewed).</summary>
+    /// <param name="catalog">The catalog's slug.</param>
+    /// <param name="spec">The facts; the expected revision is ignored.</param>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>The candidate; <see cref="EventsErrors.NotCatalogOwner"/> for another organization;
+    /// <see cref="EventsErrors.KeyTaken"/> for a key already used.</returns>
+    Task<Result<EventModel>> ProposeAsync(string catalog, EventSpec spec, CancellationToken cancellationToken = default);
+
     /// <summary>Replaces an event's facts.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="id">The event.</param>

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Imports;
@@ -16,6 +17,10 @@ public sealed record EventImportRow
 
     /// <summary>Gets when the producing system first recorded the event (UTC).</summary>
     public DateTimeOffset? RecordedAtUtc { get; init; }
+
+    /// <summary>Gets the producing system's whole row as it stood, kept as the row's evidence (an observation of kind
+    /// <c>import</c>) for reconciliation and rollback; never read for facts.</summary>
+    public JsonElement? Legacy { get; init; }
 
     /// <summary>Gets the organization's tracking; none imports the event alone.</summary>
     public EventImportTracking? Tracking { get; init; }
