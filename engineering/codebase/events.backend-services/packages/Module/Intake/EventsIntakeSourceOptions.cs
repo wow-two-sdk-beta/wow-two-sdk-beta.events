@@ -44,4 +44,16 @@ public sealed class EventsIntakeSourceOptions
 
     /// <summary>Gets or sets the scope the token asks for.</summary>
     public string? Scope { get; set; } = "harvest.events-read";
+
+    /// <summary>Gets or sets the resource the token is asked for, SCFD's resource URI at the issuer; empty asks for
+    /// <see cref="BaseUrl"/> with its trailing slash. Identity issues a service token for exactly one resource.</summary>
+    public string? Resource { get; set; }
+
+    /// <summary>Gets the resource a token is asked for: <see cref="Resource"/>, else <see cref="BaseUrl"/> with its
+    /// trailing slash; none without either.</summary>
+    /// <returns>The resource URI.</returns>
+    public string? TokenResource() =>
+        !string.IsNullOrWhiteSpace(Resource) ? Resource.Trim()
+        : string.IsNullOrWhiteSpace(BaseUrl) ? null
+        : BaseUrl.Trim().TrimEnd('/') + "/";
 }

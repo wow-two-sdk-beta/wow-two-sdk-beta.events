@@ -70,6 +70,7 @@ public static class EventsIntakeServiceCollectionExtensions
                 token.ClientId = current.ClientId;
                 token.ClientSecret = current.ClientSecret ?? string.Empty;
                 token.Scope = current.Scope;
+                token.Resource = current.TokenResource();
             });
         }
 

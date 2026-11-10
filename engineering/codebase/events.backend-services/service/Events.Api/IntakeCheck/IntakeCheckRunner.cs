@@ -44,19 +44,25 @@ internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandl
         }
 
         var ok = true;
+        var summaries = new List<string>();
         foreach (var source in selected)
-            ok &= await CheckAsync(source, arguments.ForeignSubscription, cancellationToken);
+        {
+            var (passed, summary) = await CheckAsync(source, arguments.ForeignSubscription, cancellationToken);
+            ok &= passed;
+            summaries.Add(summary);
+        }
 
-        await output.WriteLineAsync(IntakeCheckLine.Result(ok));
+        // Wheelhouse Run keeps the last line only: it carries every status.
+        await output.WriteLineAsync(IntakeCheckLine.Result(ok, summaries));
         return ok;
     }
 
-    private async Task<bool> CheckAsync(EventsIntakeSourceOptions source, string? foreign, CancellationToken cancellationToken)
+    private async Task<(bool Ok, string Summary)> CheckAsync(EventsIntakeSourceOptions source, string? foreign, CancellationToken cancellationToken)
     {
         if (!IsConfigured(source, out var baseUrl, out var tokenEndpoint))
         {
             await output.WriteLineAsync(IntakeCheckLine.Skipped(source.Name, "not-configured"));
-            return false;
+            return (false, IntakeCheckLine.Summary(source.Name, "not-configured", null, null, null, null, null, foreign is not null));
         }
 
         await using var services = Services(source, tokenEndpoint);
@@ -71,14 +77,18 @@ internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandl
         await output.WriteLineAsync(IntakeCheckLine.Check(source.Name, IntakeCheckLine.Tenants, tenants.Status, HttpStatusCode.Forbidden, reason: tenants.Reason));
         ok &= tenants.Status == HttpStatusCode.Forbidden;
 
+        HttpStatusCode? foreignStatus = null;
         if (!string.IsNullOrWhiteSpace(foreign))
         {
             var other = await SendAsync(client, $"{subscriptions}/{Uri.EscapeDataString(foreign.Trim())}/events", count: false, cancellationToken);
             await output.WriteLineAsync(IntakeCheckLine.Check(source.Name, IntakeCheckLine.Foreign, other.Status, HttpStatusCode.NotFound, reason: other.Reason));
             ok &= other.Status == HttpStatusCode.NotFound;
+            foreignStatus = other.Status;
         }
 
-        return ok;
+        // The token's outcome is the first answer's: any HTTP status means a token was issued and sent.
+        var token = pull.Status is not null || tenants.Status is not null ? "ok" : pull.Reason ?? tenants.Reason ?? "unknown";
+        return (ok, IntakeCheckLine.Summary(source.Name, token, pull.Status, pull.Records, pull.EventRecords, tenants.Status, foreignStatus, !string.IsNullOrWhiteSpace(foreign)));
     }
 
     /// <summary>Tells whether a source names everything a check needs: its base URL, its subscription and its token client.</summary>
@@ -104,6 +114,7 @@ internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandl
             token.ClientId = source.ClientId;
             token.ClientSecret = source.ClientSecret ?? string.Empty;
             token.Scope = source.Scope;
+            token.Resource = source.TokenResource();
         });
         if (primaryHandler is not null)
         {
@@ -127,9 +138,9 @@ internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandl
             await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
             return Count(response.StatusCode, await JsonDocument.ParseAsync(body, cancellationToken: cancellationToken));
         }
-        catch (OAuth2TokenRequestException)
+        catch (OAuth2TokenRequestException exception)
         {
-            return new CheckAnswer(null, null, null, "token-refused");
+            return new CheckAnswer(null, null, null, "token-refused:" + IntakeCheckLine.Code(exception.Error));
         }
         catch (HttpRequestException)
         {

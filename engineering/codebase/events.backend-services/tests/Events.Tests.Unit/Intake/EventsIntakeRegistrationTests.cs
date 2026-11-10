@@ -46,6 +46,7 @@ public sealed class EventsIntakeRegistrationTests
         token.TokenEndpoint.Should().Be(new Uri("https://identity.test/connect/token"));
         token.ClientId.Should().Be("events");
         token.Scope.Should().Be("harvest.events-read");
+        token.Resource.Should().Be("https://harvest.test/", "Identity issues a service token for exactly one resource: SCFD's, by default its base URL");
         token.ClientSecret.Should().Be("test-secret");
         provider.GetRequiredService<IObservationFeed>().Should().BeOfType<ScfdObservationFeed>();
         provider.GetServices<IHostedService>().Should().ContainSingle().Which.Should().BeOfType<IntakePoller>();

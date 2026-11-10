@@ -40,7 +40,7 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
             }
             catch (Exception exception)
             {
-                LogPageFailed(logger, source.Name, exception);
+                LogPageFailed(logger, source.Name, FailureKind(exception), exception);
                 await RecordFailureAsync(source, $"{exception.GetType().Name}: {exception.Message}", cancellationToken);
                 return;
             }
@@ -51,6 +51,9 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
                 await RecordFailureAsync(source, error.Message, cancellationToken);
                 return;
             }
+
+            if (outcome is Result<IntakePageOutcome>.Success { Value: var done })
+                LogPagePolled(logger, source.Name, page + 1, done.Received, done.Quarantined, done.HasMore);
 
             if (outcome is not Result<IntakePageOutcome>.Success { Value.HasMore: true })
                 return;
@@ -76,8 +79,22 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
         }
     }
 
-    [LoggerMessage(EventId = 4101, Level = LogLevel.Warning, Message = "Events intake: a page of source {Source} failed; it replays on the next poll.")]
-    private static partial void LogPageFailed(ILogger logger, string source, Exception exception);
+    /// <summary>Names a failure's kind for the log: SCFD's HTTP status, the token endpoint's OAuth error, or the exception
+    /// type; never a token, a body or a host.</summary>
+    internal static string FailureKind(Exception exception) => exception switch
+    {
+        WoW.Two.Sdk.Beta.Be.Http.Auth.OAuth2.OAuth2TokenRequestException token => $"token-refused:{token.Error ?? "unknown"}",
+        HttpRequestException { StatusCode: { } status } => $"scfd-status-{(int)status}",
+        HttpRequestException => "scfd-unreachable",
+        TaskCanceledException => "timeout",
+        _ => exception.GetType().Name,
+    };
+
+    [LoggerMessage(EventId = 4104, Level = LogLevel.Information, Message = "Events intake: source {Source} page {Page} polled: SCFD 200, {Received} new records stored, {Quarantined} quarantined, more pages {HasMore}; the cursor committed.")]
+    private static partial void LogPagePolled(ILogger logger, string source, int page, int received, int quarantined, bool hasMore);
+
+    [LoggerMessage(EventId = 4101, Level = LogLevel.Warning, Message = "Events intake: a page of source {Source} failed ({Kind}); the cursor stays and the page replays on the next poll.")]
+    private static partial void LogPageFailed(ILogger logger, string source, string kind, Exception exception);
 
     [LoggerMessage(EventId = 4102, Level = LogLevel.Warning, Message = "Events intake: source {Source} cannot poll: {Error}")]
     private static partial void LogPageRefused(ILogger logger, string source, string error);

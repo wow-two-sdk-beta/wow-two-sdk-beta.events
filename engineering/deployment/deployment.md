@@ -39,13 +39,18 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   ring in `DataProtection:KeysPath` (`/var/lib/events/keys`, the `keys` volume) named `DataProtection:ApplicationName`;
   keep both as deployed, or every reviewer is signed out. A rollback names its set: `migrate rollback --set events …`.
 - Intake: `Events:Intake:Sources:N` (`Name`, `Catalog`, `BaseUrl`, `SubscriptionId`, `TokenEndpoint`, `ClientId`,
-  `ClientSecret`, `Scope`, …); none polls nothing. The image answers `dotnet Events.Api.dll intake check [--source <name>]
+  `ClientSecret`, `Scope`, `Resource`, …); none polls nothing. The token request names exactly one `resource`, as
+  Identity requires: `Resource`, else `BaseUrl` with its slash. The worker logs `Events intake: polling N source(s)` at
+  start and one Information line per page polled (records stored, quarantined, more pages); a failed page logs a
+  Warning naming its kind (`token-refused:<oauth error>`, `scfd-status-<code>`, `scfd-unreachable`, `timeout`). The image answers `dotnet Events.Api.dll intake check [--source <name>]
   [--foreign-subscription <id>]` from configuration only (no database): per enabled source, its own token pulls its
   subscription (`check=pull`, 200, with `records` and `event-records` of `wow2.event.v1`), is refused the tenants list
   (`check=tenants`, 403) and, with `--foreign-subscription`, finds no other tenant's subscription (`check=foreign`, 404,
   never 403). One `intake-check source=… check=… status=… expected=… ok=…` line per check, `reason=not-configured` for a
   source missing its base URL, subscription or token client, and a last `intake-check-result ok=…`; exit 0 when every
-  check matches, else 1. It prints no token, header, body, URL or host name.
+  check matches, else 1. The last line repeats every status, for runners that keep only it:
+  `intake-check-result ok=… source=… token=<ok|token-refused:<oauth error>|unreachable|timeout|not-configured> pull=…
+  records=… event-records=… tenants=… foreign=…`. It prints no token, header, body, URL or host name.
 - Dev check: after a dev rollout, `verify` curls `$VERIFY_SERVICE_EVENTS/health` and `/api/system/status` with
   `Host: localhost`; `HostFilteringTests` replays the descriptor's requests.
 - After each main image publish, `conformance.yml` boots the released image on PostgreSQL, migrates it and checks its

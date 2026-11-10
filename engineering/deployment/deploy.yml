@@ -77,6 +77,9 @@ services:
         Events:Intake:Sources:0:ClientId: { default: events }
         Events:Intake:Sources:0:ClientSecret: { secret: true }
         Events:Intake:Sources:0:Scope: { default: harvest.events-read }
+        # SCFD's resource URI at the issuer, with its slash: Identity issues a service token for exactly one resource.
+        # Empty asks for the BaseUrl with its slash.
+        Events:Intake:Sources:0:Resource: { type: url }
         Events:Intake:Sources:0:PollInterval: { default: "00:05:00" }
         Events:Intake:Sources:1:Name: { default: afisha-exhibitions }
         Events:Intake:Sources:1:Catalog: { default: ocharo-fashion }
@@ -87,6 +90,7 @@ services:
         Events:Intake:Sources:1:ClientId: { from: Events:Intake:Sources:0:ClientId }
         Events:Intake:Sources:1:ClientSecret: { from: Events:Intake:Sources:0:ClientSecret }
         Events:Intake:Sources:1:Scope: { from: Events:Intake:Sources:0:Scope }
+        Events:Intake:Sources:1:Resource: { from: Events:Intake:Sources:0:Resource }
         Events:Intake:Sources:1:PollInterval: { default: "00:05:00" }
     # The console's data-protection key ring (DataProtection:KeysPath).
     volumes:

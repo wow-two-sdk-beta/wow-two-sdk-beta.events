@@ -25,7 +25,7 @@ public sealed class IntakeCheckTests
             "intake-check source=ocharo check=pull status=200 expected=200 ok=true records=3 event-records=2",
             "intake-check source=ocharo check=tenants status=403 expected=403 ok=true",
             "intake-check source=ocharo check=foreign status=404 expected=404 ok=true",
-            "intake-check-result ok=true");
+            "intake-check-result ok=true source=ocharo token=ok pull=200 records=3 event-records=2 tenants=403 foreign=404");
         exit.Should().Be(0);
     }
 
@@ -35,7 +35,21 @@ public sealed class IntakeCheckTests
         var (exit, lines) = await RunAsync(Stub(tenants: HttpStatusCode.OK));
 
         lines.Should().Contain("intake-check source=ocharo check=tenants status=200 expected=403 ok=false");
-        lines[^1].Should().Be("intake-check-result ok=false");
+        lines[^1].Should().Be("intake-check-result ok=false source=ocharo token=ok pull=200 records=3 event-records=2 tenants=200 foreign=skipped");
+        exit.Should().Be(1);
+    }
+
+    /// <summary>Identity names exactly one resource per service token: a request for another target is refused
+    /// <c>invalid_target</c>, and the last line says so (events-dev, 2026-11-10: the verb sent no resource).</summary>
+    [Fact]
+    public async Task Check_ShouldNameTheTokenError_WhenIdentityRefusesTheTarget()
+    {
+        var settings = Settings();
+        settings["Events:Intake:Sources:0:Resource"] = "https://another-resource.test/";
+
+        var (exit, lines) = await RunAsync(Stub(), settings, []);
+
+        lines[^1].Should().Be("intake-check-result ok=false source=ocharo token=token-refused:invalid_target pull=0 records=0 event-records=0 tenants=0 foreign=skipped");
         exit.Should().Be(1);
     }
 
@@ -57,7 +71,9 @@ public sealed class IntakeCheckTests
             ["Events:Intake:Sources:0:SubscriptionId"] = Subscription,
         }, args: []);
 
-        lines.Should().Equal("intake-check source=ocharo ok=false reason=not-configured", "intake-check-result ok=false");
+        lines.Should().Equal(
+            "intake-check source=ocharo ok=false reason=not-configured",
+            "intake-check-result ok=false source=ocharo token=not-configured pull=0 records=0 event-records=0 tenants=0 foreign=skipped");
         exit.Should().Be(1);
     }
 
@@ -128,7 +144,13 @@ public sealed class IntakeCheckTests
         {
             var url = request.RequestUri!.AbsoluteUri;
             if (url == TokenEndpoint)
-                return Answer(HttpStatusCode.OK, $$"""{"access_token":"{{Token}}","token_type":"Bearer","expires_in":300}""");
+            {
+                // As Identity: a service token names exactly one resource, here SCFD's base URL with its slash.
+                var form = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return form.Contains("resource=" + Uri.EscapeDataString(BaseUrl + "/"), StringComparison.Ordinal)
+                    ? Answer(HttpStatusCode.OK, $$"""{"access_token":"{{Token}}","token_type":"Bearer","expires_in":300}""")
+                    : Answer(HttpStatusCode.BadRequest, """{"error":"invalid_target","error_description":"Name exactly one resource."}""");
+            }
             if (request.Headers.Authorization?.Parameter != Token)
                 return Answer(HttpStatusCode.Unauthorized, "{}");
             if (url.StartsWith($"{BaseUrl}/api/subscriptions/{Subscription}/events", StringComparison.Ordinal))

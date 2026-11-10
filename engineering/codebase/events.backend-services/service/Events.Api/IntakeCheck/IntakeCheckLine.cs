@@ -46,6 +46,37 @@ public static class IntakeCheckLine
     public static string Result(bool ok, string? reason = null) =>
         reason is null ? $"intake-check-result ok={Bool(ok)}" : $"intake-check-result ok={Bool(ok)} reason={reason}";
 
+    /// <summary>Writes the last line with every source's statuses, since a runner may keep only the last line:
+    /// <c>intake-check-result ok=false source=… token=… pull=… records=… event-records=… tenants=… foreign=…</c>,
+    /// sources joined by <c> | </c>.</summary>
+    /// <param name="ok">Whether every check matched.</param>
+    /// <param name="summaries">One <see cref="Summary"/> per source.</param>
+    public static string Result(bool ok, IReadOnlyList<string> summaries) =>
+        summaries.Count == 0 ? Result(ok) : $"intake-check-result ok={Bool(ok)} {string.Join(" | ", summaries)}";
+
+    /// <summary>Writes one source's statuses for the last line: statuses, counts and error kinds only.</summary>
+    /// <param name="source">The source's name.</param>
+    /// <param name="token">The token's outcome: <c>ok</c>, <c>token-refused:{oauth error}</c>, <c>unreachable</c>,
+    /// <c>timeout</c> or <c>not-configured</c>.</param>
+    /// <param name="pull">The pull's status.</param>
+    /// <param name="records">The pull's records.</param>
+    /// <param name="eventRecords">The pull's <c>wow2.event.v1</c> records.</param>
+    /// <param name="tenants">The tenants check's status.</param>
+    /// <param name="foreign">The foreign check's status.</param>
+    /// <param name="foreignAsked">Whether a foreign subscription was given.</param>
+    public static string Summary(string source, string token, HttpStatusCode? pull, int? records, int? eventRecords, HttpStatusCode? tenants, HttpStatusCode? foreign, bool foreignAsked) =>
+        $"source={source} token={token} pull={Code(pull)} records={Count(records)} event-records={Count(eventRecords)} tenants={Code(tenants)} foreign={(foreignAsked ? Code(foreign) : "skipped")}";
+
+    /// <summary>Keeps an OAuth error code to its safe characters (<c>invalid_target</c>), or <c>unknown</c>.</summary>
+    /// <param name="error">The token endpoint's <c>error</c>.</param>
+    public static string Code(string? error)
+    {
+        var safe = new string((error ?? string.Empty).Where(c => char.IsAsciiLetterLower(c) || c == '_').Take(40).ToArray());
+        return safe.Length == 0 ? "unknown" : safe;
+    }
+
+    private static string Count(int? value) => (value ?? 0).ToString(CultureInfo.InvariantCulture);
+
     private static string Code(HttpStatusCode? status) => status is { } code ? ((int)code).ToString(CultureInfo.InvariantCulture) : "0";
 
     private static string Bool(bool value) => value ? "true" : "false";

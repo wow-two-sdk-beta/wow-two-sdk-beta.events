@@ -22,6 +22,8 @@ internal sealed partial class IntakePoller(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await Task.Yield();
+        var active = options.CurrentValue.Sources.Where(IntakeSources.IsActive).Select(source => source.Name).ToList();
+        LogStarted(logger, active.Count, string.Join(", ", active));
         var due = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -63,6 +65,9 @@ internal sealed partial class IntakePoller(
     }
 
     private static TimeSpan Min(TimeSpan left, TimeSpan right) => left < right ? left : right;
+
+    [LoggerMessage(EventId = 4105, Level = LogLevel.Information, Message = "Events intake: polling {Count} source(s): {Sources}.")]
+    private static partial void LogStarted(ILogger logger, int count, string sources);
 
     [LoggerMessage(EventId = 4100, Level = LogLevel.Error, Message = "Events intake: the poll loop failed; it retries on its next turn.")]
     private static partial void LogLoopFailed(ILogger logger, Exception exception);
