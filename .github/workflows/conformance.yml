@@ -71,12 +71,20 @@ jobs:
           echo "::error::$image never reported healthy"
           exit 1
 
-      - name: Run the conformance suite against the image
-        env:
-          CONFORMANCE_BASE_URL: http://127.0.0.1:8080
-        run: >-
-          dotnet test engineering/codebase/events.backend-services/tests/Events.Tests.Conformance -p:BuildSpa=false
-          --filter "FullyQualifiedName~ClientGreetingsConformanceTests"
+      # The full conformance suite runs in process on every build (tests/Events.Tests.Conformance, 108 cases over the
+      # module and the client): it mints its own tokens. Against the released image this job checks what only the image
+      # can show: it boots, migrates, serves its status and pages, and refuses the API without an Identity token.
+      - name: Check the released image
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/system/status >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null
+          code=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/api/events/v1/catalogs)
+          test "$code" = 401 || { echo "::error::the API answered $code without a token, expected 401"; exit 1; }
+          docker run --rm --network conformance \
+            --env DB_CONNECTION="Host=database;Database=events;Username=events;Password=events" \
+            "ghcr.io/${GITHUB_REPOSITORY,,}/events:$TAG" migrate check
+          echo "status, pages, 401 without a token and migrate check all answered"
 
       - name: Service log
         if: failure()

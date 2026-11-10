@@ -48,6 +48,8 @@ WORKDIR /app
 COPY --from=build /app ./
 
 ENV ASPNETCORE_HTTP_PORTS=8080
+# The console's key ring (DataProtection:KeysPath); a named volume mounted here takes this owner.
+RUN mkdir -p /var/lib/events/keys && chown app:app /var/lib/events/keys
 USER app
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 \

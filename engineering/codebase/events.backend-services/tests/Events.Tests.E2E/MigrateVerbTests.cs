@@ -67,18 +67,23 @@ public sealed class MigrateVerbTests(MigratorPostgresFixture fixture) : IClassFi
             await verbs.AssertRerunChangesNothingAsync(read);
     }
 
+    /// <summary>Holds the module's set, the one a rollback names.</summary>
+    private const string Set = EventsModuleConstants.MigrationSetName;
+
     [Fact]
     public async Task Rollback_ShouldRefuseWithoutTheDatabaseName_ThenRollBackAndApplyAgain()
     {
         var verbs = Verbs();
         var applied = Module((await verbs.AssertExitAsync(0, "apply")).Result).Applied.Select(label => label.Label).ToList();
 
-        (await verbs.AssertExitAsync(1, "rollback", "--to", "0")).Result.Message.Should().Contain("--confirm");
-        await verbs.AssertExitAsync(1, "rollback", "--to", "0", "--confirm", "another_database");
+        // The host runs two sets (the module's and the console's session cache), so a rollback names its set.
+        (await verbs.AssertExitAsync(1, "rollback", "--to", "0")).Result.Message.Should().Contain("--set");
+        (await verbs.AssertExitAsync(1, "rollback", "--set", Set, "--to", "0")).Result.Message.Should().Contain("--confirm");
+        await verbs.AssertExitAsync(1, "rollback", "--set", Set, "--to", "0", "--confirm", "another_database");
         Module((await verbs.AssertCheckWritesNothingAsync()).Result).State.Should().Be(MigrationLevelState.Current, "a refused rollback runs no SQL");
 
-        await verbs.AssertExitAsync(0, "rollback", "--to", "0", "--confirm", Database);
-        await verbs.AssertRerunChangesNothingAsync("rollback", "--to", "0", "--confirm", Database);
+        await verbs.AssertExitAsync(0, "rollback", "--set", Set, "--to", "0", "--confirm", Database);
+        await verbs.AssertRerunChangesNothingAsync("rollback", "--set", Set, "--to", "0", "--confirm", Database);
         Module((await verbs.AssertExitAsync(1, "check")).Result).State.Should().Be(MigrationLevelState.Behind);
 
         Module((await verbs.AssertExitAsync(0, "apply")).Result).Applied.Select(label => label.Label).Should().Equal(applied);

@@ -1,3 +1,4 @@
+using Events.Api.Auth;
 using WoW.Two.Sdk.Beta.Be.Data;
 using WoW.Two.Sdk.Beta.Be.Meta;
 
@@ -23,6 +24,8 @@ public static partial class HostConfiguration
         });
 
         return builder
+            .AddEventsAuth()
+            .AddConsoleStorage()
             .AddEventsModule()
             .AddControllers();
     }
@@ -35,9 +38,11 @@ public static partial class HostConfiguration
         // verifies the levels, since the deploy's migrate step (dotnet Events.Api.dll migrate) applied them before it.
         await app.Services.MigrateBespokeOnStartupAsync(app.Lifetime.ApplicationStopping);
 
-        // SDK pipeline: secure headers, compression, the SPA bundle, /health (database readiness) and the SPA fallback.
-        app.UseApiDefaults();
+        // SDK pipeline: secure headers, compression, the SPA bundle, /health (database readiness) and the SPA fallback;
+        // authentication (token, or the console's session with its antiforgery check) and authorization after routing.
+        app.UseApiDefaults(identity => identity.UseEventsAuth());
         app.MapControllers();
+        app.MapEventsAuth();
 
         return app;
     }

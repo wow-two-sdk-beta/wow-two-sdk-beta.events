@@ -44,7 +44,7 @@ cat > "$consumer/Program.cs" <<CS
 using Microsoft.Extensions.DependencyInjection;
 using WoW.Two.Sdk.Beta.Be.Events.Client;
 using WoW.Two.Sdk.Beta.Be.Events.Module;
-using WoW.Two.Sdk.Beta.Be.Events.Testing.Greetings;
+using WoW.Two.Sdk.Beta.Be.Events.Testing.Conformance;
 
 var formOne = new ServiceCollection();
 formOne.AddEvents().Configure(options => options.ConnectionString = "Host=localhost;Database=events");
@@ -52,7 +52,7 @@ formOne.AddEvents().Configure(options => options.ConnectionString = "Host=localh
 var formThree = new ServiceCollection();
 formThree.AddEventsClient(options => options.BaseAddress = new Uri("https://service.example.test/"));
 
-Console.WriteLine(\$"pack smoke: {nameof(GreetingsBrokerConformance)} and both forms resolve from the packed family");
+Console.WriteLine(\$"pack smoke: {nameof(EventCatalogsBrokerConformance)} and both forms resolve from the packed family");
 CS
 
 # No HTTP cache: a core version published minutes ago must resolve, not a cached index that predates it.

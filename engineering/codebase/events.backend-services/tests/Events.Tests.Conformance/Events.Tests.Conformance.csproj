@@ -5,13 +5,14 @@
   </PropertyGroup>
 
   <!--
-    Conformance tier — the one IGreetingsBroker suite (GreetingsBrokerConformance, shipped in the Testing package) run
-    against every implementation: the in-process Module over PostgreSQL, the Client against the service host (in
-    process over PostgreSQL, or a running image when CONFORMANCE_BASE_URL is set), and the test kit's fake. The
-    in-process forms need Docker (Testcontainers).
+    Conformance tier — the Events suites (one per broker, shipped in the Testing package) run against every
+    implementation: the in-process Module over PostgreSQL (the test principal switched per actor), and the Client
+    against the service host in process over PostgreSQL, trusting a fake Identity issuer whose tokens the client sends
+    per actor. Both forms need Docker (Testcontainers).
   -->
   <ItemGroup>
     <PackageReference Include="WoW2.Sdk.Beta.Be.Testing.Data" />
+    <PackageReference Include="WoW2.Sdk.Beta.Be.Identity.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
   </ItemGroup>

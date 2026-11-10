@@ -1,8 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The Events test kit: the conformance suites every implementation must pass, and a settable test principal. -->
+  <!--
+    The Events test kit: one conformance suite per broker (catalogs, catalog events, review, tracking, workflows,
+    imports, calendar, intake status) every implementation must pass, and a settable test principal.
+  -->
   <PropertyGroup>
-    <Description>Events test kit: the conformance suite of every Events broker and a settable test principal.</Description>
+    <Description>Events test kit: a conformance suite per Events broker that every implementation passes, and a settable test principal.</Description>
   </PropertyGroup>
 
   <ItemGroup>

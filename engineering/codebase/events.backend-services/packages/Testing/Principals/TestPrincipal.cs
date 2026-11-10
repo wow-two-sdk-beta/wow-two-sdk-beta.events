@@ -1,3 +1,4 @@
+using WoW.Two.Sdk.Beta.Be.Events.Testing.Conformance;
 using WoW.Two.Sdk.Beta.Be.Identity.CurrentPrincipal;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Testing.Principals;
@@ -61,6 +62,38 @@ public sealed class TestPrincipal : ICurrentPrincipal
             EventsPermissionConstants.Admin,
         };
         return this;
+    }
+
+    /// <summary>Makes the principal a service acting as itself (client credentials): every Events scope, no organization,
+    /// no person's permission.</summary>
+    /// <param name="clientId">The service's client id, also its subject.</param>
+    /// <param name="issuer">The issuer; <see cref="DefaultIssuer"/> when none.</param>
+    /// <returns>This principal.</returns>
+    public TestPrincipal ActAsService(string clientId, string? issuer = null)
+    {
+        Kind = PrincipalKind.Service;
+        Issuer = issuer ?? DefaultIssuer;
+        OrganizationId = null;
+        Subject = ClientId = clientId;
+        Scopes = new HashSet<string>
+        {
+            EventsScopeConstants.Read, EventsScopeConstants.Track, EventsScopeConstants.Review, EventsScopeConstants.Import,
+            EventsScopeConstants.Admin,
+        };
+        Permissions = new HashSet<string>();
+        return this;
+    }
+
+    /// <summary>Makes the principal a conformance actor: a member of its organization, or a service.</summary>
+    /// <param name="actor">Who calls.</param>
+    /// <param name="issuer">The issuer; <see cref="DefaultIssuer"/> when none.</param>
+    /// <returns>This principal.</returns>
+    public TestPrincipal ActAs(EventsActor actor, string? issuer = null)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        return actor.Kind == PrincipalKind.Service
+            ? ActAsService(actor.Subject, issuer)
+            : ActAsMember(actor.OrganizationId!, actor.Subject, issuer);
     }
 
     /// <summary>Makes the principal anonymous.</summary>

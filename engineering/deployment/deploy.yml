@@ -64,6 +64,10 @@ services:
         Events:Console:Authority: { type: url }
         Events:Console:ClientId: { default: events-console }
         Events:Console:ClientSecret: { secret: true }
+        # The console's sign-in sessions live in the service's database (the be sdk's `distributed_cache` set) and its
+        # cookies under a key ring on the keys volume; keep both values as deployed, or every reviewer is signed out.
+        DataProtection:KeysPath: { default: /var/lib/events/keys }
+        DataProtection:ApplicationName: { default: "events:Production" }
         Events:Intake:Sources:0:Name: { default: afisha-fashion }
         Events:Intake:Sources:0:Catalog: { default: ocharo-fashion }
         Events:Intake:Sources:0:Instance: { default: scfd }
@@ -84,6 +88,9 @@ services:
         Events:Intake:Sources:1:ClientSecret: { from: Events:Intake:Sources:0:ClientSecret }
         Events:Intake:Sources:1:Scope: { from: Events:Intake:Sources:0:Scope }
         Events:Intake:Sources:1:PollInterval: { default: "00:05:00" }
+    # The console's data-protection key ring (DataProtection:KeysPath).
+    volumes:
+      keys: /var/lib/events/keys
     needs: [postgres]
     # The pages and the signal route at /, the contract's HTTP mirror and the BFF under the same host's /api.
     sites:

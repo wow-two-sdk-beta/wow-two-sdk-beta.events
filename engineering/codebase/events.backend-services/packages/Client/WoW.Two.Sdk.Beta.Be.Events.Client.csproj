@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Forms 2 and 3: the greetings contract over the running Events service's HTTP API. -->
+  <!-- Forms 2 and 3: every Events broker over the running Events service's HTTP API; the consumer adds the token handler. -->
   <PropertyGroup>
-    <Description>Events Forms 2 and 3: the greetings contract over the running Events service's HTTP API.</Description>
+    <Description>Events Forms 2 and 3: every Events broker over the running Events service's HTTP API, with the caller's Identity token.</Description>
   </PropertyGroup>
 
   <ItemGroup>
