@@ -2,7 +2,7 @@
 
 Internal event catalog fed by SCFD and curated in review, with private tracking per organization — as a .NET package family, an npm package and a service image, under one contract. Sourced records serve internal tracking only and are never republished.
 
-> **Pre-release.** Scaffolded 2026-11-10; nothing is published yet. Plan: `engineering/planning/version-track/v0.1/`.
+> **Pre-release.** Published to NuGet (`WoW2.Sdk.Beta.Be.Events.*`), npm (`@wow-two-beta/fe-events`) and as the image of each GitHub Release (`v*`); running on Wheelhouse `events-dev`. Plan: `engineering/planning/version-track/v0.1/`.
 
 ## Artifacts
 

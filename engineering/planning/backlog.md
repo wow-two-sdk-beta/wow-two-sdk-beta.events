@@ -18,8 +18,8 @@ The events lane's verdict and phase for each contract it owns (events-integratio
 | # | Contract | Verdict | Phase | Pick |
 |---|---|---|---|---|
 | #14 | Spec reconciled | change | P1 | the reconciled spec is [`product/product.md`](../../product/product.md): pull intake from SCFD, Identity tokens, evidence per observation, the Desk import; the old webhook intake, API keys for our own callers and the `wow-two-platform.events` host drop |
-| #15 | SCFD pull, consumer side | provided, with one gap | P1 | Events polls `GET api/subscriptions/{id}/events?cursor=&limit=` (no ack, no long-poll) with its client-credentials token; the subscription is provisioned (`Events:Intake:Scfd:SubscriptionId`) with `Schema` `wow2.event.v1`; the page's observations and the next cursor commit in one transaction; dedup on (subscription, `EventId`), highest `Revision` per `PostId`; gap: SCFD's `Harvest.Abstractions` and `Harvest.Client` are on no registry, so P1 reads the wire through Events' own reader behind `IObservationFeed`, swapped for `Harvest.Client` once published (P2 row below) |
-| #19 | Evidence, consumer side | change | P1 | each observation keeps the SCFD instance, subscription, pipeline (from settings; the event carries none), `EventId`, `ItemId`, `PostId`, `Revision`, type, reason, `OccurredAtUtc`, every link's `Url`, `SourceId`, `CaptureId`, `CapturedAtUtc` and `SourceFields`, and the raw payload; asks of SCFD: the extraction stamp (norm and rules versions) in the `wow2.event.v1` projection, and `PipelineId` on `DeliveryEvent`; until then Events stores the mapping version as unknown |
+| #15 | SCFD pull, consumer side | provided, with one gap | P1 | Events polls `GET api/subscriptions/{id}/events?cursor=&limit=` (no ack, no long-poll) with its client-credentials token; the subscription is provisioned (`Events:Intake:Sources:N:SubscriptionId`) with `Schema` `wow2.event.v1`; the page's observations and the next cursor commit in one transaction; dedup on (subscription, `EventId`), highest `Revision` per `PostId`; gap: SCFD's `Harvest.Abstractions` and `Harvest.Client` are on no registry, so P1 reads the wire through Events' own reader behind `IObservationFeed`, swapped for `Harvest.Client` once published (P2 row below) |
+| #19 | Evidence, consumer side | change | P1 | each observation keeps the SCFD instance, subscription, pipeline (from settings; the event carries none), `EventId`, `ItemId`, `PostId`, `Revision`, type, reason, `OccurredAtUtc`, every link's `Url`, `SourceId`, `CaptureId`, `CapturedAtUtc` and `SourceFields`, and the raw payload; asks of SCFD: the extraction stamp (norm and rules versions) in the `wow2.event.v1` projection, and `PipelineId` on `DeliveryEvent`; Events reads the stamp as the mapping version (`ScfdEventMapper.cs`) and stores unknown when absent |
 | #21 | Names in Ocharo's Identity | add | P1 | resource `events`, `Uri` `https://events.{domain}/` with its slash, `SignalUrl` `{Uri}signals/identity`; scopes `events.read`, `events.track`, `events.review`, `events.import`, `events.admin`; organization permissions `events:read`, `events:track`, `events:review`, `events:admin`; Desk's backend grant: `events.read events.track events.import` by token exchange; the console client `events-console` (#30) |
 | #23 | Policies | add | P1 | a policy per scope; a person's call needs the scope plus its permission (`events.read` + `events:read`, `events.track` + `events:track`, `events.review` + `events:review`, `events.import` and `events.admin` + `events:admin`), a service's call its scope alone; record rules on Events' rows: tracking keys by the caller's (`iss`, `org_id`) and another organization's route answers 404; a private catalog reads only for its owner organization; review, curation and imports need the owner organization |
 | #25 | Client and fe package | change | P1 | `IEventsClient` becomes the broker family in `Events.Abstractions` (catalog, review, tracking, workflow, imports, intake status, ICS) that Module and Client implement under one conformance suite; `AddEventsClient()` takes the be sdk's `AddOAuth2TokenExchange` for a person or `AddOAuth2ClientCredentials` for a service; npm `@wow-two-beta/fe-events`: contract mirror, client, date formatting, ICS and the feed, card, deadline, detail, tracking and review components, calling the host's proxy routes; NuGet from `be-v*`, npm from `fe-v*` |
@@ -33,23 +33,22 @@ The events lane's verdict and phase for each contract it owns (events-integratio
 
 | Feature | State | Spec |
 |---|---|---|
-| Catalog and events | planned | [product](../../product/product.md#model) |
-| Intake from SCFD | planned | [product](../../product/product.md#intake) |
-| Review | planned | [product](../../product/product.md#review) |
-| Tracking and workflows | planned | [product](../../product/product.md#tracking) |
-| Imports | planned | [product](../../product/product.md#imports) |
-| Calendar export | planned | [product](../../product/product.md#calendar) |
-| Review console | planned | [product](../../product/product.md#review) |
-| Developer kits | planned | [contract](../architecture/contract.md) |
+| Catalog and events | built | [product](../../product/product.md#model) |
+| Intake from SCFD | built | [product](../../product/product.md#intake) |
+| Review | built | [product](../../product/product.md#review) |
+| Tracking and workflows | built | [product](../../product/product.md#tracking) |
+| Imports | built | [product](../../product/product.md#imports) |
+| Calendar export | built | [product](../../product/product.md#calendar) |
+| Review console | built | [product](../../product/product.md#review) |
+| Developer kits | built | [contract](../architecture/contract.md) |
 
 ## Intake
 
 | Item | Type | Notes |
 |---|---|---|
 | Swap Events' SCFD wire reader for `Harvest.Client` once SCFD publishes its NuGet family | engineering | P2; events-integration #15 |
-| Mapping version from SCFD's extraction stamp, once the projection carries it | feature | P2; events-integration #19 |
-| AI relevance as the `payload` classifier of automatic review | feature | P2; switch `Classifier` to `payload` once SCFD's AI step writes `classification` (events-integration #53) |
-| Several SCFD subscriptions per catalog, managed through a sources API | feature | P2; P1 reads one subscription from settings |
+| Switch a source's `Classifier` to `payload` | engineering | the classifier is built (`1d14977`); waits for SCFD's AI step to write `classification` (events-integration #53) |
+| Several SCFD subscriptions per catalog, managed through a sources API | feature | P2; sources are settings today (`Events:Intake:Sources:N:*`, two on dev) |
 | Webhook push from SCFD | feature | P2, waits for a consumer that needs it; events-integration #6 |
 | Operator pause, resume, replay from a cursor and resync | feature | P2; P1 exposes cursor lag and quarantine; events-integration #33 |
 

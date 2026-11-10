@@ -8,18 +8,18 @@
 
 Repository created 2026-11-10 under the Events integration (wow-two-ws `system/sessions/events-integration/`). v0.1
 (P1) is built: contract, module (catalogs, review, SCFD intake, tracking, imports, calendar), client, service, review
-console and `fe-events`. Image `v0.1.5` and NuGet `10.0.0-beta` are released; the `events-dev` rollout and its
-provisioning (`catalog ensure`, `workflow put`, `import`) are the wheelhouse lane's; npm waits for its first version by hand. Picks per contract: `engineering/planning/backlog.md` § Integration
+console and `fe-events`. CI releases the image, NuGet and npm on each push to `main` (versions per release in the version
+track); the service runs on `events-dev`, and its rollout and provisioning (`catalog ensure`, `workflow put`, `import`) are the wheelhouse lane's. Picks per contract: `engineering/planning/backlog.md` § Integration
 picks.
 
 ## Active tasks
 
 | Task | Status | Notes |
 |---|---|---|
-| v0.1 build | done, image `v0.1.5`, NuGet `10.0.0-beta` | `engineering/planning/version-track/v0.1/v0.1.md` |
-| npm first version | todo | the developer's hand step (2FA); the NuGet policy is in place |
-| Registration in Ocharo's Identity | todo | platform lane (events-integration #21, #30) |
-| Dev deploy | todo | wheelhouse lane (events-integration #28) |
+| v0.1 build | done | releases per version in `engineering/planning/version-track/v0.1/v0.1.md` |
+| npm first version | done | `@wow-two-beta/fe-events` `0.0.3` (0.0.1 by hand, 0.0.2 and 0.0.3 by CI) |
+| Registration in Ocharo's Identity | done | the resource, scopes and console client work on `events-dev` (events-integration #21, #30) |
+| Dev deploy | done | `events-dev` on Wheelhouse (events-integration #28) |
 
 ## Open questions
 
