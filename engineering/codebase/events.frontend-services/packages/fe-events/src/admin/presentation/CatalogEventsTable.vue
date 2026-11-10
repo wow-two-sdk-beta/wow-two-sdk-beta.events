@@ -16,6 +16,7 @@ import { formatEventDates, formatTimestamp } from '../../kit/dates/EventDates';
 import { eventTitle, formatEventPlace } from '../../kit/facts/EventFactsText';
 import { useEventsRequest } from '../../kit/hooks/UseEventsRequest';
 import FailureNotice from '../../kit/presentation/FailureNotice.vue';
+import ReviewAttribution from './ReviewAttribution.vue';
 import { EventsLabels } from '../../kit/text/EventsLabels';
 import type { EventsLocale } from '../../kit/text/EventsLocale';
 import { eventsText } from '../../kit/text/EventsMessages';
@@ -46,6 +47,7 @@ const items = shallowRef<readonly EventModel[]>([]);
 const nextCursor = shallowRef<string | null>(null);
 const confirming = shallowRef<string | null>(null);
 const archiving = shallowRef<string | null>(null);
+const reopening = shallowRef<string | null>(null);
 const archiveFailure = shallowRef<EventsFailure | null>(null);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -83,6 +85,18 @@ async function archive(event: EventModel) {
   if (result.ok) {
     items.value = items.value.map((item) => (item.id === event.id ? result.value : item));
     emit('archived', result.value);
+  } else if (result.failure.reason === 'conflict') void load();
+}
+
+async function reopen(event: EventModel) {
+  if (!globalThis.confirm(eventsText('confirmReturnToReview', props.locale))) return;
+  reopening.value = event.id;
+  const result = await props.client.reopenEvent(props.catalog, event.id, event.revision);
+  reopening.value = null;
+  archiveFailure.value = result.ok ? null : result.failure;
+  if (result.ok) {
+    items.value = items.value.map((item) => (item.id === event.id ? result.value : item));
+    void load();
   } else if (result.failure.reason === 'conflict') void load();
 }
 
@@ -198,9 +212,19 @@ const reviewVariant = (state: EventReviewState) =>
                 <Badge v-if="item.pendingChanges" size="sm" :variant="BadgeVariant.Info">
                   {{ eventsText('pendingChanges', locale, { count: item.pendingChanges }) }}
                 </Badge>
+                <ReviewAttribution :event="item" :locale="locale" />
               </td>
               <td class="py-2 pr-3 text-xs text-muted-foreground">{{ formatTimestamp(item.updatedAtUtc, locale) }}</td>
               <td class="py-2 text-right">
+                <Button
+                  v-if="item.review === 'published'"
+                  size="sm"
+                  variant="ghost"
+                  :is-loading="reopening === item.id"
+                  @click="reopen(item)"
+                >
+                  {{ eventsText('returnToReview', locale) }}
+                </Button>
                 <Button
                   v-if="item.review !== 'archived'"
                   size="sm"

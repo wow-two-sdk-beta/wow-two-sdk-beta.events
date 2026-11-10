@@ -41,6 +41,13 @@ internal sealed partial class EventsIntakeOptionsValidator : IValidateOptions<Ev
                 failures.Add($"{at}:PageSize must be 1 to 500");
             if (source.MaxPagesPerPoll < 1)
                 failures.Add($"{at}:MaxPagesPerPoll must be at least 1");
+            if (!string.Equals(source.Review, EventsIntakeSourceOptions.ManualReview, StringComparison.OrdinalIgnoreCase) && !source.ReviewsAutomatically)
+                failures.Add($"{at}:Review must be manual or auto");
+            if (!string.Equals(source.Classifier, EventsIntakeSourceOptions.FilterClassifier, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(source.Classifier, EventsIntakeSourceOptions.PayloadClassifier, StringComparison.OrdinalIgnoreCase))
+                failures.Add($"{at}:Classifier must be filter or payload");
+            if (source.MinConfidence is < 0 or > 1)
+                failures.Add($"{at}:MinConfidence must be 0 to 1");
             if (source.PollInterval <= TimeSpan.Zero)
                 failures.Add($"{at}:PollInterval must be positive");
             if (source.Enabled && !IsHttpUrl(source.BaseUrl))

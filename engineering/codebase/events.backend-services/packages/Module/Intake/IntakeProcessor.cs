@@ -43,6 +43,53 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private static readonly string Quarantined = EventsLabels.Of(ObservationState.Quarantined);
     private static readonly string Recorded = EventsLabels.Of(ObservationState.Recorded);
     private static readonly string Ignored = EventsLabels.Of(ObservationState.Ignored);
+    private static readonly string Accepted = EventsLabels.Of(ObservationState.Accepted);
+
+    /// <summary>Reviews a source's held backlog under its automatic review: every candidate of the source's posts that no
+    /// reviewer has decided yet (stored under manual review, or before the policy existed) gets its classifier's verdict
+    /// from its latest delivered payload. Nothing under manual review; a person's or a classifier's earlier decision
+    /// stands.</summary>
+    /// <param name="source">The source.</param>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>How many candidates it published.</returns>
+    public async Task<int> ReviewBacklogAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken)
+    {
+        if (!source.ReviewsAutomatically)
+            return 0;
+
+        var catalog = await db.Catalogs.AsNoTracking().FirstOrDefaultAsync(row => row.Slug == source.Catalog, cancellationToken);
+        if (catalog is null || catalog.Visibility != Private)
+            return 0;
+
+        var instance = source.Instance;
+        var backlog = await (
+                from post in db.SourcePosts
+                join item in db.Events on post.EventId equals item.Id
+                join observation in db.Observations on post.LatestObservationId equals observation.Id
+                where post.SourceInstance == instance && post.CatalogId == catalog.Id
+                      && item.Review == Candidate && item.ReviewedBy == null && observation.Payload != null
+                select new { Event = item, observation.Payload })
+            .Take(500)
+            .ToListAsync(cancellationToken);
+        if (backlog.Count == 0)
+            return 0;
+
+        var now = time.StoredUtcNow();
+        var published = 0;
+        foreach (var held in backlog)
+        {
+            using var document = JsonDocument.Parse(held.Payload!);
+            var verdict = IntakeVerdict.Of(source, document.RootElement);
+            Review(held.Event, verdict, now);
+            held.Event.Revision++;
+            held.Event.UpdatedAt = now;
+            if (verdict.Relevant == true)
+                published++;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return published;
+    }
 
     /// <summary>Reads one page from the committed cursor and commits what it delivered with the next cursor.</summary>
     /// <param name="source">The source.</param>
@@ -218,9 +265,15 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         post.LatestObservationId = observation.Id;
         post.UpdatedAt = page.Now;
 
+        // The source's review policy (events-integration #53): manual keeps every record for a person; auto publishes what
+        // its classifier marks relevant and holds the rest, recording the classifier and its verdict.
+        var verdict = page.Source.ReviewsAutomatically ? IntakeVerdict.Of(page.Source, payload) : null;
+
         if (post.EventId is null)
         {
-            post.EventId = await CreateCandidateAsync(page, facts, sourceId, url, cancellationToken);
+            var created = await CreateCandidateAsync(page, facts, sourceId, url, cancellationToken);
+            post.EventId = created.Id;
+            Review(created, verdict, page.Now);
             observation.State = Applied;
             observation.EventId = post.EventId;
             return;
@@ -236,11 +289,27 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         observation.EventId = post.EventId;
         if (target?.Review == Candidate)
         {
-            // A newer revision of an unreviewed candidate updates it in place.
+            // A newer revision of an unreviewed candidate updates it in place; under auto review it may now publish.
             await EventWrites.ApplyAsync(db, target, facts, isNew: false, cancellationToken);
             target.Revision++;
             target.UpdatedAt = page.Now;
+            if (target.ReviewedBy is null || target.ReviewedBy.StartsWith(IntakeVerdict.ClassifierActor, StringComparison.Ordinal))
+                Review(target, verdict, page.Now);
             observation.State = Applied;
+        }
+        else if (target?.Review == Published && verdict is { Relevant: true }
+            && target.ReviewedBy?.StartsWith(IntakeVerdict.ClassifierActor, StringComparison.Ordinal) == true)
+        {
+            // An event the classifier published, no person since, follows its source: the change applies as accepted.
+            await EventWrites.ApplyAsync(db, target, facts, isNew: false, cancellationToken);
+            target.Revision++;
+            target.UpdatedAt = page.Now;
+            target.ReviewedBy = verdict.Actor;
+            target.ReviewReason = verdict.Reason;
+            target.ReviewedAt = page.Now;
+            observation.State = Accepted;
+            observation.ResolvedAt = page.Now;
+            observation.ResolvedBySubject = verdict.Actor;
         }
         else if (target?.Review == Published)
         {
@@ -278,7 +347,28 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         }
     }
 
-    private async Task<Guid> CreateCandidateAsync(IntakePageState page, EventFacts facts, string sourceId, string? url, CancellationToken cancellationToken)
+    /// <summary>Applies an automatic review to a candidate: publishes it when the classifier marks it relevant, otherwise
+    /// keeps it a candidate with the classifier's reason; nothing under manual review.</summary>
+    private static void Review(CatalogEventEntity row, IntakeVerdict? verdict, DateTimeOffset now)
+    {
+        if (verdict is null)
+            return;
+
+        row.ReviewedBy = verdict.Actor;
+        row.ReviewedAt = now;
+        if (verdict.Relevant == true)
+        {
+            row.Review = Published;
+            row.PublishedAt ??= now;
+            row.ReviewReason = verdict.Reason;
+        }
+        else
+        {
+            row.ReviewReason = "held: " + verdict.Reason;
+        }
+    }
+
+    private async Task<CatalogEventEntity> CreateCandidateAsync(IntakePageState page, EventFacts facts, string sourceId, string? url, CancellationToken cancellationToken)
     {
         var row = new CatalogEventEntity
         {
@@ -301,7 +391,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             FirstSeenAt = page.Now,
             LastSeenAt = page.Now,
         });
-        return row.Id;
+        return row;
     }
 
     private static void Quarantine(ObservationEntity observation, string reason)

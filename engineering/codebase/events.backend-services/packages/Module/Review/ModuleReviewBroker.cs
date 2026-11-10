@@ -114,9 +114,10 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
 
         var now = time.StoredUtcNow();
         row.Review = Published;
-        row.PublishedAt = now;
+        row.PublishedAt ??= now;
         row.Revision++;
         row.UpdatedAt = now;
+        ReviewStamp.ByPerson(row, callers.Current, decision.Facts is null ? "accepted" : "accepted with edits", now);
         return await SaveEventAsync(found.Slug, row, cancellationToken);
     }
 
@@ -138,6 +139,29 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
         row.Review = Rejected;
         row.Revision++;
         row.UpdatedAt = time.StoredUtcNow();
+        ReviewStamp.ByPerson(row, callers.Current, "rejected", row.UpdatedAt);
+        return await SaveEventAsync(found.Slug, row, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<EventModel>> ReopenAsync(string catalog, Guid id, int expectedRevision, CancellationToken cancellationToken = default)
+    {
+        var owned = await OwnedAsync(catalog, cancellationToken);
+        if (owned is not Result<CatalogEntity>.Success { Value: var found })
+            return Result<EventModel>.Fail(Error(owned));
+
+        var row = await db.Events.FirstOrDefaultAsync(item => item.Id == id && item.CatalogId == found.Id, cancellationToken);
+        if (row is null)
+            return Result<EventModel>.Fail(EventsErrors.EventNotFound());
+        if (row.Review != Published)
+            return Result<EventModel>.Fail(EventsErrors.ReviewStateInvalid("published"));
+        if (row.Revision != expectedRevision)
+            return Result<EventModel>.Fail(EventsErrors.RevisionConflict());
+
+        row.Review = Candidate;
+        row.Revision++;
+        row.UpdatedAt = time.StoredUtcNow();
+        ReviewStamp.ByPerson(row, callers.Current, "reopened for review", row.UpdatedAt);
         return await SaveEventAsync(found.Slug, row, cancellationToken);
     }
 
@@ -179,8 +203,10 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
         candidate.MergedInto = target.Id;
         candidate.Revision++;
         candidate.UpdatedAt = now;
+        ReviewStamp.ByPerson(candidate, callers.Current, "merged", now);
         target.Revision++;
         target.UpdatedAt = now;
+        ReviewStamp.ByPerson(target, callers.Current, "merged a candidate in", now);
 
         try
         {
@@ -241,6 +267,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
         await EventWrites.ApplyAsync(db, row, facts, isNew: false, cancellationToken);
         row.Revision++;
         row.UpdatedAt = now;
+        ReviewStamp.ByPerson(row, callers.Current, "applied a source change", now);
         Resolve(observation, Accepted, now);
         return await SaveEventAsync(found.Slug, row, cancellationToken);
     }

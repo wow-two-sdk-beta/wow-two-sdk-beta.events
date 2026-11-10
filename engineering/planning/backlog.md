@@ -48,6 +48,7 @@ The events lane's verdict and phase for each contract it owns (events-integratio
 |---|---|---|
 | Swap Events' SCFD wire reader for `Harvest.Client` once SCFD publishes its NuGet family | engineering | P2; events-integration #15 |
 | Mapping version from SCFD's extraction stamp, once the projection carries it | feature | P2; events-integration #19 |
+| AI relevance as the `payload` classifier of automatic review | feature | P2; switch `Classifier` to `payload` once SCFD's AI step writes `classification` (events-integration #53) |
 | Several SCFD subscriptions per catalog, managed through a sources API | feature | P2; P1 reads one subscription from settings |
 | Webhook push from SCFD | feature | P2, waits for a consumer that needs it; events-integration #6 |
 | Operator pause, resume, replay from a cursor and resync | feature | P2; P1 exposes cursor lag and quarantine; events-integration #33 |

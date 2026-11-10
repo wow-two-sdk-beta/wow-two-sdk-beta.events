@@ -30,6 +30,11 @@ export interface EventModel {
   readonly createdAtUtc: string;
   readonly updatedAtUtc: string;
   readonly publishedAtUtc?: string | null;
+  /** Who decided the review: `person:{subject}` or `classifier:{name}`. */
+  readonly reviewedBy?: string | null;
+  /** Why: a filter that passed it, or the reason a classifier held it. */
+  readonly reviewReason?: string | null;
+  readonly reviewedAtUtc?: string | null;
 }
 
 /** Mirrors `EventPage`. */

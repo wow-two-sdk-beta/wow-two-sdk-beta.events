@@ -81,6 +81,12 @@ services:
         # Empty asks for the BaseUrl with its slash.
         Events:Intake:Sources:0:Resource: { type: url }
         Events:Intake:Sources:0:PollInterval: { default: "00:05:00" }
+        # Review policy (events-integration #53): auto publishes what the classifier marks relevant into the private
+        # catalog and holds the rest as candidates; manual keeps every record for a person. The classifier is filter
+        # (SCFD's subscription filter passed it) or payload (the record's own classification, from an AI relevance step).
+        Events:Intake:Sources:0:Review: { type: choice, values: [auto, manual], default: auto }
+        Events:Intake:Sources:0:Classifier: { type: choice, values: [filter, payload], default: filter }
+        Events:Intake:Sources:0:Filter: { default: ocharo-fashion-v1 }
         Events:Intake:Sources:1:Name: { default: afisha-exhibitions }
         Events:Intake:Sources:1:Catalog: { default: ocharo-fashion }
         Events:Intake:Sources:1:Instance: { default: scfd }
@@ -92,6 +98,9 @@ services:
         Events:Intake:Sources:1:Scope: { from: Events:Intake:Sources:0:Scope }
         Events:Intake:Sources:1:Resource: { from: Events:Intake:Sources:0:Resource }
         Events:Intake:Sources:1:PollInterval: { default: "00:05:00" }
+        Events:Intake:Sources:1:Review: { from: Events:Intake:Sources:0:Review }
+        Events:Intake:Sources:1:Classifier: { from: Events:Intake:Sources:0:Classifier }
+        Events:Intake:Sources:1:Filter: { from: Events:Intake:Sources:0:Filter }
     # The console's data-protection key ring (DataProtection:KeysPath).
     volumes:
       keys: /var/lib/events/keys

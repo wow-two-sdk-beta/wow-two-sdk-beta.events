@@ -22,4 +22,7 @@ internal sealed class CatalogEventEntity
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
+    public string? ReviewedBy { get; set; }
+    public string? ReviewReason { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
 }

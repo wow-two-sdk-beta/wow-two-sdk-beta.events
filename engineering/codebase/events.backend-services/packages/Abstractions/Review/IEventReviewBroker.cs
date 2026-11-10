@@ -32,6 +32,15 @@ public interface IEventReviewBroker
     /// <returns>The rejected event.</returns>
     Task<Result<EventModel>> RejectAsync(string catalog, Guid id, int expectedRevision, CancellationToken cancellationToken = default);
 
+    /// <summary>Returns a published event to the review queue as a candidate: it leaves every reader's list until a
+    /// reviewer accepts it again. Reverses an automatic accept (events-integration #53).</summary>
+    /// <param name="catalog">The catalog's slug.</param>
+    /// <param name="id">The published event.</param>
+    /// <param name="expectedRevision">The revision read.</param>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>The candidate; <see cref="EventsErrors.ReviewStateInvalid"/> unless it is published.</returns>
+    Task<Result<EventModel>> ReopenAsync(string catalog, Guid id, int expectedRevision, CancellationToken cancellationToken = default);
+
     /// <summary>Merges a candidate into another event: its sources and observations move, the candidate archives.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="id">The candidate.</param>

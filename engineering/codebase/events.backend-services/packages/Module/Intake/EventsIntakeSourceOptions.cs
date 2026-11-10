@@ -45,6 +45,37 @@ public sealed class EventsIntakeSourceOptions
     /// <summary>Gets or sets the scope the token asks for.</summary>
     public string? Scope { get; set; } = "harvest.events-read";
 
+    /// <summary>Holds the review policy that waits for a person.</summary>
+    public const string ManualReview = "manual";
+
+    /// <summary>Holds the review policy that publishes what the classifier marks relevant.</summary>
+    public const string AutoReview = "auto";
+
+    /// <summary>Holds the classifier that trusts SCFD's subscription filter.</summary>
+    public const string FilterClassifier = "filter";
+
+    /// <summary>Holds the classifier that reads the record's own <c>classification</c>.</summary>
+    public const string PayloadClassifier = "payload";
+
+    /// <summary>Gets or sets the review policy: <see cref="ManualReview"/> (the default) keeps every new record a
+    /// candidate; <see cref="AutoReview"/> publishes what the classifier marks relevant and holds the rest as candidates,
+    /// recording the classifier and its verdict as the review's actor and reason (events-integration #53).</summary>
+    public string Review { get; set; } = ManualReview;
+
+    /// <summary>Gets or sets the classifier an automatic review reads: <see cref="FilterClassifier"/> (the default) or
+    /// <see cref="PayloadClassifier"/>.</summary>
+    public string Classifier { get; set; } = FilterClassifier;
+
+    /// <summary>Gets or sets the name of the SCFD filter the subscription applies, such as <c>ocharo-fashion-v1</c>; it
+    /// names the <see cref="FilterClassifier"/>.</summary>
+    public string? Filter { get; set; }
+
+    /// <summary>Gets or sets the lowest confidence a <see cref="PayloadClassifier"/> verdict needs to publish, 0 to 1.</summary>
+    public double MinConfidence { get; set; }
+
+    /// <summary>Gets whether the source reviews automatically.</summary>
+    public bool ReviewsAutomatically => string.Equals(Review, AutoReview, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Gets or sets the resource the token is asked for, SCFD's resource URI at the issuer; empty asks for
     /// <see cref="BaseUrl"/> with its trailing slash. Identity issues a service token for exactly one resource.</summary>
     public string? Resource { get; set; }

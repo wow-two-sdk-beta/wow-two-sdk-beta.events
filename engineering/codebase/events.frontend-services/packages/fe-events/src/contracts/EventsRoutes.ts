@@ -35,6 +35,7 @@ export const EventsRoutes = {
   review: (slug: string) => `${catalog(slug)}/${EventsRouteConstants.review}`,
   accept: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.review}/${segment(id)}/accept`,
   reject: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.review}/${segment(id)}/reject`,
+  reopen: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.review}/${segment(id)}/reopen`,
   merge: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.review}/${segment(id)}/merge`,
   observations: (slug: string) => `${catalog(slug)}/${EventsRouteConstants.observations}`,
   observation: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.observations}/${segment(id)}`,

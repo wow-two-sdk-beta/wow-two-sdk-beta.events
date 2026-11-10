@@ -50,6 +50,19 @@ public sealed class ReviewController(IEventReviewBroker review) : EventsControll
             ? Invalid(error)
             : Answer(await review.RejectAsync(catalog, id, revision, ct));
 
+    /// <summary>Returns a published event to the review queue as a candidate.</summary>
+    /// <param name="catalog">The catalog's slug.</param>
+    /// <param name="id">The published event.</param>
+    /// <param name="expectedRevision">The revision read.</param>
+    /// <param name="ct">The token that cancels the request.</param>
+    /// <returns>The candidate.</returns>
+    [HttpPost(EventsRouteConstants.Review + "/{id:guid}/reopen")]
+    [ProducesResponseType<ApiResponse<EventModel>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reopen(string catalog, Guid id, [FromQuery] int? expectedRevision, CancellationToken ct) =>
+        WireQueryMapper.RequireRevision(expectedRevision, out var revision) is { } error
+            ? Invalid(error)
+            : Answer(await review.ReopenAsync(catalog, id, revision, ct));
+
     /// <summary>Merges a candidate into an existing event: sources and evidence move, the candidate archives.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="id">The candidate.</param>

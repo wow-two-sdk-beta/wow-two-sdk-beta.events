@@ -56,7 +56,32 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
                 LogPagePolled(logger, source.Name, page + 1, done.Received, done.Quarantined, done.HasMore);
 
             if (outcome is not Result<IntakePageOutcome>.Success { Value.HasMore: true })
-                return;
+                break;
+        }
+
+        await ReviewBacklogAsync(source, cancellationToken);
+    }
+
+    /// <summary>Reviews the source's held backlog after its pages, so candidates stored before automatic review publish.</summary>
+    private async Task ReviewBacklogAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken)
+    {
+        if (!source.ReviewsAutomatically)
+            return;
+
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var published = await scope.ServiceProvider.GetRequiredService<IntakeProcessor>().ReviewBacklogAsync(source, cancellationToken);
+            if (published > 0)
+                LogBacklogPublished(logger, source.Name, published);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            LogPageFailed(logger, source.Name, FailureKind(exception), exception);
         }
     }
 
@@ -89,6 +114,9 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
         TaskCanceledException => "timeout",
         _ => exception.GetType().Name,
     };
+
+    [LoggerMessage(EventId = 4106, Level = LogLevel.Information, Message = "Events intake: source {Source} published {Count} held candidate(s) by its automatic review.")]
+    private static partial void LogBacklogPublished(ILogger logger, string source, int count);
 
     [LoggerMessage(EventId = 4104, Level = LogLevel.Information, Message = "Events intake: source {Source} page {Page} polled: SCFD 200, {Received} new records stored, {Quarantined} quarantined, more pages {HasMore}; the cursor committed.")]
     private static partial void LogPagePolled(ILogger logger, string source, int page, int received, int quarantined, bool hasMore);

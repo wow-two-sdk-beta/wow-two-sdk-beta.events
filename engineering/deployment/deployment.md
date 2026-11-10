@@ -39,7 +39,10 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   ring in `DataProtection:KeysPath` (`/var/lib/events/keys`, the `keys` volume) named `DataProtection:ApplicationName`;
   keep both as deployed, or every reviewer is signed out. A rollback names its set: `migrate rollback --set events …`.
 - Intake: `Events:Intake:Sources:N` (`Name`, `Catalog`, `BaseUrl`, `SubscriptionId`, `TokenEndpoint`, `ClientId`,
-  `ClientSecret`, `Scope`, `Resource`, …); none polls nothing. The token request names exactly one `resource`, as
+  `ClientSecret`, `Scope`, `Resource`, `Review`, `Classifier`, `Filter`, `MinConfidence`, …); none polls nothing. `Review`
+  `auto` publishes what the classifier marks relevant (`classifier:{name}` as the reviewer, its verdict as the reason) and
+  holds the rest as candidates; `manual` keeps every record for a person. A person's review takes the event off automatic
+  changes, and `POST …/review/{id}/reopen` returns any published event to review. The token request names exactly one `resource`, as
   Identity requires: `Resource`, else `BaseUrl` with its slash. The worker logs `Events intake: polling N source(s)` at
   start and one Information line per page polled (records stored, quarantined, more pages); a failed page logs a
   Warning naming its kind (`token-refused:<oauth error>`, `scfd-status-<code>`, `scfd-unreachable`, `timeout`). The image answers `dotnet Events.Api.dll intake check [--source <name>]

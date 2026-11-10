@@ -101,6 +101,7 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
         await EventWrites.ApplyAsync(db, row, facts, isNew: false, cancellationToken);
         row.Revision++;
         row.UpdatedAt = time.StoredUtcNow();
+        ReviewStamp.ByPerson(row, callers.Current, "edited", row.UpdatedAt);
         return await SaveAsync(found.Slug, row, cancellationToken);
     }
 
@@ -122,6 +123,7 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
         row.Review = Archived;
         row.Revision++;
         row.UpdatedAt = time.StoredUtcNow();
+        ReviewStamp.ByPerson(row, callers.Current, "archived", row.UpdatedAt);
         return await SaveAsync(found.Slug, row, cancellationToken);
     }
 
@@ -151,6 +153,8 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
             PublishedAt = review == EventReviewState.Published ? now : null,
         };
         await EventWrites.ApplyAsync(db, row, facts, isNew: true, cancellationToken);
+        if (review == EventReviewState.Published)
+            ReviewStamp.ByPerson(row, caller, "entered by a curator", now);
         db.Events.Add(row);
 
         // A curator's identity per event: the source key is unique per catalog, so it names the event too.

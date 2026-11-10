@@ -30,6 +30,13 @@ internal sealed class ApiEventReviewBroker(EventsApiTransport transport) : IEven
             cancellationToken);
 
     /// <inheritdoc />
+    public Task<Result<EventModel>> ReopenAsync(string catalog, Guid id, int expectedRevision, CancellationToken cancellationToken = default) =>
+        transport.SendAsync<EventModel>(
+            HttpMethod.Post,
+            new EventsApiQuery().Add("expectedRevision", expectedRevision).ToRoute(EventsApiRoutes.Catalog(catalog, EventsRouteConstants.Review, id, "reopen")),
+            cancellationToken);
+
+    /// <inheritdoc />
     public Task<Result<EventModel>> MergeAsync(string catalog, Guid id, MergeDecision decision, CancellationToken cancellationToken = default) =>
         transport.SendAsync<MergeDecision, EventModel>(HttpMethod.Post, EventsApiRoutes.Catalog(catalog, EventsRouteConstants.Review, id, "merge"), decision, cancellationToken);
 

@@ -79,5 +79,8 @@ internal static class EventRows
         CreatedAtUtc = row.CreatedAt,
         UpdatedAtUtc = row.UpdatedAt,
         PublishedAtUtc = row.PublishedAt,
+        ReviewedBy = row.ReviewedBy,
+        ReviewReason = row.ReviewReason,
+        ReviewedAtUtc = row.ReviewedAt,
     };
 }

@@ -81,6 +81,8 @@ export interface EventsClient {
   listReview(catalog: string, query?: ReviewQuery, signal?: AbortSignal): EventsResult<ReviewPage>;
   acceptEvent(catalog: string, id: string, decision: ReviewDecision, signal?: AbortSignal): EventsResult<EventModel>;
   rejectEvent(catalog: string, id: string, expectedRevision: number, signal?: AbortSignal): EventsResult<EventModel>;
+  /** Returns a published event to the review queue as a candidate. */
+  reopenEvent(catalog: string, id: string, expectedRevision: number, signal?: AbortSignal): EventsResult<EventModel>;
   mergeEvent(catalog: string, id: string, decision: MergeDecision, signal?: AbortSignal): EventsResult<EventModel>;
   applyChange(
     catalog: string,
@@ -214,6 +216,8 @@ export function createEventsClient(options: EventsClientOptions = {}): EventsCli
       post(EventsRoutes.accept(catalog, id), EventsDecoders.event, decision, signal),
     rejectEvent: (catalog, id, expectedRevision, signal) =>
       post(EventsRoutes.reject(catalog, id), EventsDecoders.event, undefined, signal, revision(expectedRevision)),
+    reopenEvent: (catalog, id, expectedRevision, signal) =>
+      post(EventsRoutes.reopen(catalog, id), EventsDecoders.event, undefined, signal, revision(expectedRevision)),
     mergeEvent: (catalog, id, decision, signal) =>
       post(EventsRoutes.merge(catalog, id), EventsDecoders.event, decision, signal),
     applyChange: (catalog, observationId, decision, signal) =>

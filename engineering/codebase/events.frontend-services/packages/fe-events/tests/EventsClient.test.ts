@@ -114,6 +114,16 @@ describe('writes', () => {
     expect(requests[1]!.url).toBe(`${serviceUrl}/api/events/v1/catalogs/ocharo/events/e1?expectedRevision=4`);
   });
 
+  it('names the expected revision in the query of a reopen', async () => {
+    const { client, requests } = fakeService(() => envelope(eventModel('e1', {}, { review: 'candidate' })));
+
+    const result = await client.reopenEvent('ocharo', 'e1', 6);
+
+    expect(result.ok && result.value.review).toBe('candidate');
+    expect(requests[0]!.method).toBe('POST');
+    expect(requests[0]!.url).toBe(`${serviceUrl}/api/events/v1/catalogs/ocharo/review/e1/reopen?expectedRevision=6`);
+  });
+
   it('sends an import bundle with its legacy rows and the dry-run flag', async () => {
     const report = { dryRun: true, source: 'ocharo-desk', created: 1, updated: 0, unchanged: 0, failed: 0, map: [] };
     const { client, requests } = fakeService(() => envelope(report));

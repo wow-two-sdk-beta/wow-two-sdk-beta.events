@@ -51,6 +51,7 @@ internal sealed class EventsDbContext(DbContextOptions<EventsDbContext> options)
         item.Property(row => row.Status).HasMaxLength(16);
         item.Property(row => row.Country).HasMaxLength(2);
         item.Property(row => row.Revision).IsConcurrencyToken();
+        item.Property(row => row.ReviewedBy).HasMaxLength(256);
 
         var deadline = modelBuilder.Entity<EventDeadlineEntity>();
         deadline.ToTable("events_event_deadlines");

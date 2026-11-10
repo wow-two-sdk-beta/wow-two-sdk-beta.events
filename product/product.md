@@ -94,15 +94,23 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - evidence per observation: SCFD instance, subscription, pipeline, `EventId`, `ItemId`, `PostId`, `Revision`, type,
   reason, observed time, each link's URL, source, capture and source fields, the mapping version when SCFD sends it,
   and the raw payload.
-- review never blocks intake; nothing publishes unreviewed; a catalog that is not private takes nothing (#50).
+- review never blocks intake; a catalog that is not private takes nothing (#50).
+- each source has a review policy (#53, the developer: "why someone needs to accept anything ? we'll use ai
+  classification ofc"): `auto` publishes what its classifier marks relevant into the private catalog and holds the rest
+  as candidates; `manual` keeps every record for a person. The classifier is `filter` (SCFD's subscription filter passed
+  the record) or `payload` (the record's own `classification`: classifier, verdict, confidence, reason), so an AI
+  relevance step needs no rework here. The classifier and its verdict are recorded as the reviewer and the reason.
 
 ## Review
 
-- a new source identity becomes a `candidate` event; a newer revision of a candidate updates it in place.
+- a new source identity becomes a `candidate` event, published at once under `auto` review when its classifier marks it
+  relevant; a newer revision of a candidate updates it in place.
 - a newer revision of a published event becomes a pending change: reviewers see its proposed fields beside the
   current ones and their evidence; a source never overwrites a reviewer's accepted value, a stage or a note.
 - reviewers accept (publish, with edits), reject, merge a candidate into an existing event (sources and evidence move,
-  the candidate archives), and apply or dismiss a pending change.
+  the candidate archives), apply or dismiss a pending change, and reopen a published event for review.
+- an event the classifier published follows its source's newer revisions by itself until a person reviews it; from
+  then on a newer revision waits as a pending change.
 - curators create and edit published events by hand; a curator's own entry is reviewed by definition.
 - members of the owner organization propose events (`POST …/catalogs/{c}/candidates`, `events.track`): a proposal is a
   candidate and publishes only when a reviewer accepts it.

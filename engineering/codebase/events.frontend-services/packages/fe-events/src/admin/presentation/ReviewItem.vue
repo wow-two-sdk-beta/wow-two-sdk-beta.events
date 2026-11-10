@@ -12,6 +12,7 @@ import { EventsLabels } from '../../kit/text/EventsLabels';
 import type { EventsLocale } from '../../kit/text/EventsLocale';
 import { eventsText, type EventsMessageKey } from '../../kit/text/EventsMessages';
 import { factChanges } from '../review/FactsChanges';
+import ReviewAttribution from './ReviewAttribution.vue';
 import ObservationEvidence from './ObservationEvidence.vue';
 import ReviewFactsEditor from './ReviewFactsEditor.vue';
 
@@ -153,6 +154,7 @@ function openMerge() {
       </h3>
       <p class="text-sm font-medium">{{ formatEventDates(event, locale) }}</p>
       <p v-if="place" class="text-sm text-muted-foreground">{{ place }}</p>
+      <ReviewAttribution :event="event" :locale="locale" />
     </header>
 
     <FailureNotice v-if="failure" :failure="failure" :locale="locale" context="review" />

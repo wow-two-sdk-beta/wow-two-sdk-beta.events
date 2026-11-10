@@ -35,4 +35,15 @@ public sealed record EventModel
 
     /// <summary>Gets when it was first published (UTC).</summary>
     public DateTimeOffset? PublishedAtUtc { get; init; }
+
+    /// <summary>Gets who last reviewed it: <c>person:{subject}</c>, or <c>classifier:{name}</c> when an intake source's
+    /// automatic review decided (events-integration #53).</summary>
+    public string? ReviewedBy { get; init; }
+
+    /// <summary>Gets why: a classifier's verdict, such as <c>passed SCFD filter ocharo-fashion-v1</c>, or a reviewer's
+    /// action.</summary>
+    public string? ReviewReason { get; init; }
+
+    /// <summary>Gets when it was last reviewed (UTC).</summary>
+    public DateTimeOffset? ReviewedAtUtc { get; init; }
 }
