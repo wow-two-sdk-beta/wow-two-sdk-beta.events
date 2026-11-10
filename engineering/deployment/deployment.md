@@ -12,9 +12,9 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
 ## Contract with Wheelhouse
 
 - Image: `ghcr.io/<owner>/<repo>/events`, published by `.github/workflows/publish-docker-image.yml` through the shared
-  `delivery.yml` of `wow-two-platform.pipelines` (pinned `v0.12.0`); CI never deploys. `v0.10.0` and later carry the
-  typed setting keys (`settings.keys`) into the bundle, and `v0.12.0` the `migrate:` step and the sets each item's
-  image hosts; the runner needs Wheelhouse v0.5 or later.
+  `delivery.yml` of `wow-two-platform.pipelines` (pinned `v0.16.0`); CI never deploys. `v0.10.0` and later carry the
+  typed setting keys (`settings.keys`) into the bundle, `v0.12.0` the `migrate:` step and the sets each item's
+  image hosts; the runner needs Wheelhouse v0.5 or later. `v0.14.0` adds the linked keys (`from`) source 1 of the intake uses.
 - Version: `X.Y` from the newest `planning/version-track/v{X.Y}/`; the image tag and `GET /api/system/status` report the
   same `X.Y.Z`, plus the build's commit after a `+`. Package releases (`be-v*`, `fe-v*`) never move it.
 - Settings a target provides in `/app/appsettings.Target.json`: `DatabaseSettings:ConnectionString`, which Wheelhouse

@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   delivery:
-    uses: wow-two-platform/wow-two-platform.pipelines/.github/workflows/delivery.yml@v0.13.0
+    uses: wow-two-platform/wow-two-platform.pipelines/.github/workflows/delivery.yml@v0.16.0
     with:
       commit: ${{ inputs.commit }}
       # Backend: every tier (unit, integration, E2E, conformance in process, migrations); all but unit run PostgreSQL in
