@@ -30,7 +30,7 @@ internal sealed partial class IntakePoller(
             {
                 foreach (var source in options.CurrentValue.Sources.Where(IntakeSources.IsActive))
                 {
-                    var now = time.GetUtcNow();
+                    var now = time.StoredUtcNow();
                     if (due.TryGetValue(source.Name, out var at) && at > now)
                     {
                         wait = Min(wait, at - now);
@@ -38,7 +38,7 @@ internal sealed partial class IntakePoller(
                     }
 
                     await poller.PollAsync(source, stoppingToken);
-                    due[source.Name] = time.GetUtcNow() + source.PollInterval;
+                    due[source.Name] = time.StoredUtcNow() + source.PollInterval;
                     wait = Min(wait, source.PollInterval);
                 }
             }

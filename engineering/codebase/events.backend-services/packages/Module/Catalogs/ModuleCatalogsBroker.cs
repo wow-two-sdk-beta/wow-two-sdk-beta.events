@@ -53,7 +53,7 @@ internal sealed partial class ModuleCatalogsBroker(EventsDbContext db, IEventsCa
             return Result<CatalogModel>.Fail(invalid);
 
         var caller = callers.Current;
-        var now = time.GetUtcNow();
+        var now = time.StoredUtcNow();
         var row = await db.Catalogs.FirstOrDefaultAsync(catalog => catalog.Slug == slug, cancellationToken);
         if (row is null)
         {

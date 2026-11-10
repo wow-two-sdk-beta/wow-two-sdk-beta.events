@@ -137,7 +137,7 @@ internal sealed class ModuleImportsBroker(EventsDbContext db, IEventsCallerServi
             .Select(row => new { Key = row.Key!, row.Id })
             .ToDictionaryAsync(row => row.Key, row => row.Id, StringComparer.Ordinal, cancellationToken);
 
-        var now = time.GetUtcNow();
+        var now = time.StoredUtcNow();
         var entries = new List<EventImportMapEntry>(inputs.Count);
         foreach (var input in inputs)
         {

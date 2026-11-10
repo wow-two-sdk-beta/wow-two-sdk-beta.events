@@ -60,7 +60,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         var cursor = committed is not null && committed.SubscriptionId == subscription ? committed.Cursor : null;
         var page = await feed.ReadAsync(source, cursor, source.PageSize, cancellationToken);
 
-        var now = time.GetUtcNow();
+        var now = time.StoredUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await db.Database.ExecuteSqlRawAsync(EnsureCursorSql, [source.Name, subscription, now], cancellationToken);
         var row = (await RelationalQueryableExtensions.FromSqlRaw(db.IntakeCursors, LockCursorSql, source.Name).ToListAsync(cancellationToken)).Single();
@@ -129,7 +129,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             Reason = Fit(record.Reason, 32),
             PostId = record.PostId ?? ScfdEventMapper.PostId(data),
             Revision = record.Revision ?? ScfdEventMapper.Revision(data),
-            ObservedAt = (record.OccurredAtUtc ?? page.Now).ToUniversalTime(),
+            ObservedAt = StoredClock.Truncate((record.OccurredAtUtc ?? page.Now).ToUniversalTime()),
             ReceivedAt = page.Now,
             MappingVersion = ScfdEventMapper.MappingVersion(data),
             Links = EventsJson.Write(ScfdEventMapper.Links(data)),

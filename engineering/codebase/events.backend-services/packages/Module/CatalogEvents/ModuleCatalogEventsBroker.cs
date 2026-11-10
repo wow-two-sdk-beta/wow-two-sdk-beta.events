@@ -100,7 +100,7 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
 
         await EventWrites.ApplyAsync(db, row, facts, isNew: false, cancellationToken);
         row.Revision++;
-        row.UpdatedAt = time.GetUtcNow();
+        row.UpdatedAt = time.StoredUtcNow();
         return await SaveAsync(found.Slug, row, cancellationToken);
     }
 
@@ -121,7 +121,7 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
 
         row.Review = Archived;
         row.Revision++;
-        row.UpdatedAt = time.GetUtcNow();
+        row.UpdatedAt = time.StoredUtcNow();
         return await SaveAsync(found.Slug, row, cancellationToken);
     }
 
@@ -139,7 +139,7 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
         if (await EventWrites.KeyTakenAsync(db, found.Id, facts.Key, Guid.Empty, cancellationToken))
             return Result<EventModel>.Fail(EventsErrors.KeyTaken());
 
-        var now = time.GetUtcNow();
+        var now = time.StoredUtcNow();
         var row = new CatalogEventEntity
         {
             Id = Guid.CreateVersion7(now),
@@ -206,7 +206,7 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
 
         if (query.DeadlineBefore is { } before)
         {
-            var today = DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
+            var today = DateOnly.FromDateTime(time.StoredUtcNow().UtcDateTime);
             rows = rows.Where(row => db.Deadlines.Any(deadline =>
                 deadline.EventId == row.Id && deadline.AtMin != null && deadline.AtMin <= before && deadline.AtMax >= today));
         }

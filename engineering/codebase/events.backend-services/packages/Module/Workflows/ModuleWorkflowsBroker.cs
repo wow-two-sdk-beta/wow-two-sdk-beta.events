@@ -68,7 +68,7 @@ internal sealed class ModuleWorkflowsBroker(EventsDbContext db, IEventsCallerSer
         row.Stages = EventsJson.Write(stages);
         row.DefaultStage = spec.DefaultStage;
         row.Fields = EventsJson.Write(spec.Fields);
-        row.UpdatedAt = time.GetUtcNow();
+        row.UpdatedAt = time.StoredUtcNow();
 
         try
         {

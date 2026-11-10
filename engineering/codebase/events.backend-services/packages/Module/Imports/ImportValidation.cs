@@ -87,7 +87,7 @@ internal static class ImportValidation
             tracking = values;
         }
 
-        input = new ImportRowInput(legacyId, sourceId, facts, sourceUrl, row.RecordedAtUtc, tracking, EventsJson.Write(row.Legacy));
+        input = new ImportRowInput(legacyId, sourceId, facts, sourceUrl, row.RecordedAtUtc is { } recorded ? StoredClock.Truncate(recorded) : null, tracking, EventsJson.Write(row.Legacy));
         return null;
     }
 

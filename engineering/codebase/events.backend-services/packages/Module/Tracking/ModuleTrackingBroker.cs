@@ -113,7 +113,7 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
         if (TrackingRules.Validate(string.Empty, workflow, spec.Stage, spec.Priority, spec.Assignee, spec.Notes, spec.Fields, spec.References, out var values) is { } invalid)
             return Result<TrackingModel>.Fail(invalid);
 
-        var now = time.GetUtcNow();
+        var now = time.StoredUtcNow();
         var row = await FindTrackingAsync(caller, eventId, tracked: true, cancellationToken);
         TrackingHistoryEntity? history = null;
         if (row is null)

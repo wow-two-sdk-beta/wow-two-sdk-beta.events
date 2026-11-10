@@ -112,7 +112,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
             await EventWrites.ApplyAsync(db, row, facts, isNew: false, cancellationToken);
         }
 
-        var now = time.GetUtcNow();
+        var now = time.StoredUtcNow();
         row.Review = Published;
         row.PublishedAt = now;
         row.Revision++;
@@ -137,7 +137,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
 
         row.Review = Rejected;
         row.Revision++;
-        row.UpdatedAt = time.GetUtcNow();
+        row.UpdatedAt = time.StoredUtcNow();
         return await SaveEventAsync(found.Slug, row, cancellationToken);
     }
 
@@ -163,7 +163,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
         if (candidate.Revision != decision.ExpectedRevision || target.Revision != decision.IntoExpectedRevision)
             return Result<EventModel>.Fail(EventsErrors.RevisionConflict());
 
-        var now = time.GetUtcNow();
+        var now = time.StoredUtcNow();
         Guid? into = target.Id;
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
@@ -237,7 +237,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
         if (await EventWrites.KeyTakenAsync(db, found.Id, facts.Key, row.Id, cancellationToken))
             return Result<EventModel>.Fail(EventsErrors.KeyTaken());
 
-        var now = time.GetUtcNow();
+        var now = time.StoredUtcNow();
         await EventWrites.ApplyAsync(db, row, facts, isNew: false, cancellationToken);
         row.Revision++;
         row.UpdatedAt = now;
@@ -258,7 +258,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
         if (observation.State != Pending)
             return Result<ObservationModel>.Fail(EventsErrors.ReviewStateInvalid("a pending change"));
 
-        Resolve(observation, Dismissed, time.GetUtcNow());
+        Resolve(observation, Dismissed, time.StoredUtcNow());
         await db.SaveChangesAsync(cancellationToken);
         return Result<ObservationModel>.Ok(ObservationModels.ToModel(observation, found.Slug));
     }

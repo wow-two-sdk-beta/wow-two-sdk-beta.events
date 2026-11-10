@@ -63,5 +63,5 @@ internal static class EventListQuery
     public static string? Normalize(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim().ToLowerInvariant();
 
     /// <summary>Gets the day in UTC.</summary>
-    public static DateOnly Today(TimeProvider time) => DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
+    public static DateOnly Today(TimeProvider time) => DateOnly.FromDateTime(time.StoredUtcNow().UtcDateTime);
 }

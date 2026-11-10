@@ -64,7 +64,7 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
             await using var scope = scopes.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<EventsDbContext>();
             var message = error.Length > MaxErrorLength ? error[..MaxErrorLength] : error;
-            await db.Database.ExecuteSqlRawAsync(FailureSql, [source.Name, IntakeSources.Subscription(source), time.GetUtcNow(), message], cancellationToken);
+            await db.Database.ExecuteSqlRawAsync(FailureSql, [source.Name, IntakeSources.Subscription(source), time.StoredUtcNow(), message], cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
