@@ -8,8 +8,9 @@ using WoW.Two.Sdk.Beta.Be.Http.Auth.OAuth2ClientCredentials;
 
 namespace Events.Api.IntakeCheck;
 
-/// <summary>Runs <c>intake check</c> against each source: the source's own token pulls its subscription (200), is refused
-/// the tenants list (403), and finds no other tenant's subscription (404, never 403).</summary>
+/// <summary>Runs <c>intake check</c> against each source: the source's own token pulls its subscription (200), reads it
+/// and finds the source's filter, schema and state (200, no difference), is refused the tenants list (403), and finds no
+/// other tenant's subscription (404, never 403).</summary>
 /// <param name="output">Where the lines go.</param>
 /// <param name="primaryHandler">Creates the handler every call ends in, for a test; none uses the network.</param>
 internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandler>? primaryHandler)
@@ -62,7 +63,7 @@ internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandl
         if (!IsConfigured(source, out var baseUrl, out var tokenEndpoint))
         {
             await output.WriteLineAsync(IntakeCheckLine.Skipped(source.Name, "not-configured"));
-            return (false, IntakeCheckLine.Summary(source.Name, "not-configured", null, null, null, null, null, foreign is not null));
+            return (false, IntakeCheckLine.Summary(source.Name, "not-configured", null, null, null, "0", null, null, foreign is not null));
         }
 
         await using var services = Services(source, tokenEndpoint);
@@ -72,6 +73,10 @@ internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandl
         var pull = await SendAsync(client, $"{subscriptions}/{Uri.EscapeDataString(source.SubscriptionId.Trim())}/events?limit={PullLimit}", count: true, cancellationToken);
         await output.WriteLineAsync(IntakeCheckLine.Check(source.Name, IntakeCheckLine.Pull, pull.Status, HttpStatusCode.OK, pull.Records, pull.EventRecords, pull.Reason));
         var ok = pull.Status == HttpStatusCode.OK;
+
+        var (subscriptionStatus, problem) = await ReadSubscriptionAsync(client, $"{subscriptions}/{Uri.EscapeDataString(source.SubscriptionId.Trim())}", source, cancellationToken);
+        await output.WriteLineAsync(IntakeCheckLine.SubscriptionCheck(source.Name, subscriptionStatus, problem));
+        ok &= subscriptionStatus == HttpStatusCode.OK && problem is null;
 
         var tenants = await SendAsync(client, $"{baseUrl}/api/tenants", count: false, cancellationToken);
         await output.WriteLineAsync(IntakeCheckLine.Check(source.Name, IntakeCheckLine.Tenants, tenants.Status, HttpStatusCode.Forbidden, reason: tenants.Reason));
@@ -88,7 +93,8 @@ internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandl
 
         // The token's outcome is the first answer's: any HTTP status means a token was issued and sent.
         var token = pull.Status is not null || tenants.Status is not null ? "ok" : pull.Reason ?? tenants.Reason ?? "unknown";
-        return (ok, IntakeCheckLine.Summary(source.Name, token, pull.Status, pull.Records, pull.EventRecords, tenants.Status, foreignStatus, !string.IsNullOrWhiteSpace(foreign)));
+        return (ok, IntakeCheckLine.Summary(source.Name, token, pull.Status, pull.Records, pull.EventRecords,
+            IntakeCheckLine.SubscriptionSummary(subscriptionStatus, problem), tenants.Status, foreignStatus, !string.IsNullOrWhiteSpace(foreign)));
     }
 
     /// <summary>Tells whether a source names everything a check needs: its base URL, its subscription and its token client.</summary>
@@ -153,6 +159,41 @@ internal sealed class IntakeCheckRunner(TextWriter output, Func<HttpMessageHandl
         catch (JsonException)
         {
             return new CheckAnswer(HttpStatusCode.OK, 0, 0, "malformed");
+        }
+    }
+
+    /// <summary>Reads the source's subscription and names how it differs from the source, if it does; only the status
+    /// and the difference leave this method.</summary>
+    private static async Task<(HttpStatusCode? Status, string? Problem)> ReadSubscriptionAsync(
+        HttpClient client, string url, EventsIntakeSourceOptions source, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await client.GetAsync(url, cancellationToken);
+            if (response.StatusCode != HttpStatusCode.OK)
+                return (response.StatusCode, null);
+
+            await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(body, cancellationToken: cancellationToken);
+            return document.RootElement.TryGetProperty("data", out var data) && ScfdSubscription.Read(data) is { } subscription
+                ? (response.StatusCode, subscription.MismatchWith(source))
+                : (response.StatusCode, "malformed");
+        }
+        catch (OAuth2TokenRequestException exception)
+        {
+            return (null, "token-refused:" + IntakeCheckLine.Code(exception.Error));
+        }
+        catch (HttpRequestException)
+        {
+            return (null, "unreachable");
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return (null, "timeout");
+        }
+        catch (JsonException)
+        {
+            return (HttpStatusCode.OK, "malformed");
         }
     }
 

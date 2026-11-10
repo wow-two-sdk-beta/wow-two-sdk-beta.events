@@ -26,6 +26,9 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
     /// <param name="cancellationToken">The token that cancels the poll; the only exception it lets through.</param>
     public async Task PollAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken)
     {
+        if (!await SubscriptionMatchesAsync(source, cancellationToken))
+            return;
+
         for (var page = 0; page < Math.Max(1, source.MaxPagesPerPoll); page++)
         {
             Result<IntakePageOutcome> outcome;
@@ -60,6 +63,36 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
         }
 
         await ReviewBacklogAsync(source, cancellationToken);
+    }
+
+    /// <summary>Checks the source's subscription before any pull: its filter, schema and state must be what the source
+    /// expects, or nothing is pulled and the mismatch is recorded on the source's cursor row (sweep #3).</summary>
+    private async Task<bool> SubscriptionMatchesAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken)
+    {
+        ScfdSubscription subscription;
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            subscription = await scope.ServiceProvider.GetRequiredService<IObservationFeed>().ReadSubscriptionAsync(source, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            LogPageFailed(logger, source.Name, FailureKind(exception), exception);
+            await RecordFailureAsync(source, $"{exception.GetType().Name}: {exception.Message}", cancellationToken);
+            return false;
+        }
+
+        if (subscription.MismatchWith(source) is not { } mismatch)
+            return true;
+
+        var message = $"The subscription does not match the source ({mismatch}): {subscription.Describe(source)}; intake pulls nothing.";
+        LogSubscriptionRefused(logger, source.Name, mismatch, subscription.Describe(source));
+        await RecordFailureAsync(source, message, cancellationToken);
+        return false;
     }
 
     /// <summary>Reviews the source's held backlog after its pages, so candidates stored before automatic review publish.</summary>
@@ -116,6 +149,9 @@ internal sealed partial class IntakeSourcePoller(IServiceScopeFactory scopes, Ti
 
     [LoggerMessage(EventId = 4106, Level = LogLevel.Information, Message = "Events intake: source {Source} backlog pass: {Checked} held event(s) checked, {Remapped} re-mapped, {Published} published by its automatic review.")]
     private static partial void LogBacklogPass(ILogger logger, string source, int @checked, int remapped, int published);
+
+    [LoggerMessage(EventId = 4107, Level = LogLevel.Warning, Message = "Events intake: source {Source} pulls nothing: its SCFD subscription does not match ({Mismatch}): {Detail}.")]
+    private static partial void LogSubscriptionRefused(ILogger logger, string source, string mismatch, string detail);
 
     [LoggerMessage(EventId = 4104, Level = LogLevel.Information, Message = "Events intake: source {Source} page {Page} polled: SCFD 200, {Received} new records stored, {Quarantined} quarantined, more pages {HasMore}; the cursor committed.")]
     private static partial void LogPagePolled(ILogger logger, string source, int page, int received, int quarantined, bool hasMore);

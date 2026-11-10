@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using WoW.Two.Sdk.Beta.Be.Events;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 
 namespace Events.Tests.Integration.Intake;
@@ -10,6 +11,7 @@ internal sealed class FakeObservationFeed : IObservationFeed
 {
     private readonly ConcurrentDictionary<string, List<ScfdDeliveryRecord>> logs = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Exception> failures = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ScfdSubscription> subscriptions = new(StringComparer.Ordinal);
 
     /// <summary>Gets every read, as (source, cursor), in order.</summary>
     public ConcurrentQueue<(string Source, string? Cursor)> Reads { get; } = new();
@@ -29,6 +31,21 @@ internal sealed class FakeObservationFeed : IObservationFeed
             failures.TryRemove(source.Name, out _);
         else
             failures[source.Name] = failure;
+    }
+
+    /// <summary>Sets what a source's subscription answers; by default it matches the source: its filter, the schema, active.</summary>
+    public void Subscription(EventsIntakeSourceOptions source, ScfdSubscription subscription) =>
+        subscriptions[IntakeSources.Subscription(source)] = subscription;
+
+    /// <inheritdoc />
+    public Task<ScfdSubscription> ReadSubscriptionAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken)
+    {
+        if (failures.TryGetValue(source.Name, out var failure))
+            throw failure;
+
+        return Task.FromResult(subscriptions.TryGetValue(IntakeSources.Subscription(source), out var set)
+            ? set
+            : new ScfdSubscription(ScfdSubscription.ExpectedFilter(source), EventsConstants.EventSchema, ScfdSubscription.ActiveState));
     }
 
     /// <inheritdoc />

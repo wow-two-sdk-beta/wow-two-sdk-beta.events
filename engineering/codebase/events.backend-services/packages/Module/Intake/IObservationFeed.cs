@@ -10,4 +10,10 @@ internal interface IObservationFeed
     /// <param name="cancellationToken">The token that cancels the call.</param>
     /// <returns>The page; a failed read throws.</returns>
     Task<ObservationFeedPage> ReadAsync(EventsIntakeSourceOptions source, string? cursor, int limit, CancellationToken cancellationToken);
+
+    /// <summary>Reads the source's subscription: its filter, schema and state.</summary>
+    /// <param name="source">The source.</param>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>The subscription; a failed read throws.</returns>
+    Task<ScfdSubscription> ReadSubscriptionAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken);
 }

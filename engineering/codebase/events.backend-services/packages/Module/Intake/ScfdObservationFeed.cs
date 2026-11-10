@@ -27,4 +27,20 @@ internal sealed class ScfdObservationFeed(IHttpClientFactory clients) : IObserva
         var page = envelope?.Data ?? throw new InvalidDataException($"SCFD answered no page for source '{source.Name}'.");
         return new ObservationFeedPage(page.Data ?? [], page.Next, page.HasMore);
     }
+
+    /// <inheritdoc />
+    public async Task<ScfdSubscription> ReadSubscriptionAsync(EventsIntakeSourceOptions source, CancellationToken cancellationToken)
+    {
+        var client = clients.CreateClient(IntakeSources.ClientName(source.Name));
+        var uri = new Uri(new Uri(source.BaseUrl.TrimEnd('/') + "/"), $"api/subscriptions/{Uri.EscapeDataString(IntakeSources.Subscription(source))}");
+
+        using var response = await client.GetAsync(uri, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"SCFD answered {(int)response.StatusCode} for the subscription of source '{source.Name}'.", null, response.StatusCode);
+
+        var envelope = await response.Content.ReadFromJsonAsync<ScfdEnvelope<JsonElement>>(Wire, cancellationToken);
+        return envelope is { Data: var data } && ScfdSubscription.Read(data) is { } subscription
+            ? subscription
+            : throw new InvalidDataException($"SCFD answered no subscription for source '{source.Name}'.");
+    }
 }

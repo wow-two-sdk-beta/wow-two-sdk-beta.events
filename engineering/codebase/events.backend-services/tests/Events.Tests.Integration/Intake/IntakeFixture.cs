@@ -48,6 +48,8 @@ public sealed class IntakeFixture : IAsyncLifetime
             BaseUrl = "https://scfd.test/",
             SubscriptionId = Guid.NewGuid().ToString("D"),
             PipelineId = Guid.NewGuid().ToString("D"),
+            // The SCFD filter the subscription carries; the fake subscription matches it unless a test sets another.
+            Filter = "fixture-filter",
             PageSize = 50,
             MaxPagesPerPoll = 5,
             // The catalog's owner: the organization acting when the test created it.

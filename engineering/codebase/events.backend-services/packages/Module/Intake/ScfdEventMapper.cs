@@ -26,6 +26,22 @@ internal static partial class ScfdEventMapper
         data is { ValueKind: JsonValueKind.Object } value && value.TryGetProperty("revision", out var revision)
         && revision.ValueKind == JsonValueKind.Number && revision.TryGetInt32(out var number) ? number : null;
 
+    /// <summary>Reads the post's state, lowercase: <c>live</c>, <c>suspect</c> or <c>gone</c>, as a label or as SCFD's
+    /// <c>PostState</c> number (Live 0, Suspect 1, Gone 2); none when the payload names none.</summary>
+    public static string? PostState(JsonElement? data) =>
+        data is { ValueKind: JsonValueKind.Object } value && value.TryGetProperty("state", out var state)
+            ? state.ValueKind switch
+            {
+                JsonValueKind.String => state.GetString()?.Trim().ToLowerInvariant(),
+                JsonValueKind.Number when state.TryGetInt32(out var number) => number switch { 0 => "live", 1 => "suspect", 2 => "gone", _ => null },
+                _ => null,
+            }
+            : null;
+
+    /// <summary>Reads the post another post absorbed this one into, on a <c>post.merged</c> record; none otherwise.</summary>
+    public static Guid? MergedInto(JsonElement? data) =>
+        data is { ValueKind: JsonValueKind.Object } value && Guid.TryParse(String(value, "mergedInto"), out var survivor) ? survivor : null;
+
     /// <summary>Reads the mapping stamp as one version: its schema, norm, rules and parser, at most 64 characters.</summary>
     public static string? MappingVersion(JsonElement? data)
     {

@@ -23,10 +23,26 @@ public sealed class IntakeCheckTests
 
         lines.Should().Equal(
             "intake-check source=ocharo check=pull status=200 expected=200 ok=true records=3 event-records=2",
+            "intake-check source=ocharo check=subscription status=200 expected=200 ok=true",
             "intake-check source=ocharo check=tenants status=403 expected=403 ok=true",
             "intake-check source=ocharo check=foreign status=404 expected=404 ok=true",
-            "intake-check-result ok=true source=ocharo token=ok pull=200 records=3 event-records=2 tenants=403 foreign=404");
+            "intake-check-result ok=true source=ocharo token=ok pull=200 records=3 event-records=2 subscription=ok tenants=403 foreign=404");
         exit.Should().Be(0);
+    }
+
+    /// <summary>Under automatic review a subscription without the source's filter would publish everything it delivers
+    /// (the services sweep's safety gap): the check names the difference, never the values.</summary>
+    [Theory]
+    [InlineData("another-filter", "wow2.event.v1", "active", "filter-mismatch")]
+    [InlineData("ocharo-fashion-v1", "wow2.post.v1", "active", "schema-mismatch")]
+    [InlineData("ocharo-fashion-v1", "wow2.event.v1", "suspended", "state-suspended")]
+    public async Task Check_ShouldFail_WhenTheSubscriptionDoesNotMatchTheSource(string filterKey, string schema, string state, string mismatch)
+    {
+        var (exit, lines) = await RunAsync(Stub(subscription: (filterKey, schema, state)));
+
+        lines.Should().Contain($"intake-check source=ocharo check=subscription status=200 expected=200 ok=false reason={mismatch}");
+        lines[^1].Should().Be($"intake-check-result ok=false source=ocharo token=ok pull=200 records=3 event-records=2 subscription={mismatch} tenants=403 foreign=skipped");
+        exit.Should().Be(1);
     }
 
     [Fact]
@@ -35,7 +51,7 @@ public sealed class IntakeCheckTests
         var (exit, lines) = await RunAsync(Stub(tenants: HttpStatusCode.OK));
 
         lines.Should().Contain("intake-check source=ocharo check=tenants status=200 expected=403 ok=false");
-        lines[^1].Should().Be("intake-check-result ok=false source=ocharo token=ok pull=200 records=3 event-records=2 tenants=200 foreign=skipped");
+        lines[^1].Should().Be("intake-check-result ok=false source=ocharo token=ok pull=200 records=3 event-records=2 subscription=ok tenants=200 foreign=skipped");
         exit.Should().Be(1);
     }
 
@@ -49,7 +65,7 @@ public sealed class IntakeCheckTests
 
         var (exit, lines) = await RunAsync(Stub(), settings, []);
 
-        lines[^1].Should().Be("intake-check-result ok=false source=ocharo token=token-refused:invalid_target pull=0 records=0 event-records=0 tenants=0 foreign=skipped");
+        lines[^1].Should().Be("intake-check-result ok=false source=ocharo token=token-refused:invalid_target pull=0 records=0 event-records=0 subscription=token-refused:invalid_target tenants=0 foreign=skipped");
         exit.Should().Be(1);
     }
 
@@ -73,7 +89,7 @@ public sealed class IntakeCheckTests
 
         lines.Should().Equal(
             "intake-check source=ocharo ok=false reason=not-configured",
-            "intake-check-result ok=false source=ocharo token=not-configured pull=0 records=0 event-records=0 tenants=0 foreign=skipped");
+            "intake-check-result ok=false source=ocharo token=not-configured pull=0 records=0 event-records=0 subscription=0 tenants=0 foreign=skipped");
         exit.Should().Be(1);
     }
 
@@ -136,10 +152,13 @@ public sealed class IntakeCheckTests
         ["Events:Intake:Sources:0:ClientId"] = "events",
         ["Events:Intake:Sources:0:ClientSecret"] = "client-secret-never-printed",
         ["Events:Intake:Sources:0:Scope"] = "harvest.events-read",
+        ["Events:Intake:Sources:0:Filter"] = "ocharo-fashion-v1",
     };
 
     /// <summary>Answers as Identity's token endpoint and SCFD would; a call without the token answers 401.</summary>
-    private static Func<HttpMessageHandler> Stub(HttpStatusCode tenants = HttpStatusCode.Forbidden, HttpStatusCode foreign = HttpStatusCode.NotFound) =>
+    private static Func<HttpMessageHandler> Stub(
+        HttpStatusCode tenants = HttpStatusCode.Forbidden, HttpStatusCode foreign = HttpStatusCode.NotFound,
+        (string FilterKey, string Schema, string State)? subscription = null) =>
         () => new StubHandler(request =>
         {
             var url = request.RequestUri!.AbsoluteUri;
@@ -162,6 +181,12 @@ public sealed class IntakeCheckTests
                       {"eventId":"0193f3a4-0000-7000-8000-00000000000c","data":{"schema":"wow2.post.v1"}}
                     ],"next":null,"hasMore":false}}
                     """);
+            }
+
+            if (url == $"{BaseUrl}/api/subscriptions/{Subscription}")
+            {
+                var (filterKey, schema, state) = subscription ?? ("ocharo-fashion-v1", "wow2.event.v1", "active");
+                return Answer(HttpStatusCode.OK, $$$"""{"data":{"id":"{{{Subscription}}}","filterKey":"{{{filterKey}}}","schema":"{{{schema}}}","state":"{{{state}}}"}}""");
             }
 
             if (url == $"{BaseUrl}/api/tenants")
