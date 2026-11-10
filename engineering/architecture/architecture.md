@@ -9,6 +9,7 @@ product Domain / Application ──► Abstractions (contract)
 product composition root ──► Module (Form 1)  or  Client (Forms 2/3)
 service/Events.Api ──► Module (ProjectReference), + HTTP mirror of the contract + hosted pages (apps/web)
 Client ──HTTP──► service/Events.Api ──► Module ──► the service's store
+Module (intake) ──HTTP pull──► SCFD subscription feed
 ```
 
 | Form | Registration | Store owner |
@@ -19,10 +20,10 @@ Client ──HTTP──► service/Events.Api ──► Module ──► the ser
 
 | Project | Responsibility |
 |---|---|
-| `packages/Abstractions` | the contract — broker, model, constants, errors; no DI, options or I/O |
-| `packages/Module` | Form 1 over the module's store; embedded SQL migrations |
+| `packages/Abstractions` | the contract — eight brokers (catalogs, events, review, tracking, workflows, imports, calendar, intake), models, scopes, permissions, routes, errors; no DI, options or I/O |
+| `packages/Module` | Form 1 over PostgreSQL schema `events`; embedded SQL migrations; `AddEventsIntake()` adds the SCFD pull consumer |
 | `packages/Client` | Forms 2/3 over the service's HTTP API |
-| `packages/Testing` | the fake and the conformance suite |
+| `packages/Testing` | the conformance suite of every broker and a settable test principal |
 | `service/Events.Api` | hosting, the HTTP mirror of the contract, the hosted pages and console |
-| `fe-events` | the TypeScript contract mirror, the embeddable widget, the forward to the hosted page, the management screens (`./admin`) |
-| `apps/web` | hosted pages (`/greet`) and console (`/`, composing `fe-events/admin`), on `fe-events` through its exports |
+| `fe-events` | the TypeScript contract mirror and client (`./contracts`, `./kit`), product components (feed, card, deadlines, detail, tracking form), the reviewer's screens (`./admin`) |
+| `apps/web` | the review console (`/`, composing `fe-events/admin`), signed in through Identity's BFF |
