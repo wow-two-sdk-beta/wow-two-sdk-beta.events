@@ -7,16 +7,17 @@
 ## Current state
 
 Repository created 2026-11-10 under the Events integration (wow-two-ws `system/sessions/events-integration/`). v0.1
-(P1) is in build: the contract and schema are committed; the module, client, service, console and fe package are
-under way; nothing is published or deployed yet. Picks per contract: `engineering/planning/backlog.md` § Integration
+(P1) is built: contract, module (catalogs, review, SCFD intake, tracking, imports, calendar), client, service, review
+console and `fe-events`, 323 tests. Image `v0.1.1` is released; the `events-dev` rollout is the wheelhouse lane's; the
+NuGet family and npm package wait for the first publish (the developer's NuGet policy and npm first version). Picks per contract: `engineering/planning/backlog.md` § Integration
 picks.
 
 ## Active tasks
 
 | Task | Status | Notes |
 |---|---|---|
-| v0.1 build | in progress | `engineering/planning/version-track/v0.1/v0.1.md` |
-| Public flip, NuGet policy, npm first version | todo | the developer's hand steps, `engineering/development/development.md` § Repository |
+| v0.1 build | done, image `v0.1.1` | `engineering/planning/version-track/v0.1/v0.1.md` |
+| NuGet policy, npm first version | todo | the developer's hand steps (the repo is public since 2026-11-10) |
 | Registration in Ocharo's Identity | todo | platform lane (events-integration #21, #30) |
 | Dev deploy | todo | wheelhouse lane (events-integration #28) |
 
