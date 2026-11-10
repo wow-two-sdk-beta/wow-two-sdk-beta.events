@@ -7,7 +7,8 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 /// <param name="Relevant">Whether the record is relevant; none when the classifier did not decide.</param>
 /// <param name="Classifier">The classifier's name, recorded as the review's actor <c>classifier:{name}</c>.</param>
 /// <param name="Reason">Why, recorded as the review's reason.</param>
-internal sealed record IntakeVerdict(bool? Relevant, string Classifier, string Reason)
+/// <param name="Kind">The kind the classifier assigns, such as <c>runway</c>; none leaves the mapped kind.</param>
+internal sealed record IntakeVerdict(bool? Relevant, string Classifier, string Reason, string? Kind = null)
 {
     /// <summary>Holds the actor prefix of an automatic review.</summary>
     public const string ClassifierActor = "classifier:";
@@ -19,7 +20,8 @@ internal sealed record IntakeVerdict(bool? Relevant, string Classifier, string R
     /// <remarks>
     ///   - <c>filter</c>: SCFD delivers only what the subscription's filter passed, so every record is relevant
     ///   - <c>payload</c>: the record's own <c>classification</c> object decides — <c>{ classifier, verdict:
-    ///     relevant | irrelevant | uncertain, confidence?: 0..1, reason? }</c>, as an AI relevance step writes it; a missing
+    ///     relevant | irrelevant | uncertain, confidence?: 0..1, reason?, kind? }</c>, as an AI relevance step writes it; a
+    ///     <c>kind</c> of the catalog's taxonomy becomes the event's kind; a missing
     ///     or uncertain verdict, or a confidence under the source's minimum, decides nothing
     /// </remarks>
     /// <param name="source">The intake source.</param>
@@ -51,7 +53,7 @@ internal sealed record IntakeVerdict(bool? Relevant, string Classifier, string R
             "irrelevant" => false,
             _ => null,
         };
-        return new IntakeVerdict(relevant, name, detail.Length > 500 ? detail[..500] : detail);
+        return new IntakeVerdict(relevant, name, detail.Length > 500 ? detail[..500] : detail, Text(classification, "kind")?.ToLowerInvariant());
     }
 
     private static string? Text(JsonElement element, string name) =>

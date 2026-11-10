@@ -54,6 +54,25 @@ public sealed class ScfdEventMapperTests
         facts.Images.Should().BeEmpty("sourced media stays evidence (events-integration #50)");
     }
 
+    /// <summary>Afisha's reader puts the city only in schema.org's addressLocality; SCFD's mentions carry the venue and
+    /// the street (events-dev, 2026-11-10: the published event lost its city).</summary>
+    [Fact]
+    public void TryMap_ShouldTakeTheCity_FromSchemaOrgsLocation_WhenNoMentionNamesIt()
+    {
+        var facts = Map("""
+            {"schema":"wow2.event.v1","title":"Показ мод The Fashion Show Line 2026",
+             "place":{"mentions":[{"kind":"venue","text":"Дворец творчества молодёжи"},{"kind":"address","text":"ул. Мустакиллик, 2"}]},
+             "schemaOrg":{"@type":"Event","location":{"@type":"Place","name":"Дворец творчества молодёжи",
+               "address":{"@type":"PostalAddress","addressLocality":"Ташкент","streetAddress":"ул. Мустакиллик, 2"},
+               "geo":{"latitude":41.31,"longitude":69.28}}}}
+            """);
+
+        facts.Place.Should().BeEquivalentTo(new EventPlace
+        {
+            Venue = "Дворец творчества молодёжи", Address = "ул. Мустакиллик, 2", City = "Ташкент", Latitude = 41.31, Longitude = 69.28,
+        });
+    }
+
     [Theory]
     [InlineData("""{"value":"2026","precision":"year"}""", "2026", DatePrecision.Year)]
     [InlineData("""{"value":"2026-10-15","precision":"day"}""", "2026-10-15", DatePrecision.Day)]

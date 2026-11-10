@@ -215,12 +215,30 @@ internal static partial class ScfdEventMapper
                 (latitude, longitude) = (placeLatitude, placeLongitude);
         }
 
-        var country = schemaOrg is { } original
-            && original.TryGetProperty("location", out var location) && location.ValueKind == JsonValueKind.Object
-            && location.TryGetProperty("address", out var postal) && postal.ValueKind == JsonValueKind.Object
-            && String(postal, "addressCountry")?.Trim().ToUpperInvariant() is { Length: 2 } code && code.All(char.IsAsciiLetterUpper)
-                ? code
-                : null;
+        // The source's own schema.org location fills what the mentions leave out: Afisha's reader puts the city only in
+        // addressLocality, and SCFD's mentions carry the venue and the street (events-dev, 2026-11-10).
+        string? country = null;
+        if (schemaOrg is { } original
+            && original.TryGetProperty("location", out var location) && location.ValueKind == JsonValueKind.Object)
+        {
+            venue ??= Fit(String(location, "name"), EventsConstants.MaxNameLength);
+            if (location.TryGetProperty("address", out var postal) && postal.ValueKind == JsonValueKind.Object)
+            {
+                city ??= Fit(String(postal, "addressLocality"), EventsConstants.MaxNameLength);
+                region ??= Fit(String(postal, "addressRegion"), EventsConstants.MaxNameLength);
+                street ??= Fit(String(postal, "streetAddress"), EventsConstants.MaxNameLength);
+                country = String(postal, "addressCountry")?.Trim().ToUpperInvariant() is { Length: 2 } code && code.All(char.IsAsciiLetterUpper)
+                    ? code
+                    : null;
+            }
+            else if (location.TryGetProperty("address", out var line) && line.ValueKind == JsonValueKind.String)
+            {
+                street ??= Fit(line.GetString(), EventsConstants.MaxNameLength);
+            }
+
+            if (latitude is null)
+                (latitude, longitude) = Geo(location);
+        }
 
         address ??= street;
         return venue is null && address is null && city is null && region is null && country is null && latitude is null

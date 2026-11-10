@@ -46,6 +46,8 @@ internal sealed partial class EventsIntakeOptionsValidator : IValidateOptions<Ev
             if (!string.Equals(source.Classifier, EventsIntakeSourceOptions.FilterClassifier, StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(source.Classifier, EventsIntakeSourceOptions.PayloadClassifier, StringComparison.OrdinalIgnoreCase))
                 failures.Add($"{at}:Classifier must be filter or payload");
+            if (source.DefaultCountry is { } country && (country.Length != 2 || !country.All(char.IsAsciiLetterUpper)))
+                failures.Add($"{at}:DefaultCountry must be an upper-case ISO 3166-1 alpha-2 code");
             if (source.MinConfidence is < 0 or > 1)
                 failures.Add($"{at}:MinConfidence must be 0 to 1");
             if (source.PollInterval <= TimeSpan.Zero)

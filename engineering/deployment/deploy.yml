@@ -87,6 +87,8 @@ services:
         Events:Intake:Sources:0:Review: { type: choice, values: [auto, manual], default: auto }
         Events:Intake:Sources:0:Classifier: { type: choice, values: [filter, payload], default: filter }
         Events:Intake:Sources:0:Filter: { default: ocharo-fashion-v1 }
+        # afisha.uz lists Uzbekistan's events and its records name no country: the operator's knowledge of the source.
+        Events:Intake:Sources:0:DefaultCountry: { default: UZ }
         Events:Intake:Sources:1:Name: { default: afisha-exhibitions }
         Events:Intake:Sources:1:Catalog: { default: ocharo-fashion }
         Events:Intake:Sources:1:Instance: { default: scfd }
@@ -101,6 +103,7 @@ services:
         Events:Intake:Sources:1:Review: { from: Events:Intake:Sources:0:Review }
         Events:Intake:Sources:1:Classifier: { from: Events:Intake:Sources:0:Classifier }
         Events:Intake:Sources:1:Filter: { from: Events:Intake:Sources:0:Filter }
+        Events:Intake:Sources:1:DefaultCountry: { from: Events:Intake:Sources:0:DefaultCountry }
     # The console's data-protection key ring (DataProtection:KeysPath).
     volumes:
       keys: /var/lib/events/keys

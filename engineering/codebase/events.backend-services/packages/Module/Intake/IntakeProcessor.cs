@@ -45,10 +45,10 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private static readonly string Ignored = EventsLabels.Of(ObservationState.Ignored);
     private static readonly string Accepted = EventsLabels.Of(ObservationState.Accepted);
 
-    /// <summary>Reviews a source's held backlog under its automatic review: every candidate of the source's posts that no
-    /// reviewer has decided yet (stored under manual review, or before the policy existed) gets its classifier's verdict
-    /// from its latest delivered payload. Nothing under manual review; a person's or a classifier's earlier decision
-    /// stands.</summary>
+    /// <summary>Reconciles a source's automatically reviewed events with its latest deliveries (events-integration #53):
+    /// every event of the source's posts no person has reviewed is mapped again from its latest payload, so a better
+    /// mapping (a place, a country, a classifier's kind) reaches events already stored; a candidate no reviewer has decided
+    /// gets its classifier's verdict. Nothing under manual review; a person's decision stands.</summary>
     /// <param name="source">The source.</param>
     /// <param name="cancellationToken">The token that cancels the call.</param>
     /// <returns>How many candidates it published.</returns>
@@ -62,29 +62,48 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             return 0;
 
         var instance = source.Instance;
+        var classifier = IntakeVerdict.ClassifierActor;
         var backlog = await (
                 from post in db.SourcePosts
                 join item in db.Events on post.EventId equals item.Id
                 join observation in db.Observations on post.LatestObservationId equals observation.Id
-                where post.SourceInstance == instance && post.CatalogId == catalog.Id
-                      && item.Review == Candidate && item.ReviewedBy == null && observation.Payload != null
+                where post.SourceInstance == instance && post.CatalogId == catalog.Id && observation.Payload != null
+                      && ((item.Review == Candidate && item.ReviewedBy == null)
+                          || ((item.Review == Candidate || item.Review == Published) && item.ReviewedBy!.StartsWith(classifier)))
                 select new { Event = item, observation.Payload })
             .Take(500)
             .ToListAsync(cancellationToken);
         if (backlog.Count == 0)
             return 0;
 
+        var kinds = CatalogAccess.KindKeys(catalog);
         var now = time.StoredUtcNow();
         var published = 0;
         foreach (var held in backlog)
         {
             using var document = JsonDocument.Parse(held.Payload!);
             var verdict = IntakeVerdict.Of(source, document.RootElement);
-            Review(held.Event, verdict, now);
+            var changed = false;
+            if (Facts(source, document.RootElement, kinds, verdict) is { } facts
+                && !Tracking.JsonComparison.Same(EventsJson.Write(facts), held.Event.Facts))
+            {
+                await EventWrites.ApplyAsync(db, held.Event, facts, isNew: false, cancellationToken);
+                changed = true;
+            }
+
+            if (held.Event.ReviewedBy is null)
+            {
+                Review(held.Event, verdict, now);
+                changed = true;
+                if (verdict.Relevant == true)
+                    published++;
+            }
+
+            if (!changed)
+                continue;
+
             held.Event.Revision++;
             held.Event.UpdatedAt = now;
-            if (verdict.Relevant == true)
-                published++;
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -229,15 +248,12 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             return;
         }
 
-        if (!ScfdEventMapper.TryMap(payload, page.Kinds, out var mapped, out var reason))
+        // The source's review policy (events-integration #53): manual keeps every record for a person; auto publishes what
+        // its classifier marks relevant and holds the rest, recording the classifier and its verdict.
+        var verdict = page.Source.ReviewsAutomatically ? IntakeVerdict.Of(page.Source, payload) : null;
+        if (Facts(page.Source, payload, page.Kinds, verdict) is not { } facts)
         {
-            Quarantine(observation, reason);
-            return;
-        }
-
-        if (EventFactsValidator.Validate(mapped, ProposedFacts.SourcedKinds(page.Kinds), out var facts) is { } invalid)
-        {
-            Quarantine(observation, invalid.Message);
+            Quarantine(observation, FactsError(page.Source, payload, page.Kinds, verdict));
             return;
         }
 
@@ -264,10 +280,6 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         post.LatestRevision = revision;
         post.LatestObservationId = observation.Id;
         post.UpdatedAt = page.Now;
-
-        // The source's review policy (events-integration #53): manual keeps every record for a person; auto publishes what
-        // its classifier marks relevant and holds the rest, recording the classifier and its verdict.
-        var verdict = page.Source.ReviewsAutomatically ? IntakeVerdict.Of(page.Source, payload) : null;
 
         if (post.EventId is null)
         {
@@ -345,6 +357,38 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
                 .Where(row => row.SourceInstance == instance && row.PostId == postId && row.Payload != null)
                 .ExecuteUpdateAsync(set => set.SetProperty(row => row.Payload, (string?)null), cancellationToken);
         }
+    }
+
+    /// <summary>Reads a payload's facts as this source delivers them: the mapping, the source's default country, the
+    /// classifier's kind, then validation; none when the payload is malformed.</summary>
+    private static EventFacts? Facts(EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict) =>
+        TryFacts(source, payload, kinds, verdict, out var facts, out _) ? facts : null;
+
+    /// <summary>Says why a payload's facts are unreadable.</summary>
+    private static string FactsError(EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict) =>
+        TryFacts(source, payload, kinds, verdict, out _, out var reason) ? string.Empty : reason;
+
+    private static bool TryFacts(
+        EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict,
+        out EventFacts facts, out string reason)
+    {
+        facts = null!;
+        if (!ScfdEventMapper.TryMap(payload, kinds, out var mapped, out reason))
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(source.DefaultCountry) && mapped.Place?.Country is null)
+            mapped = mapped with { Place = (mapped.Place ?? new EventPlace()) with { Country = source.DefaultCountry.Trim().ToUpperInvariant() } };
+        if (verdict?.Kind is { } kind && kinds.Contains(kind))
+            mapped = mapped with { Kind = kind };
+
+        if (EventFactsValidator.Validate(mapped, ProposedFacts.SourcedKinds(kinds), out var valid) is { } invalid)
+        {
+            reason = invalid.Message;
+            return false;
+        }
+
+        facts = valid;
+        return true;
     }
 
     /// <summary>Applies an automatic review to a candidate: publishes it when the classifier marks it relevant, otherwise

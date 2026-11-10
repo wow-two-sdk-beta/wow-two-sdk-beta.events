@@ -139,6 +139,39 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         (await EventsAsync(slug, new EventQuery())).Should().BeEmpty();
     }
 
+    /// <summary>A better reading reaches events the classifier already published, once: the source's default country here
+    /// (afisha.uz lists Uzbekistan's events, and its records name no country).</summary>
+    [Fact]
+    public async Task Intake_ShouldRemapAPublishedEventOnce_WhenTheSourceGainsADefaultCountry()
+    {
+        var (slug, source) = await SourceAsync(auto => auto.Review = "auto");
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Show"));
+        await fixture.PollAsync(source);
+        var before = (await EventsAsync(slug, new EventQuery())).Single();
+        before.Facts.Place!.Country.Should().BeNull();
+
+        source.DefaultCountry = "UZ";
+        await fixture.PollAsync(source);
+        await fixture.PollAsync(source);
+
+        var after = (await EventsAsync(slug, new EventQuery())).Single();
+        after.Facts.Place!.Country.Should().Be("UZ");
+        after.Facts.Place.City.Should().Be("Tashkent");
+        after.Revision.Should().Be(before.Revision + 1, "a second poll with nothing new changes nothing");
+    }
+
+    [Fact]
+    public async Task Intake_ShouldTakeTheClassifiersKind_WhenItIsACatalogKind()
+    {
+        var (slug, source) = await SourceAsync(auto => { auto.Review = "auto"; auto.Classifier = "payload"; });
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Показ мод", edit: data =>
+            data["classification"] = new { classifier = "relevance-ai@1", verdict = "relevant", kind = "runway" }));
+
+        await fixture.PollAsync(source);
+
+        (await EventsAsync(slug, new EventQuery())).Single().Facts.Kind.Should().Be("runway");
+    }
+
     [Fact]
     public async Task Intake_ShouldKeepCandidates_WhenTheSourceReviewsManually()
     {

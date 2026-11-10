@@ -73,6 +73,10 @@ public sealed class EventsIntakeSourceOptions
     /// <summary>Gets or sets the lowest confidence a <see cref="PayloadClassifier"/> verdict needs to publish, 0 to 1.</summary>
     public double MinConfidence { get; set; }
 
+    /// <summary>Gets or sets the ISO-2 country the source covers, such as <c>UZ</c> for afisha.uz, set on a record whose place
+    /// names none: the operator's knowledge of the source, never a guess about one record.</summary>
+    public string? DefaultCountry { get; set; }
+
     /// <summary>Gets whether the source reviews automatically.</summary>
     public bool ReviewsAutomatically => string.Equals(Review, AutoReview, StringComparison.OrdinalIgnoreCase);
 
