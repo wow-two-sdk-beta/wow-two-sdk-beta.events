@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from '@wow-two-beta/fe/presentation/actions';
+import { Button, RefreshButton } from '@wow-two-beta/fe/presentation/actions';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
 import { onMounted, shallowRef, watch } from 'vue';
 import type { CatalogKindModel, ReviewItemModel, ReviewPage } from '../../contracts';
@@ -58,9 +58,12 @@ watch([() => props.catalog, () => props.client], () => {
   <section class="space-y-4" aria-labelledby="review-queue-title">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 id="review-queue-title" class="text-lg font-semibold">{{ eventsText('reviewQueue', locale) }}</h2>
-      <Button size="sm" variant="ghost" :is-loading="list.pending.value" @click="load()">
-        {{ eventsText('refresh', locale) }}
-      </Button>
+      <RefreshButton
+        variant="ghost"
+        :is-refreshing="list.pending.value"
+        :label="eventsText('refresh', locale)"
+        @click="load()"
+      />
     </div>
     <p v-if="notice" class="rounded-md bg-success-soft px-3 py-2 text-sm text-success-soft-foreground" role="status">
       {{ eventsText(notice, locale) }}

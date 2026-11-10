@@ -144,23 +144,19 @@ export function createEventsClient(options: EventsClientOptions = {}): EventsCli
     ...(options.credentials !== undefined ? { credentials: options.credentials } : {}),
     ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
     ...(options.getAuthToken !== undefined ? { getAuthToken: options.getAuthToken } : {}),
+    // The fe sdk echoes the BFF session's token on every unsafe request, read per request; no token sends no header.
+    ...(options.csrfToken !== undefined
+      ? { antiforgery: { headerName: EventsCsrfHeader, getToken: () => options.csrfToken?.() || null } }
+      : {}),
   });
 
-  function headersFor(method: Method): Record<string, string> | undefined {
-    if (method === 'GET') return undefined;
-    const token = options.csrfToken?.();
-    return token ? { [EventsCsrfHeader]: token } : undefined;
-  }
-
   async function send<T>(call: Call<T>): EventsResult<T> {
-    const headers = headersFor(call.method);
     const result: Result<T, ApiFailure> = await api.request<T>(`/${call.route}`, {
       method: call.method,
       decode: call.decode,
       ...(call.query !== undefined ? { query: call.query } : {}),
       ...(call.body !== undefined ? { body: call.body } : {}),
       ...(call.signal !== undefined ? { signal: call.signal } : {}),
-      ...(headers !== undefined ? { headers } : {}),
     });
     return result.ok ? result : ResultExtensions.fail(failed(result.failure));
   }

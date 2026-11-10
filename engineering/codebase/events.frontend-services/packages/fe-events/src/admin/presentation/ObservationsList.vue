@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from '@wow-two-beta/fe/presentation/actions';
+import { Button, RefreshButton } from '@wow-two-beta/fe/presentation/actions';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
 import { onMounted, shallowRef, watch } from 'vue';
 import type { ObservationModel, ObservationPage, ObservationState } from '../../contracts';
@@ -78,9 +78,12 @@ watch([state, () => props.catalog, () => props.eventId, () => props.client], () 
   <section class="space-y-4" aria-labelledby="observations-title">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 id="observations-title" class="text-lg font-semibold">{{ eventsText('observations', locale) }}</h2>
-      <Button size="sm" variant="ghost" :is-loading="list.pending.value" @click="load()">
-        {{ eventsText('refresh', locale) }}
-      </Button>
+      <RefreshButton
+        variant="ghost"
+        :is-refreshing="list.pending.value"
+        :label="eventsText('refresh', locale)"
+        @click="load()"
+      />
     </div>
     <div class="flex flex-wrap gap-2" role="group" :aria-label="eventsText('state', locale)">
       <button

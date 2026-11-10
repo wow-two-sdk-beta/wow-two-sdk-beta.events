@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from '@wow-two-beta/fe/presentation/actions';
+import { Button, RefreshButton } from '@wow-two-beta/fe/presentation/actions';
 import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
 import { computed, onMounted, watch } from 'vue';
@@ -41,9 +41,12 @@ watch(
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 id="intake-title" class="text-lg font-semibold">{{ eventsText('intake', locale) }}</h2>
       <div class="flex gap-2">
-        <Button size="sm" variant="ghost" :is-loading="status.pending.value" @click="status.run()">
-          {{ eventsText('refresh', locale) }}
-        </Button>
+        <RefreshButton
+          variant="ghost"
+          :is-refreshing="status.pending.value"
+          :label="eventsText('refresh', locale)"
+          @click="status.run()"
+        />
         <Button size="sm" variant="outline" :is-loading="poll.pending.value" :is-disabled="!current" @click="pollNow">
           {{ eventsText('pollNow', locale) }}
         </Button>
