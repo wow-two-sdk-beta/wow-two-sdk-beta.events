@@ -1,7 +1,7 @@
 import { createAppRouter, lazyRoute, RouterHistoryMode, type RouteConfig } from '@wow-two-beta/fe/router';
 import { ConsolePaths } from '../../domain/console/ConsolePaths';
 
-/** Holds the console's route table: the review queue at the root, then observations, catalog events and intake. */
+/** Holds the console's route table: the review queue at the root, then observations, catalog events, intake and imports. */
 export const routes: RouteConfig = [
   {
     path: ConsolePaths.review,
@@ -26,6 +26,12 @@ export const routes: RouteConfig = [
     id: 'intake',
     handle: { title: 'Intake' },
     lazy: lazyRoute(() => import('../../presentation/intake/pages/IntakePage.vue')),
+  },
+  {
+    path: ConsolePaths.imports,
+    id: 'imports',
+    handle: { title: 'Imports' },
+    lazy: lazyRoute(() => import('../../presentation/imports/pages/ImportsPage.vue')),
   },
 ];
 

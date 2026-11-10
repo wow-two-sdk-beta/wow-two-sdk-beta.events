@@ -10,7 +10,7 @@ public sealed class EventsConsoleSettings
     public const string SectionName = "Events:Console";
 
     /// <summary>Holds the scopes the console asks for when <see cref="Scopes"/> is empty.</summary>
-    public static readonly IReadOnlyList<string> DefaultScopes = ["openid", "profile", "events.read", "events.review", "events.admin"];
+    public static readonly IReadOnlyList<string> DefaultScopes = ["openid", "profile", "events.read", "events.review", "events.track", "events.import", "events.admin"];
 
     /// <summary>Gets or sets the Identity instance's issuer URL, such as <c>https://id.example.com/</c>.</summary>
     public string? Authority { get; set; }

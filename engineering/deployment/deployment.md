@@ -51,6 +51,20 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   check matches, else 1. The last line repeats every status, for runners that keep only it:
   `intake-check-result ok=… source=… token=<ok|token-refused:<oauth error>|unreachable|timeout|not-configured> pull=…
   records=… event-records=… tenants=… foreign=…`. It prints no token, header, body, URL or host name.
+- Provisioning, as the deploy's operator for the owner organization, through Wheelhouse Run after `migrate` (no web
+  host, no token; idempotent; the last line carries the outcome):
+  - `dotnet Events.Api.dll catalog ensure <slug> --owner-org <org id> [--owner-issuer <issuer>] [--name <name>]
+    [--kinds a,b]` creates or updates a private catalog (`--owner-issuer` defaults to `Events:Auth:Issuers:0:Issuer`):
+    `catalog-ensure-result ok=… slug=… created=… changed=… revision=…`, or `ok=false reason=…` (another organization
+    owns the slug, usage, no issuer, no database).
+  - `dotnet Events.Api.dll workflow put --owner-org <org id> [--owner-issuer <issuer>] --default <key> --stages
+    key:class,…` writes the organization's workflow: `workflow-put-result ok=… stages=… changed=… revision=…`.
+  - Ocharo on dev: `catalog ensure ocharo-fashion --owner-org <Ocharo's org_id> --name "Ocharo fashion" --kinds
+    runway,trade-fair,market,exhibition,competition,festival,conference,other`, then `workflow put --owner-org <id>
+    --default candidate --stages candidate:open,shortlisted:open,applying:active,applied:active,confirmed:active,
+    attended:won,skipped:lost,rejected:lost`. Intake pulls nothing until the catalog exists.
+- Imports: a signed-in owner or admin uploads a `wow2.events-import.v1` bundle on the console's `/imports` page, dry
+  runs it, then imports; the console asks for `events.read events.review events.track events.import events.admin`.
 - Dev check: after a dev rollout, `verify` curls `$VERIFY_SERVICE_EVENTS/health` and `/api/system/status` with
   `Host: localhost`; `HostFilteringTests` replays the descriptor's requests.
 - After each main image publish, `conformance.yml` boots the released image on PostgreSQL, migrates it and checks its

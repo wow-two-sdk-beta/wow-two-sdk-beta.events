@@ -319,6 +319,39 @@ export const EventsMessages = {
   confirmArchive: entry('Confirm archive', 'Подтвердить архивирование', 'Arxivlashni tasdiqlash'),
   archivedDone: entry('Archived.', 'Отправлено в архив.', 'Arxivlandi.'),
   noEvents: entry('No events.', 'Мероприятий нет.', 'Tadbirlar yo‘q.'),
+
+  // Import
+  imports: entry('Import', 'Импорт', 'Import'),
+  importFile: entry('Import file (.json)', 'Файл импорта (.json)', 'Import fayli (.json)'),
+  importInvalidJson: entry(
+    'The file is not valid JSON.',
+    'Файл не является корректным JSON.',
+    'Fayl yaroqli JSON emas.',
+  ),
+  importWrongFormat: entry(
+    'The file is not a wow2.events-import.v1 bundle.',
+    'Файл не является пакетом wow2.events-import.v1.',
+    'Fayl wow2.events-import.v1 to‘plami emas.',
+  ),
+  importSource: entry('Source', 'Источник', 'Manba'),
+  importRows: entry('Rows', 'Строк', 'Qatorlar'),
+  dryRun: entry('Dry run', 'Пробный запуск', 'Sinov ishga tushirish'),
+  importRun: entry('Import', 'Импортировать', 'Import qilish'),
+  importConfirm: entry(
+    'Import {count} rows from {source} into {catalog}?',
+    'Импортировать строк: {count} из {source} в {catalog}?',
+    '{source} dan {catalog} ga {count} ta qatorni import qilasizmi?',
+  ),
+  importDryReport: entry('Dry run report', 'Отчёт пробного запуска', 'Sinov hisoboti'),
+  importDoneReport: entry('Import report', 'Отчёт импорта', 'Import hisoboti'),
+  importCreated: entry('Created', 'Создано', 'Yaratilgan'),
+  importUpdated: entry('Updated', 'Обновлено', 'Yangilangan'),
+  importUnchanged: entry('Unchanged', 'Без изменений', 'O‘zgarmagan'),
+  importFailed: entry('Failed', 'Ошибки', 'Xatolar'),
+  legacyId: entry('Legacy id', 'Старый id', 'Eski id'),
+  outcome: entry('Outcome', 'Результат', 'Natija'),
+  eventId: entry('Event id', 'Id мероприятия', 'Tadbir id'),
+  rowError: entry('Error', 'Ошибка', 'Xato'),
 } as const satisfies Record<string, Entry>;
 
 export type EventsMessageKey = keyof typeof EventsMessages;

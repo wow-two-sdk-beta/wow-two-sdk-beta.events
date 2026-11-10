@@ -81,7 +81,7 @@ const requiredNames = {
     'type EventsFailure',
     'type EventsLocale',
   ],
-  './admin': ['ReviewQueue', 'ObservationsList', 'ObservationEvidence', 'IntakeStatusPanel', 'CatalogEventsTable'],
+  './admin': ['ReviewQueue', 'ObservationsList', 'ObservationEvidence', 'IntakeStatusPanel', 'CatalogEventsTable', 'ImportPanel'],
 };
 
 try {

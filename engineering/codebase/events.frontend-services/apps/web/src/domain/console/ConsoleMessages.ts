@@ -10,6 +10,7 @@ export const ConsoleMessages = {
   observations: entry('Observations', 'Наблюдения', 'Kuzatuvlar'),
   events: entry('Events', 'Мероприятия', 'Tadbirlar'),
   intake: entry('Intake', 'Приём', 'Qabul'),
+  imports: entry('Imports', 'Импорт', 'Import'),
   catalog: entry('Catalog', 'Каталог', 'Katalog'),
   language: entry('Language', 'Язык', 'Til'),
   signIn: entry('Sign in', 'Войти', 'Kirish'),

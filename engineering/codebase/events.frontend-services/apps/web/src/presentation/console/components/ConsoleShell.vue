@@ -30,6 +30,7 @@ const links = computed(() =>
       ['observations', ConsolePaths.observations],
       ['events', ConsolePaths.events],
       ['intake', ConsolePaths.intake],
+      ['imports', ConsolePaths.imports],
     ] as const satisfies readonly (readonly [ConsoleMessageKey, string])[]
   ).map(([key, path]) => ({
     key,
