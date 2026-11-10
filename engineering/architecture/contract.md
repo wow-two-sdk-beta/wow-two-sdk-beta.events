@@ -10,7 +10,7 @@
 | Broker | Members | Who |
 |---|---|---|
 | `IEventCatalogsBroker` | `GetAsync(slug)`, `ListAsync()`, `PutAsync(slug, CatalogSpec)` | reads: owner org, or anyone for a public catalog; put: creates for the caller's org, or replaces a catalog it owns |
-| `ICatalogEventsBroker` | `ListAsync(catalog, EventQuery)`, `GetAsync`, `CreateAsync(EventSpec)`, `UpdateAsync`, `ArchiveAsync(expectedRevision)` | reads: published events for readers, every state for the owner; writes: owner org, a curator's entry publishes |
+| `ICatalogEventsBroker` | `ListAsync(catalog, EventQuery)`, `GetAsync`, `CreateAsync(EventSpec)`, `ProposeAsync(EventSpec)`, `UpdateAsync`, `ArchiveAsync(expectedRevision)` | reads: published events for readers, every state for the owner; writes: owner org; a curator's entry publishes, a member's proposal is a candidate |
 | `IEventReviewBroker` | `ListAsync(ReviewQuery)`, `AcceptAsync(id, ReviewDecision)`, `RejectAsync`, `MergeAsync(id, MergeDecision)`, `ApplyChangeAsync(observationId, ReviewDecision)`, `DismissChangeAsync`, `ListObservationsAsync(ObservationQuery)`, `GetObservationAsync` | owner org |
 | `IEventTrackingBroker` | `ListAsync(catalog, TrackingQuery)`, `GetAsync(catalog, eventId)`, `PutAsync(TrackingSpec)`, `DeleteAsync(expectedRevision)`, `GetHistoryAsync`, `GetSummaryAsync(today)` | the caller's active organization; its own tracking only |
 | `IEventWorkflowsBroker` | `GetAsync()`, `PutAsync(WorkflowSpec)` | the caller's active organization |
@@ -39,6 +39,7 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 | `GET api/events/v1/catalogs/{c}/events?from&to&kind&country&city&text&status&review&deadlineBefore&includeUndated&cursor&limit` | events `ListAsync` | `events.read` · `events:read` |
 | `GET …/catalogs/{c}/events/{id}` | events `GetAsync` | `events.read` · `events:read` |
 | `POST …/catalogs/{c}/events` (body `EventSpec`) | events `CreateAsync` → 201 | `events.review` · `events:review` |
+| `POST …/catalogs/{c}/candidates` (body `EventSpec`) | events `ProposeAsync` → 201, a candidate | `events.track` · `events:track` |
 | `PUT …/catalogs/{c}/events/{id}` (body `EventSpec`) | events `UpdateAsync` | `events.review` · `events:review` |
 | `DELETE …/catalogs/{c}/events/{id}?expectedRevision=` | events `ArchiveAsync` | `events.review` · `events:review` |
 | `GET …/catalogs/{c}/events.ics?<event filters>` | calendar `ExportAsync` → `text/calendar` file, no envelope | `events.read` · `events:read` |
@@ -115,6 +116,7 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
       },
       "sourceUrl": "https://…",
       "recordedAtUtc": "2026-09-01T10:00:00Z",
+      "legacy": { "…": "the producer's whole row, kept as evidence" },
       "tracking": {
         "stage": "shortlisted",
         "priority": "high",

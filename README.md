@@ -1,6 +1,6 @@
 # wow-two-sdk-beta.events
 
-Shared event catalog fed by SCFD and curated in review, with private tracking per organization — as a .NET package family, an npm package and a service image, under one contract.
+Internal event catalog fed by SCFD and curated in review, with private tracking per organization — as a .NET package family, an npm package and a service image, under one contract. Sourced records serve internal tracking only and are never republished.
 
 > **Pre-release.** Scaffolded 2026-11-10; nothing is published yet. Plan: `engineering/planning/version-track/v0.1/`.
 

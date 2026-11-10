@@ -11,6 +11,19 @@ delivery, evidence, Desk migration). What changed: SCFD delivers by pull, never 
 holds an Identity token, never an API key (#3); each observation keeps its evidence; Desk's `showcase_events` moves in
 through an import bundle with a stable id map; one domain repo ships every form (#2).
 
+## Internal use
+
+The developer, 2026-11-10 (events-integration #50): "I only ever use this sourcing for internal use, like to track
+events for ocharo and not post them anywhere else".
+
+- a catalog fed by SCFD stays private to its owner organization; Events refuses to make it `shared` or `public`, and
+  intake applies nothing into a catalog that is not private.
+- sourced facts and captures serve internal tracking and review; nothing sourced is republished.
+- sourced images and text stay review evidence, never content: intake leaves `images` empty, and only a curator adds
+  images to an event.
+- calendar export and agent reads stay inside the owner organization; anonymous or token feed links are not built.
+- `shared` and `public` visibility, and Form 3's shared catalog, apply only to catalogs with no sourced records.
+
 ## Problem
 
 - Products track dated happenings — fairs, fashion weeks, exhibitions, competitions — and the deadlines before them.
@@ -24,13 +37,13 @@ through an import bundle with a stable id map; one domain repo ships every form 
 |---|---|---|---|
 | 1 · library | `WoW2.Sdk.Beta.Be.Events.Module` | the `events` service | planned, P1 |
 | 2 · self-hosted service | `…Events.Client` + the `events` image | Ocharo Desk, through its backend | planned, P1 |
-| 3 · provided service | `…Events.Client` | a second product sharing a catalog | P2 |
+| 3 · provided service | `…Events.Client` | a second product sharing a catalog with no sourced records (#50) | P2 |
 
 ## Model
 
 | Concept | Is | Owned by |
 |---|---|---|
-| catalog | a curated namespace of events: slug, name, owner organization, visibility (`private` · `shared` · `public`), locales, kinds | its owner organization |
+| catalog | a curated namespace of events: slug, name, owner organization, visibility (`private` · `shared` · `public`; a catalog with sourced records stays `private`), locales, kinds | its owner organization |
 | event | a reviewed fact: something that happens at a time and place | the catalog |
 | observation | one record a source reported, with its evidence, waiting to become or change an event | the catalog |
 | workflow | the stages and custom fields one organization tracks events with | the organization |
@@ -57,7 +70,7 @@ through an import bundle with a stable id map; one domain repo ships every form 
 | `deadlines` | kind (`application` · `registration` · `early-bird` · `submission` · `payment` · `other`), `at` (When), label, url |
 | `offers` | kind (`ticket` · `exhibitor` · `sponsorship` · `submission` · `other`), name, price min/max/currency (null when unknown, never 0), free, terms, url |
 | `website`, `ticketUrl`, `onlineUrl` | http(s), ≤ 2,048 |
-| `images` | references: url, the source link and capture, attribution (#31: bytes stay where they are in P1) |
+| `images` | curated references: url, attribution (#31: no bytes copied in P1; sourced images stay evidence, #50) |
 | `sources` | every source identity that reported it: kind (`scfd` · `import` · `manual`), id, url, first and last seen |
 | `review` | `candidate` · `published` · `rejected` · `archived`; consumers see `published` |
 | `revision` | optimistic concurrency; `createdAt`, `updatedAt`, `publishedAt` |
@@ -81,7 +94,7 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - evidence per observation: SCFD instance, subscription, pipeline, `EventId`, `ItemId`, `PostId`, `Revision`, type,
   reason, observed time, each link's URL, source, capture and source fields, the mapping version when SCFD sends it,
   and the raw payload.
-- review never blocks intake; nothing publishes unreviewed.
+- review never blocks intake; nothing publishes unreviewed; a catalog that is not private takes nothing (#50).
 
 ## Review
 
@@ -91,6 +104,8 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - reviewers accept (publish, with edits), reject, merge a candidate into an existing event (sources and evidence move,
   the candidate archives), and apply or dismiss a pending change.
 - curators create and edit published events by hand; a curator's own entry is reviewed by definition.
+- members of the owner organization propose events (`POST …/catalogs/{c}/candidates`, `events.track`): a proposal is a
+  candidate and publishes only when a reviewer accepts it.
 - the review console is Events' own page set; reviewers sign in through the catalog owner's Identity (P1: Ocharo's)
   and need `events:review` in the owner organization.
 
@@ -111,12 +126,13 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - dates keep their precision: a month stays a month, `estimated` stays estimated; a row's `language` is kept, `und`
   when absent; titles are never assumed to be in one language.
 - the row's stage, priority, notes, participation and cost land in the importing organization's tracking; its source
-  URL and website in the event's sources.
+  URL and website in the event's sources; the producer's whole row (`legacy`) is kept as the row's evidence.
 
 ## Calendar
 
 - `GET …/catalogs/{c}/events.ics` exports published events for a filter, with stable UIDs and sequence numbers from
-  the revision; an exact deadline exports as its own all-day entry. Token feed links are P2.
+  the revision; an exact deadline exports as its own all-day entry. The export reads as a catalog read: inside the
+  owner organization (#50); token feed links are not built.
 
 ## Access
 
@@ -137,8 +153,9 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 
 - P1 (v0.1): the contract, module, client, service, review console, fe package, imports, ICS, the SCFD pull consumer,
   conformance and deploy; on dev a live Afisha record becomes a candidate and Desk's Events page reads through Events.
-- P2: deduplicated places, organizers and series, occurrences, cross-source match proposals, sharing, images in FSS,
-  reminders, webhooks, feed links, MCP tools, translations, sources API, push intake — `backlog.md`.
+- P2: deduplicated places, organizers and series, occurrences, cross-source match proposals, sharing of unsourced
+  catalogs, curated images in a Files instance, reminders, webhooks, MCP tools inside the owner organization,
+  translations, sources API, push intake — `backlog.md`.
 
 ## Sources
 

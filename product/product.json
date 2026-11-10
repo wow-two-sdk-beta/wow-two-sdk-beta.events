@@ -2,5 +2,5 @@
   "$schema": "../../../../conventions/design/identity/product.schema.json",
   "manifest": 1,
   "name": "Events",
-  "description": "Shared event catalog fed by SCFD and curated in review, with private tracking per organization"
+  "description": "Internal event catalog fed by SCFD and curated in review, with private tracking per organization"
 }
