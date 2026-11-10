@@ -77,6 +77,14 @@ public sealed class EventsIntakeSourceOptions
     /// names none: the operator's knowledge of the source, never a guess about one record.</summary>
     public string? DefaultCountry { get; set; }
 
+    /// <summary>Gets or sets the organization that must own the source's catalog, its id at its issuer: intake refuses a
+    /// catalog another organization owns, so a slug alone never routes sourced records (cross-lane review, 2026-11-10).
+    /// Without it the source pulls nothing.</summary>
+    public string? OwnerOrg { get; set; }
+
+    /// <summary>Gets or sets the owner organization's issuer; none checks the organization id alone.</summary>
+    public string? OwnerIssuer { get; set; }
+
     /// <summary>Gets whether the source reviews automatically.</summary>
     public bool ReviewsAutomatically => string.Equals(Review, AutoReview, StringComparison.OrdinalIgnoreCase);
 

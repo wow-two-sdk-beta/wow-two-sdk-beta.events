@@ -44,6 +44,10 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private static readonly string Recorded = EventsLabels.Of(ObservationState.Recorded);
     private static readonly string Ignored = EventsLabels.Of(ObservationState.Ignored);
     private static readonly string Accepted = EventsLabels.Of(ObservationState.Accepted);
+    private const string PurgeSql =
+        "UPDATE " + EventsModuleConstants.SchemaName + ".events_observations SET payload = NULL, proposed = NULL, " +
+        "links = COALESCE((SELECT jsonb_agg(link - 'sourceFields') FROM jsonb_array_elements(links) AS link), '[]'::jsonb) " +
+        "WHERE source_instance = {0} AND catalog_id = {1} AND post_id = {2}";
 
     /// <summary>Reconciles a source's automatically reviewed events with its latest deliveries (events-integration #53):
     /// every event of the source's posts no person has reviewed is mapped again from its latest payload, so a better
@@ -58,7 +62,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             return 0;
 
         var catalog = await db.Catalogs.AsNoTracking().FirstOrDefaultAsync(row => row.Slug == source.Catalog, cancellationToken);
-        if (catalog is null || catalog.Visibility != Private)
+        if (catalog is null || catalog.Visibility != Private || OwnerProblem(source, catalog) is not null)
             return 0;
 
         var instance = source.Instance;
@@ -121,6 +125,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         var catalog = await db.Catalogs.AsNoTracking().FirstOrDefaultAsync(row => row.Slug == source.Catalog, cancellationToken);
         if (catalog is null)
             return Result<IntakePageOutcome>.Fail(AppErrorFactory.NotFound($"The catalog '{source.Catalog}' of intake source '{source.Name}' was not found."));
+        if (OwnerProblem(source, catalog) is { } owner)
+            return Result<IntakePageOutcome>.Fail(AppErrorFactory.Forbidden(owner));
 
         var committed = await db.IntakeCursors.AsNoTracking().FirstOrDefaultAsync(row => row.SourceName == source.Name, cancellationToken);
         var cursor = committed is not null && committed.SubscriptionId == subscription ? committed.Cursor : null;
@@ -259,7 +265,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         observation.Proposed = EventsJson.Write(facts);
         var instance = page.Source.Instance;
-        var post = await db.SourcePosts.FirstOrDefaultAsync(row => row.SourceInstance == instance && row.PostId == postId, cancellationToken);
+        var post = await db.SourcePosts.FirstOrDefaultAsync(row => row.SourceInstance == instance && row.CatalogId == page.Catalog.Id && row.PostId == postId, cancellationToken);
         if (post is not null && revision <= post.LatestRevision)
         {
             observation.State = Superseded;
@@ -299,7 +305,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         var target = await db.Events.FirstOrDefaultAsync(row => row.Id == post.EventId, cancellationToken);
         observation.EventId = post.EventId;
-        if (target?.Review == Candidate)
+        var byPerson = target?.ReviewedBy?.StartsWith(ReviewStamp.PersonActor, StringComparison.Ordinal) == true;
+        if (target?.Review == Candidate && !byPerson)
         {
             // A newer revision of an unreviewed candidate updates it in place; under auto review it may now publish.
             await EventWrites.ApplyAsync(db, target, facts, isNew: false, cancellationToken);
@@ -323,11 +330,11 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             observation.ResolvedAt = page.Now;
             observation.ResolvedBySubject = verdict.Actor;
         }
-        else if (target?.Review == Published)
+        else if (target?.Review == Published || (target?.Review == Candidate && byPerson))
         {
             // A reviewed event never changes by itself: the newest revision waits as the one pending change of its post.
             await db.Observations
-                .Where(row => row.SourceInstance == instance && row.PostId == postId && row.State == Pending)
+                .Where(row => row.SourceInstance == instance && row.CatalogId == page.Catalog.Id && row.PostId == postId && row.State == Pending)
                 .ExecuteUpdateAsync(set => set.SetProperty(row => row.State, Superseded), cancellationToken);
             observation.State = Pending;
         }
@@ -345,18 +352,30 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         var instance = page.Source.Instance;
         observation.EventId = await db.SourcePosts.AsNoTracking()
-            .Where(row => row.SourceInstance == instance && row.PostId == postId)
+            .Where(row => row.SourceInstance == instance && row.CatalogId == page.Catalog.Id && row.PostId == postId)
             .Select(row => row.EventId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (observation.Type == "post.purged")
         {
-            // A purge is honoured: the post's delivered payloads go, the rows and every reviewed fact stay.
+            // A purge is honoured: the post's delivered content goes — payloads, proposed facts and each link's source
+            // fields — while the rows, their links' references and every reviewed fact stay (events-integration #15).
             observation.Payload = null;
-            await db.Observations
-                .Where(row => row.SourceInstance == instance && row.PostId == postId && row.Payload != null)
-                .ExecuteUpdateAsync(set => set.SetProperty(row => row.Payload, (string?)null), cancellationToken);
+            observation.Proposed = null;
+            await db.Database.ExecuteSqlRawAsync(PurgeSql, [instance, page.Catalog.Id, postId], cancellationToken);
         }
+    }
+
+    /// <summary>Says why the source may not deliver into the catalog: no owner pinned, or another owner; none when it may.</summary>
+    internal static string? OwnerProblem(EventsIntakeSourceOptions source, CatalogEntity catalog)
+    {
+        if (string.IsNullOrWhiteSpace(source.OwnerOrg))
+            return $"Intake source '{source.Name}' pins no owner organization (OwnerOrg); it pulls nothing.";
+        if (!string.Equals(catalog.OwnerOrganizationId, source.OwnerOrg.Trim(), StringComparison.Ordinal)
+            || (!string.IsNullOrWhiteSpace(source.OwnerIssuer)
+                && !string.Equals(catalog.OwnerIssuer.TrimEnd('/'), source.OwnerIssuer.Trim().TrimEnd('/'), StringComparison.Ordinal)))
+            return $"The catalog '{source.Catalog}' of intake source '{source.Name}' is owned by another organization; it pulls nothing.";
+        return null;
     }
 
     /// <summary>Reads a payload's facts as this source delivers them: the mapping, the source's default country, the

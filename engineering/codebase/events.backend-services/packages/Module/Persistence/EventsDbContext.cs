@@ -85,7 +85,7 @@ internal sealed class EventsDbContext(DbContextOptions<EventsDbContext> options)
 
         var post = modelBuilder.Entity<SourcePostEntity>();
         post.ToTable("events_source_posts");
-        post.HasKey(row => new { row.SourceInstance, row.PostId });
+        post.HasKey(row => new { row.SourceInstance, row.CatalogId, row.PostId });
         post.Property(row => row.SourceInstance).HasMaxLength(128);
         post.Property(row => row.SubscriptionId).HasMaxLength(64);
 

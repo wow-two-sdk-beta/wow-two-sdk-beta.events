@@ -39,12 +39,14 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   ring in `DataProtection:KeysPath` (`/var/lib/events/keys`, the `keys` volume) named `DataProtection:ApplicationName`;
   keep both as deployed, or every reviewer is signed out. A rollback names its set: `migrate rollback --set events …`.
 - Intake: `Events:Intake:Sources:N` (`Name`, `Catalog`, `BaseUrl`, `SubscriptionId`, `TokenEndpoint`, `ClientId`,
-  `ClientSecret`, `Scope`, `Resource`, `Review`, `Classifier`, `Filter`, `MinConfidence`, `DefaultCountry`, …); none polls nothing. `Review`
+  `ClientSecret`, `Scope`, `Resource`, `Review`, `Classifier`, `Filter`, `MinConfidence`, `DefaultCountry`, `OwnerOrg`, `OwnerIssuer`, …); none polls nothing. `Review`
   `auto` publishes what the classifier marks relevant (`classifier:{name}` as the reviewer, its verdict as the reason) and
   holds the rest as candidates; `manual` keeps every record for a person. A person's review takes the event off automatic
   changes, and `POST …/review/{id}/reopen` returns any published event to review. After each poll an `auto` source maps its
   unreviewed and classifier-reviewed events again from their latest payload, so a better mapping reaches stored events
-  once. The token request names exactly one `resource`, as
+  once. `OwnerOrg` (required) pins the organization that must own the source's catalog: a catalog anyone else owns, or a
+  source pinning none, pulls nothing. Intake status and `intake/poll` cover only sources whose catalogs the caller's
+  organization owns. The token request names exactly one `resource`, as
   Identity requires: `Resource`, else `BaseUrl` with its slash. The worker logs `Events intake: polling N source(s)` at
   start and one Information line per page polled (records stored, quarantined, more pages); a failed page logs a
   Warning naming its kind (`token-refused:<oauth error>`, `scfd-status-<code>`, `scfd-unreachable`, `timeout`). The image answers `dotnet Events.Api.dll intake check [--source <name>]

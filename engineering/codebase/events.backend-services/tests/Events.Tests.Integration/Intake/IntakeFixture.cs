@@ -50,6 +50,9 @@ public sealed class IntakeFixture : IAsyncLifetime
             PipelineId = Guid.NewGuid().ToString("D"),
             PageSize = 50,
             MaxPagesPerPoll = 5,
+            // The catalog's owner: the organization acting when the test created it.
+            OwnerOrg = Principal.OrganizationId,
+            OwnerIssuer = Principal.Issuer,
         };
         configure?.Invoke(source);
         lock (sources)

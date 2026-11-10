@@ -89,6 +89,10 @@ services:
         Events:Intake:Sources:0:Filter: { default: ocharo-fashion-v1 }
         # afisha.uz lists Uzbekistan's events and its records name no country: the operator's knowledge of the source.
         Events:Intake:Sources:0:DefaultCountry: { default: UZ }
+        # The organization that must own the catalog (its org_id at the issuer): intake refuses a catalog anyone else owns,
+        # so a slug alone never routes sourced records. Without it the source pulls nothing.
+        Events:Intake:Sources:0:OwnerOrg: { required: true }
+        Events:Intake:Sources:0:OwnerIssuer: { from: Events:Auth:Issuers:0:Issuer }
         Events:Intake:Sources:1:Name: { default: afisha-exhibitions }
         Events:Intake:Sources:1:Catalog: { default: ocharo-fashion }
         Events:Intake:Sources:1:Instance: { default: scfd }
@@ -104,6 +108,8 @@ services:
         Events:Intake:Sources:1:Classifier: { from: Events:Intake:Sources:0:Classifier }
         Events:Intake:Sources:1:Filter: { from: Events:Intake:Sources:0:Filter }
         Events:Intake:Sources:1:DefaultCountry: { from: Events:Intake:Sources:0:DefaultCountry }
+        Events:Intake:Sources:1:OwnerOrg: { from: Events:Intake:Sources:0:OwnerOrg }
+        Events:Intake:Sources:1:OwnerIssuer: { from: Events:Intake:Sources:0:OwnerIssuer }
     # The console's data-protection key ring (DataProtection:KeysPath).
     volumes:
       keys: /var/lib/events/keys

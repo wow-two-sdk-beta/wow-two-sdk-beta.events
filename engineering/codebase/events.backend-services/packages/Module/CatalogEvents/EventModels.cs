@@ -24,10 +24,12 @@ internal static class EventModels
             return [];
 
         var ids = rows.Select(row => row.Id).ToList();
+        var catalogIds = rows.Select(row => row.CatalogId).Distinct().ToList();
         var sources = (await db.Sources.AsNoTracking().Where(source => ids.Contains(source.EventId)).ToListAsync(cancellationToken))
             .ToLookup(source => source.EventId);
         var pending = await db.Observations.AsNoTracking()
-            .Where(observation => observation.EventId != null && ids.Contains(observation.EventId.Value) && observation.State == Pending)
+            .Where(observation => observation.EventId != null && ids.Contains(observation.EventId.Value) && observation.State == Pending
+                && catalogIds.Contains(observation.CatalogId))
             .GroupBy(observation => observation.EventId!.Value)
             .Select(group => new { EventId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(group => group.EventId, group => group.Count, cancellationToken);

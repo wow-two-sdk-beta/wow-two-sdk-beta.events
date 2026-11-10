@@ -1,7 +1,7 @@
 namespace WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
 
-/// <summary>Maps a row of <c>events_source_posts</c>: the newest revision applied per post of one SCFD instance,
-/// whichever subscription delivered it.</summary>
+/// <summary>Maps a row of <c>events_source_posts</c>: the newest revision applied per post of one SCFD instance in one
+/// catalog, whichever of that catalog's subscriptions delivered it.</summary>
 internal sealed class SourcePostEntity
 {
     public string SourceInstance { get; set; } = string.Empty;

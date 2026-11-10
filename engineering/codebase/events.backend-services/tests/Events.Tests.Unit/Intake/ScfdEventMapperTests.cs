@@ -25,7 +25,8 @@ public sealed class ScfdEventMapperTests
     }
 
     /// <summary>The live Afisha record on dev (2026-11-10), before and after SCFD turned its enums into strings (harvest
-    /// v0.1.12): a show at a youth palace in Tashkent, second precision with an offset, no organizer.</summary>
+    /// v0.1.12), in its real shape: SCFD's mentions name the venue and the address, the city lives only in schema.org's
+    /// addressLocality, and nothing names a country; second precision with an offset, no organizer.</summary>
     /// <param name="venueKind">The venue mention's kind: LocationKind's number, or its label.</param>
     /// <param name="addressKind">The address mention's kind.</param>
     [Theory]
@@ -33,24 +34,27 @@ public sealed class ScfdEventMapperTests
     [InlineData("\"venue\"", "\"address\"")]
     public void TryMap_ShouldReadTheLiveAfishaRecord_WithNumberOrStringEnums(string venueKind, string addressKind)
     {
-        var facts = Map($$$"""
+        var facts = Map($$$$"""
             {"schema":"wow2.event.v1","title":"Показ мод The Fashion Show Line 2026",
              "starts":{"value":"2026-11-21T17:00+05:00","precision":"second"},
-             "postedAt":{"value":"2026-10-14","precision":5},
+             "postedAt":{"value":"2026-10-14","precision":"day"},
              "organizer":null,
              "place":{"mentions":[
-               {"kind":{{{venueKind}}},"text":"Дворец творчества молодёжи"},
-               {"kind":{{{addressKind}}},"text":"Ташкент, ул. Мустакиллик, 2"},
-               {"kind":0,"text":"Ташкент"}],
+               {"kind":{{{{venueKind}}}},"text":"Дворец творчества молодёжи"},
+               {"kind":{{{{addressKind}}}},"text":"ул. Мустакиллик, 2"}],
                "geo":{"latitude":41.31,"longitude":69.28}},
              "offers":[{"min":100000,"currency":"UZS"}],
+             "schemaOrg":{"@type":"Event","location":{"@type":"Place","name":"Дворец творчества молодёжи",
+               "address":{"@type":"PostalAddress","addressLocality":"Ташкент","streetAddress":"ул. Мустакиллик, 2"}}},
              "mapping":{"schema":"wow2.event.v1","norm":"norm@1","rules":"rules@4","parser":"schema.org.event"}}
             """);
 
         facts.Starts.Should().Be(new EventWhen { Value = "2026-11-21T17:00", Precision = DatePrecision.Minute, Certainty = DateCertainty.Announced });
         facts.Organizer.Should().BeNull();
-        facts.Place!.Venue.Should().Be("Дворец творчества молодёжи");
-        facts.Place.City.Should().Be("Ташкент");
+        facts.Place.Should().BeEquivalentTo(new EventPlace
+        {
+            Venue = "Дворец творчества молодёжи", Address = "ул. Мустакиллик, 2", City = "Ташкент", Latitude = 41.31, Longitude = 69.28,
+        }, "the city comes from schema.org, and no country is invented: the source's DefaultCountry adds UZ later");
         facts.Images.Should().BeEmpty("sourced media stays evidence (events-integration #50)");
     }
 

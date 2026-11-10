@@ -320,8 +320,9 @@ public sealed class IntakeTests(IntakeFixture fixture) : IClassFixture<IntakeFix
     [Fact]
     public async Task PollAsync_ShouldPollEveryEnabledSource_AndReportTheQueue()
     {
-        var (_, enabled) = await SourceAsync();
-        var (_, disabled) = await SourceAsync(configure: options => options.Enabled = false);
+        var organization = Guid.NewGuid().ToString("N");
+        var (_, enabled) = await SourceAsync(organization: organization);
+        var (_, disabled) = await SourceAsync(configure: options => options.Enabled = false, organization: organization);
         fixture.Feed.Append(enabled, ScfdRecords.Post(Guid.NewGuid(), 1, "Polled"));
         fixture.Feed.Append(disabled, ScfdRecords.Post(Guid.NewGuid(), 1, "Not polled"));
 
@@ -338,9 +339,9 @@ public sealed class IntakeTests(IntakeFixture fixture) : IClassFixture<IntakeFix
     }
 
     private async Task<(string Slug, EventsIntakeSourceOptions Source)> SourceAsync(
-        CatalogVisibility visibility = CatalogVisibility.Private, Action<EventsIntakeSourceOptions>? configure = null)
+        CatalogVisibility visibility = CatalogVisibility.Private, Action<EventsIntakeSourceOptions>? configure = null, string? organization = null)
     {
-        fixture.Principal.ActAsMember(Guid.NewGuid().ToString("N"));
+        fixture.Principal.ActAsMember(organization ?? Guid.NewGuid().ToString("N"));
         var slug = $"intake-{Guid.NewGuid():N}";
         await TestCatalogs.CreateAsync(fixture.Services, slug, visibility, "runway");
         return (slug, fixture.AddSource(slug, configure));

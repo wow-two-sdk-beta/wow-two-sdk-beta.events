@@ -54,7 +54,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
                 .Select(row => new
                 {
                     Row = row,
-                    Oldest = db.Observations.Where(observation => observation.EventId == row.Id && observation.State == Pending)
+                    Oldest = db.Observations.Where(observation => observation.EventId == row.Id && observation.CatalogId == found.Id && observation.State == Pending)
                         .Min(observation => (long?)observation.Seq),
                 })
                 .Where(item => item.Oldest != null)
@@ -69,7 +69,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
         var models = await EventModels.LoadAsync(db, found.Slug, rows, cancellationToken);
         var ids = rows.Select(row => row.Id).ToList();
         var evidence = (await db.Observations.AsNoTracking()
-                .Where(observation => observation.EventId != null && ids.Contains(observation.EventId.Value)
+                .Where(observation => observation.EventId != null && ids.Contains(observation.EventId.Value) && observation.CatalogId == found.Id
                     && (observation.State == Pending || observation.State == Applied))
                 .OrderBy(observation => observation.Seq)
                 .ToListAsync(cancellationToken))
@@ -79,7 +79,7 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
         {
             Event = model,
             Observations = evidence[model.Id]
-                .Where(observation => observation.State == (rows[index].Review == Candidate ? Applied : Pending))
+                .Where(observation => observation.State == Pending || (rows[index].Review == Candidate && observation.State == Applied))
                 .Select(observation => ObservationModels.ToModel(observation, found.Slug))
                 .ToList(),
         }).ToList();
