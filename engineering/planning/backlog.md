@@ -42,6 +42,38 @@ The events lane's verdict and phase for each contract it owns (events-integratio
 | Review console | built | [product](../../product/product.md#review) |
 | Developer kits | built | [contract](../architecture/contract.md) |
 
+## Specced next
+
+ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-integration/tasks/tasks.md`; each row's spec is its id in the named file there. Delete a row when it ships, with any older row it covers.
+
+| Item | Type | Notes |
+|---|---|---|
+| E00 Find why no SCFD event reached Ocharo dev after 11-13 | fix | spec in `tasks-events-path.md` |
+| E01 Pull all five default Ocharo SCFD subscriptions into Events | fix | spec in `tasks-events-path.md` |
+| E04 Hold events whose SCFD post stopped matching | fix | spec in `tasks-events-path.md` |
+| E33 Show sourced city names in the app's script | fix | spec in `tasks-events-path.md` |
+| E12 Give sourced events a kind from their subscription | feature | spec in `tasks-events-path.md` |
+| E06 Stop taking aggregator pages as the event website | fix | spec in `tasks-events-path.md` |
+| E08 Map SCFD deadlines and time zones into event facts | feature | spec in `tasks-events-path.md` |
+| E11 Keep foreign cities out of the default country | fix | spec in `tasks-events-path.md` |
+| E15 Expose source name, state and posted time on events | feature | spec in `tasks-events-path.md` |
+| E26 Ship a conformance-tested in-memory Events fake | engineering | spec in `tasks-events-path.md` |
+| E28 Replay SCFD's new golden pages in Events | engineering | spec in `tasks-events-path.md` |
+| E20 Discover intake subscriptions instead of per-index settings | feature | spec in `tasks-events-path.md` |
+| E21 Add country lists and untracked counts to tracking reads | feature | spec in `tasks-events-path.md` |
+| E23 Let catalog members read intake freshness | feature | spec in `tasks-events-path.md` |
+| E17 Attach cross-source duplicates to one event on intake | feature | spec in `tasks-events-path.md` |
+| E18 Move tracking to the survivor when SCFD merges posts | fix | spec in `tasks-events-path.md` |
+| O14 WoW2 Events prod target `events-prod` | engineering | spec in `tasks-platform.md` |
+| V01 Review console on AppFrame and the SDK session | engineering | spec in `tasks-platform.md` |
+| V02 Places and organizers as deduplicated entities | feature | spec in `tasks-platform.md` |
+| V03 Cross-source match proposals | feature | spec in `tasks-platform.md` |
+| V04 Custom field schemas per workflow | feature | spec in `tasks-platform.md` |
+| V05 Webhooks for published, changed, cancelled and deadline events | feature | spec in `tasks-platform.md` |
+| V06 Calendar export with VTIMEZONE blocks | fix | spec in `tasks-platform.md` |
+| A07 Events takes SCFD's AI classification | engineering | spec in `tasks-platform.md` · owner: ev-ai lane |
+| E32 Decide a per-source policy for event thumbnails | product | spec in `tasks-events-path.md` |
+
 ## Intake
 
 | Item | Type | Notes |
