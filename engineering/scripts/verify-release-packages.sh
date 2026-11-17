@@ -45,8 +45,10 @@ for project in "${projects[@]}"; do
   sdk=$(grep -oE 'dependency id="WoW2\.Sdk\.Beta\.Be(\.Abstractions|\.Testing[A-Za-z.]*)?" version="[^"]+"' <<< "$nuspec" || true)
   [ -n "$sdk" ] || fail "$id: no be sdk dependency"
   if grep -v "version=\"$core\"" <<< "$sdk" | grep -q .; then fail "$id: be sdk floor is not the pin $core"; fi
-  family=$(grep -oE 'dependency id="WoW2\.Sdk\.Beta\.Be\.[A-Za-z]+\.[A-Za-z.]+" version="[^"]+"' <<< "$nuspec" \
-    | grep -v 'WoW2\.Sdk\.Beta\.Be\.Testing' || true)
+  # This repo's own family only (WoW2.Sdk.Beta.Be.Events.*); another domain's contract, such as Identity's, keeps its
+  # own version.
+  prefix=${id%.*}
+  family=$(grep -oE "dependency id=\"${prefix//./\\.}\\.[A-Za-z.]+\" version=\"[^\"]+\"" <<< "$nuspec" || true)
   if [ -n "$family" ] && grep -v "version=\"$version\"" <<< "$family" | grep -q .; then
     fail "$id: a family dependency is not at $version"
   fi
