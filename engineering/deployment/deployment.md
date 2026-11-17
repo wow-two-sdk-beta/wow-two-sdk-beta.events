@@ -60,7 +60,9 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   recorded on the source's cursor row and logged (4107). Under `auto` review a post's lifecycle follows SCFD's records:
   a listing gone before its event, or a post SCFD merged into another, sends an event no person decided and no
   organization tracks back to review, held by `source:{instance}` with the reason; it returns to its classifier when
-  the listing is live again or the post is unmerged. Nothing is merged or moved, so SCFD's unmerge undoes it whole;
+  the listing is live again or the post is unmerged. A post SCFD reports unmatched (`post.unmatched`: it no longer passes
+  the subscription's filter) is held the same way, whatever its dates, until a revision passes the filter again; a
+  tracked event stays published. Nothing is merged or moved, so SCFD's unmerge undoes it whole;
   `post.unmerged` applies each post's restored content as a revision. The token request names exactly one `resource`, as
   Identity requires: `Resource`, else `BaseUrl` with its slash. The worker logs `Events intake: polling N source(s)` at
   start, one Information line per page polled (records stored, quarantined, more pages) and, for an `auto` source,

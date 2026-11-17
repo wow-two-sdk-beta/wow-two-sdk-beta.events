@@ -91,6 +91,11 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   quarantined and never blocks the page.
 - lifecycle records (`link.state`, `post.merged`, `post.unmerged`, `post.purged`, `post.relisted`) change evidence,
   never a reviewed fact: a missing source page does not cancel an event; run and health records feed the status.
+- `post.unmatched` (SCFD sends it once when a post it delivered no longer passes the subscription's filter) sends an
+  event no person decided and no organization tracks back to review, held by `source:{instance}`, so an off-topic event
+  leaves the published feed; its content never applies, and only a revision that passes the filter again
+  (`post.new`, `post.changed`, `post.extracted`) returns it to its classifier, never a relist or an unmerge. A tracked
+  event stays published.
 - evidence per observation: SCFD instance, subscription, pipeline, `EventId`, `ItemId`, `PostId`, `Revision`, type,
   reason, observed time, each link's URL, source, capture and source fields, the mapping version when SCFD sends it,
   and the raw payload.

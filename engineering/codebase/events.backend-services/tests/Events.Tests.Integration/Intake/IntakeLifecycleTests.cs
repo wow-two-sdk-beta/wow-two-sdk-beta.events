@@ -111,6 +111,85 @@ public sealed class IntakeLifecycleTests(IntakeFixture fixture) : IClassFixture<
         after.Single(item => item.Id == duplicate.Id).ReviewedBy.Should().StartWith(IntakeVerdict.ClassifierActor);
     }
 
+    /// <summary>SCFD sends <c>post.unmatched</c> once when a delivered post stops passing the subscription's filter
+    /// (harvest E03): the off-topic event leaves the published feed, held by the source, and no listing gone or back
+    /// releases it; only a revision that passes the filter again does.</summary>
+    [Fact]
+    public async Task Intake_ShouldHoldAnUntrackedEvent_WhenItsPostStopsMatching_AndKeepItHeldThroughItsListingsLifecycle()
+    {
+        var (slug, source) = await SourceAsync();
+        var post = Guid.NewGuid();
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Fashion week"));
+        await fixture.PollAsync(source);
+        var published = (await EventsAsync(slug, new EventQuery())).Single();
+
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 2, "Concert", type: IntakeProcessor.UnmatchedType));
+        await fixture.PollAsync(source);
+
+        (await EventsAsync(slug, new EventQuery())).Should().BeEmpty("an unmatched post takes its event off the published feed");
+        var held = (await EventsAsync(slug, new EventQuery { Review = EventReviewState.Candidate })).Single();
+        held.Id.Should().Be(published.Id);
+        held.Facts.Title.Values.Single().Should().Be("Fashion week", "the off-topic revision's content never applies");
+        held.ReviewedBy.Should().Be($"{IntakeProcessor.SourceActor}{source.Instance}");
+        held.ReviewReason.Should().Be(IntakeProcessor.UnmatchedReason);
+
+        fixture.Feed.Append(source,
+            ScfdRecords.Post(post, 2, "Concert", type: "link.state", edit: data => data["state"] = "gone"),
+            ScfdRecords.Post(post, 2, "Concert", type: "link.state", edit: data => data["state"] = "live"));
+        await fixture.PollAsync(source);
+
+        (await EventsAsync(slug, new EventQuery())).Should().BeEmpty("lifecycle records still arrive for an unmatched post and release nothing");
+        (await EventsAsync(slug, new EventQuery { Review = EventReviewState.Candidate })).Single().ReviewReason.Should().Be(IntakeProcessor.UnmatchedReason);
+    }
+
+    [Fact]
+    public async Task Intake_ShouldKeepATrackedEventPublished_WhenItsPostStopsMatching()
+    {
+        var (slug, source) = await SourceAsync();
+        var post = Guid.NewGuid();
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Tracked fashion week"));
+        await fixture.PollAsync(source);
+        var published = (await EventsAsync(slug, new EventQuery())).Single();
+        await TrackAsync(published.Id);
+
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 2, "Concert", type: IntakeProcessor.UnmatchedType));
+        await fixture.PollAsync(source);
+
+        var kept = (await EventsAsync(slug, new EventQuery())).Should().ContainSingle("an organization tracks it").Subject;
+        kept.Id.Should().Be(published.Id);
+        kept.ReviewedBy.Should().StartWith(IntakeVerdict.ClassifierActor);
+        kept.Facts.Title.Values.Single().Should().Be("Tracked fashion week");
+    }
+
+    [Fact]
+    public async Task Intake_ShouldReleaseAnUnmatchedHold_WhenARevisionMatchesAgain_AndHoldItAsGone_WhenItsListingIsGone()
+    {
+        var (slug, source) = await SourceAsync();
+        var (post, gone) = (Guid.NewGuid(), Guid.NewGuid());
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Runway show"), ScfdRecords.Post(gone, 1, "Gone show"));
+        await fixture.PollAsync(source);
+        var published = await EventsAsync(slug, new EventQuery());
+
+        fixture.Feed.Append(source,
+            ScfdRecords.Post(post, 2, "Concert", type: IntakeProcessor.UnmatchedType),
+            ScfdRecords.Post(gone, 2, "Concert", type: IntakeProcessor.UnmatchedType));
+        await fixture.PollAsync(source);
+        (await EventsAsync(slug, new EventQuery())).Should().BeEmpty();
+
+        fixture.Feed.Append(source,
+            ScfdRecords.Post(post, 3, "Runway show, new date", type: "post.changed"),
+            ScfdRecords.Post(gone, 3, "Gone show, matching", type: "post.changed", edit: data => data["state"] = "gone"));
+        await fixture.PollAsync(source);
+
+        var back = (await EventsAsync(slug, new EventQuery())).Should().ContainSingle().Subject;
+        back.Id.Should().Be(published.Single(item => item.Facts.Title.Values.Single() == "Runway show").Id);
+        back.Facts.Title.Values.Single().Should().Be("Runway show, new date", "the matching revision applies");
+        back.ReviewedBy.Should().StartWith(IntakeVerdict.ClassifierActor, "the classifier reviews it again");
+        var stillHeld = (await EventsAsync(slug, new EventQuery { Review = EventReviewState.Candidate })).Single();
+        stillHeld.Facts.Title.Values.Single().Should().Be("Gone show, matching");
+        stillHeld.ReviewReason.Should().Be(IntakeProcessor.GoneReason, "it matches again, but its listing is gone before the event");
+    }
+
     private static void Past(Dictionary<string, object?> data) => data["starts"] = new { value = "2026-10-01", precision = "day" };
 
     private async Task<(string Slug, EventsIntakeSourceOptions Source)> SourceAsync()

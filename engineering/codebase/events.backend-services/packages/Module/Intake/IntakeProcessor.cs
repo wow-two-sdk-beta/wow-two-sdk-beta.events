@@ -35,6 +35,14 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
     // post.unmerged carries each split post's restored content at a new revision (SCFD's golden lifecycle page).
     private static readonly HashSet<string> PostTypes = new(StringComparer.Ordinal) { "post.new", "post.changed", "post.extracted", "post.relisted", "post.unmerged" };
+
+    // The revisions SCFD sends only when they pass the subscription's filter: one of them ends an unmatched hold. Relists
+    // and unmerges are lifecycle records SCFD sends whatever the filter says, so they never do (harvest E03).
+    private static readonly HashSet<string> MatchingTypes = new(StringComparer.Ordinal) { "post.new", "post.changed", "post.extracted" };
+
+    /// <summary>Holds the type of the record SCFD sends once when a post it delivered no longer passes the subscription's
+    /// filter or section (harvest E03).</summary>
+    internal const string UnmatchedType = "post.unmatched";
     private static readonly string Scfd = EventsLabels.Of(EventSourceKind.Scfd);
     private static readonly string Private = EventsLabels.Of(CatalogVisibility.Private);
     private static readonly string Candidate = EventsLabels.Of(EventReviewState.Candidate);
@@ -48,7 +56,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private static readonly string Accepted = EventsLabels.Of(ObservationState.Accepted);
     private static readonly string Archived = EventsLabels.Of(EventReviewState.Archived);
 
-    /// <summary>Holds the actor prefix of a decision the source's own lifecycle made: a listing gone, a post merged.</summary>
+    /// <summary>Holds the actor prefix of a decision the source's own lifecycle made: a listing gone, a post merged or
+    /// no longer matching.</summary>
     internal const string SourceActor = "source:";
 
     /// <summary>Holds the reason an event waits for a person after its source listing went away before the event.</summary>
@@ -56,6 +65,9 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
     /// <summary>Holds the reason an event waits for a person after SCFD merged its post into another: a duplicate.</summary>
     internal const string MergedReason = "SCFD merged its post into another: a duplicate of that post's event";
+
+    /// <summary>Holds the reason an event waits for a person after its post stopped passing the subscription's filter.</summary>
+    internal const string UnmatchedReason = "the source post no longer matches the subscription's filter (SCFD)";
     private const string PurgeSql =
         "UPDATE " + EventsModuleConstants.SchemaName + ".events_observations SET payload = NULL, proposed = NULL, " +
         "links = COALESCE((SELECT jsonb_agg(link - 'sourceFields') FROM jsonb_array_elements(links) AS link), '[]'::jsonb) " +
@@ -413,14 +425,20 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     }
 
     /// <summary>Follows the post's lifecycle as SCFD reports it on any record that renders the post (the services sweep):
-    /// a listing gone or back, and a post merged into another or split from it again.</summary>
+    /// a listing gone or back, a post merged into another or split from it again, and a post that stopped passing the
+    /// subscription's filter or passes it again.</summary>
     /// <remarks>
     ///   - under automatic review only: a manual source's candidates already wait for a person
     ///   - gone, or merged into another post (<c>mergedInto</c>): an event no person decided, that no organization tracks
     ///     and (for a gone listing) whose dates have not passed, goes back to review, held by <c>source:{instance}</c>
     ///     with the reason; a listing gone after its event is how sources end, and changes nothing
-    ///   - live again, or no longer merged: an event the source held for that reason returns to its classifier, which
-    ///     the backlog pass runs after the poll; nothing is merged or moved, so SCFD's unmerge undoes it whole
+    ///   - unmatched (<c>post.unmatched</c>, E04): an event no person decided and no organization tracks goes back to
+    ///     review held by the source, whatever its dates, so an off-topic event leaves the published feed; it replaces a
+    ///     gone or merged hold, because only a revision that passes the filter again (<c>post.new</c>, <c>post.changed</c>,
+    ///     <c>post.extracted</c>) ends it, never a relist or an unmerge; a tracked event stays published
+    ///   - live again, no longer merged, or matching again: an event the source held for that reason returns to its
+    ///     classifier, which the backlog pass runs after the poll; nothing is merged or moved, so SCFD's unmerge undoes
+    ///     it whole, and a post matching again while its listing is gone stays held as gone
     ///   - a person's decision always stands; a stale record (an older revision than stored) changes nothing
     /// </remarks>
     private async Task ApplyLifecycleAsync(IntakePageState page, ObservationEntity observation, JsonElement? data, CancellationToken cancellationToken)
@@ -428,9 +446,11 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         if (!page.Source.ReviewsAutomatically || observation.State == Quarantined || observation.PostId is not { } postId)
             return;
 
+        var unmatched = observation.Type == UnmatchedType;
+        var matching = MatchingTypes.Contains(observation.Type) && observation.State == Applied;
         var state = ScfdEventMapper.PostState(data);
         var survivor = ScfdEventMapper.MergedInto(data);
-        if (state is null && survivor is null)
+        if (state is null && survivor is null && !unmatched && !matching)
             return;
 
         var instance = page.Source.Instance;
@@ -444,28 +464,61 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         observation.EventId ??= eventId;
         var actor = SourceActor + instance;
-        var merged = survivor is { } into && into != postId;
         var heldBySource = item.ReviewedBy == actor;
+        if (unmatched)
+        {
+            if (heldBySource
+                    ? item.ReviewReason == UnmatchedReason
+                    : !Automatic(item) || await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken))
+                return;
+
+            Hold(item, actor, UnmatchedReason, page.Now);
+            return;
+        }
+
+        // Only a revision that passes the filter again ends an unmatched hold; the post's state then applies as to any event.
+        if (heldBySource && item.ReviewReason == UnmatchedReason)
+        {
+            if (!matching)
+                return;
+
+            Release(item, page.Now);
+            heldBySource = false;
+        }
+
+        var merged = survivor is { } into && into != postId;
         if (merged || state == "gone")
         {
             if (heldBySource || !Automatic(item) || (!merged && Ended(item)) || await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken))
                 return;
 
-            item.Review = Candidate;
-            item.ReviewedBy = actor;
-            item.ReviewReason = merged ? MergedReason : GoneReason;
-            item.ReviewedAt = page.Now;
-            item.Revision++;
-            item.UpdatedAt = page.Now;
+            Hold(item, actor, merged ? MergedReason : GoneReason, page.Now);
         }
         else if (heldBySource && (item.ReviewReason == MergedReason || (item.ReviewReason == GoneReason && state == "live")))
         {
-            item.ReviewedBy = null;
-            item.ReviewReason = null;
-            item.ReviewedAt = null;
-            item.Revision++;
-            item.UpdatedAt = page.Now;
+            Release(item, page.Now);
         }
+    }
+
+    /// <summary>Sends an event back to review, held by its source with the reason.</summary>
+    private static void Hold(CatalogEventEntity item, string actor, string reason, DateTimeOffset now)
+    {
+        item.Review = Candidate;
+        item.ReviewedBy = actor;
+        item.ReviewReason = reason;
+        item.ReviewedAt = now;
+        item.Revision++;
+        item.UpdatedAt = now;
+    }
+
+    /// <summary>Returns an event its source held to its classifier, which the backlog pass runs after the poll.</summary>
+    private static void Release(CatalogEventEntity item, DateTimeOffset now)
+    {
+        item.ReviewedBy = null;
+        item.ReviewReason = null;
+        item.ReviewedAt = null;
+        item.Revision++;
+        item.UpdatedAt = now;
     }
 
     /// <summary>Tells whether no person decided the event: unreviewed, or reviewed by a classifier.</summary>
