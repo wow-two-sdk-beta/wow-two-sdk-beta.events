@@ -87,10 +87,36 @@ export {
   type EventImportTracking,
 } from './ImportModels';
 export type { IntakeSourceStatusModel, IntakeStatusModel } from './IntakeModels';
+export {
+  DigestChannelConstants,
+  DigestDayValues,
+  DigestLanguageValues,
+  DigestRecipientStatusValues,
+  DigestRunStatusValues,
+  DigestRunTriggerValues,
+  type DigestDay,
+  type DigestItemModel,
+  type DigestLanguage,
+  type DigestModel,
+  type DigestPreviewModel,
+  type DigestRecipient,
+  type DigestRecipientStatus,
+  type DigestRunModel,
+  type DigestRunPage,
+  type DigestRunQuery,
+  type DigestRunRecipientModel,
+  type DigestRunStatus,
+  type DigestRunTrigger,
+  type DigestSchedule,
+  type DigestSelection,
+  type DigestSpec,
+  type DigestTextModel,
+} from './DigestModels';
 export { EventsConstants, EventsPermissionConstants, EventsScopeConstants } from './EventsConstants';
 export {
   EventsRouteConstants,
   EventsRoutes,
+  digestRunQueryParams,
   eventQueryParams,
   eventsQueryString,
   observationQueryParams,

@@ -2,12 +2,19 @@ import { createApiClient, type ApiDecoder, type ApiFailure } from '@wow-two-beta
 import { ResultExtensions, type Result } from '@wow-two-beta/fe/foundation/results';
 import {
   EventsRoutes,
+  digestRunQueryParams,
   eventQueryParams,
   observationQueryParams,
   reviewQueryParams,
   trackingQueryParams,
   type CatalogModel,
   type CatalogSpec,
+  type DigestModel,
+  type DigestPreviewModel,
+  type DigestRunModel,
+  type DigestRunPage,
+  type DigestRunQuery,
+  type DigestSpec,
   type EventImportBundle,
   type EventImportReport,
   type EventModel,
@@ -123,6 +130,23 @@ export interface EventsClient {
 
   getIntakeStatus(signal?: AbortSignal): EventsResult<IntakeStatusModel>;
   pollIntake(signal?: AbortSignal): EventsResult<IntakeStatusModel>;
+
+  /** Lists the caller's organization's digests of a catalog (`events:admin`). */
+  listDigests(catalog: string, signal?: AbortSignal): EventsResult<readonly DigestModel[]>;
+  getDigest(catalog: string, id: string, signal?: AbortSignal): EventsResult<DigestModel>;
+  createDigest(catalog: string, spec: DigestSpec, signal?: AbortSignal): EventsResult<DigestModel>;
+  updateDigest(catalog: string, id: string, spec: DigestSpec, signal?: AbortSignal): EventsResult<DigestModel>;
+  deleteDigest(catalog: string, id: string, expectedRevision: number, signal?: AbortSignal): EventsResult<DigestModel>;
+  /** Renders a digest now without sending: the texts a send now at this instant sends. */
+  previewDigest(catalog: string, id: string, signal?: AbortSignal): EventsResult<DigestPreviewModel>;
+  /** Runs a digest now, outside its schedule, and sends it to every recipient. */
+  sendDigest(catalog: string, id: string, signal?: AbortSignal): EventsResult<DigestRunModel>;
+  listDigestRuns(
+    catalog: string,
+    id: string,
+    query?: DigestRunQuery,
+    signal?: AbortSignal,
+  ): EventsResult<DigestRunPage>;
 }
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -246,5 +270,19 @@ export function createEventsClient(options: EventsClientOptions = {}): EventsCli
 
     getIntakeStatus: (signal) => get(EventsRoutes.intake(), EventsDecoders.intake, signal),
     pollIntake: (signal) => post(EventsRoutes.intakePoll(), EventsDecoders.intake, undefined, signal),
+
+    listDigests: (catalog, signal) => get(EventsRoutes.digests(catalog), EventsDecoders.digests, signal),
+    getDigest: (catalog, id, signal) => get(EventsRoutes.digest(catalog, id), EventsDecoders.digest, signal),
+    createDigest: (catalog, spec, signal) => post(EventsRoutes.digests(catalog), EventsDecoders.digest, spec, signal),
+    updateDigest: (catalog, id, spec, signal) =>
+      put(EventsRoutes.digest(catalog, id), EventsDecoders.digest, spec, signal),
+    deleteDigest: (catalog, id, expectedRevision, signal) =>
+      remove(EventsRoutes.digest(catalog, id), EventsDecoders.digest, revision(expectedRevision), signal),
+    previewDigest: (catalog, id, signal) =>
+      post(EventsRoutes.digestPreview(catalog, id), EventsDecoders.digestPreview, undefined, signal),
+    sendDigest: (catalog, id, signal) =>
+      post(EventsRoutes.digestSend(catalog, id), EventsDecoders.digestRun, undefined, signal),
+    listDigestRuns: (catalog, id, query, signal) =>
+      get(EventsRoutes.digestRuns(catalog, id), EventsDecoders.digestRunPage, signal, digestRunQueryParams(query)),
   };
 }

@@ -46,6 +46,23 @@ const candidate = {
   updatedAtUtc: '2026-11-01T00:00:00Z',
 };
 
+const digest = {
+  id: 'd1',
+  catalog: 'ocharo',
+  name: 'Ocharo weekly',
+  enabled: true,
+  channel: 'telegram',
+  schedule: { days: ['monday'], times: ['09:00'], timeZone: 'Asia/Tashkent' },
+  selection: { newSinceLastRun: true, startingWithinDays: 30, deadlineWithinDays: 14 },
+  recipients: [{ subject: '0193f3a4-0000-7000-8000-00000000000a' }],
+  language: 'uz-Latn',
+  itemCap: 20,
+  nextRunAtUtc: '2026-11-23T04:00:00Z',
+  revision: 1,
+  createdAtUtc: '2026-11-17T08:00:00Z',
+  updatedAtUtc: '2026-11-17T08:00:00Z',
+};
+
 type Answer = (url: URL, request: Request) => Response | undefined;
 
 /** Answers the console's same-origin calls: status, the BFF session, the catalogs, then each screen's route. */
@@ -77,6 +94,12 @@ function serve(session: unknown, ...answers: Answer[]) {
         return Response.json({ data: { items: [candidate], nextCursor: null } });
       case '/api/events/v1/intake':
         return Response.json({ data: { sources: [], candidates: 3, pendingChanges: 1 } });
+      case '/api/events/v1/catalogs/ocharo/digests':
+        return Response.json({ data: [digest] });
+      case '/api/events/v1/catalogs/ocharo/digests/d1':
+        return Response.json({ data: digest });
+      case '/api/events/v1/catalogs/ocharo/digests/d1/runs':
+        return Response.json({ data: { items: [], nextCursor: null } });
       default:
         return Response.json({ title: 'Not found' }, { status: 404 });
     }
@@ -179,5 +202,15 @@ describe('console routes', () => {
       'Tashkent Fashion Week',
     );
     expect((await renderAt('/intake')).get('[data-test="intake-candidates"]').text()).toBe('3');
+  });
+
+  it('renders the chosen catalog’s digests with the next run in Tashkent time', async () => {
+    serve(signedIn);
+    const wrapper = await renderAt('/digests?catalog=ocharo');
+    await flushPromises();
+
+    expect(wrapper.get('[data-test="digest-item"]').text()).toContain('Ocharo weekly');
+    expect(wrapper.get('[data-test="digest-next-run"]').text()).toContain('09:00 (Asia/Tashkent)');
+    expect(wrapper.find('select[name="channel"]').exists()).toBe(true);
   });
 });

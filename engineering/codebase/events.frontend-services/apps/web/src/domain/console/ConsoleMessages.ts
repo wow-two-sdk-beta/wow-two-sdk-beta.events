@@ -11,6 +11,7 @@ export const ConsoleMessages = {
   events: entry('Events', 'Мероприятия', 'Tadbirlar'),
   intake: entry('Intake', 'Приём', 'Qabul'),
   imports: entry('Imports', 'Импорт', 'Import'),
+  digests: entry('Digests', 'Рассылки', 'Dayjestlar'),
   catalog: entry('Catalog', 'Каталог', 'Katalog'),
   language: entry('Language', 'Язык', 'Til'),
   signIn: entry('Sign in', 'Войти', 'Kirish'),

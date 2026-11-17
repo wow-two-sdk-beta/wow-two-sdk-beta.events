@@ -2,6 +2,10 @@ import { ApiFailureFactory, type ApiDecoder } from '@wow-two-beta/fe/foundation/
 import { ResultExtensions } from '@wow-two-beta/fe/foundation/results';
 import type {
   CatalogModel,
+  DigestModel,
+  DigestPreviewModel,
+  DigestRunModel,
+  DigestRunPage,
   EventImportReport,
   EventModel,
   EventPage,
@@ -44,6 +48,15 @@ export const EventsShapes = {
   historyEntry: has({ toStage: isString, atUtc: isString }),
   intake: has({ sources: isArrayOf(has({ name: isString, catalog: isString })), candidates: isNumber }),
   importReport: has({ dryRun: (value: unknown) => typeof value === 'boolean', map: Array.isArray }),
+  digest: has({
+    id: isString,
+    name: isString,
+    schedule: has({ days: Array.isArray, times: Array.isArray, timeZone: isString }),
+    recipients: Array.isArray,
+    revision: isNumber,
+  }),
+  digestRun: has({ id: isString, status: isString, matched: isNumber, selected: isNumber, startedAtUtc: isString }),
+  digestPreview: has({ digestId: isString, items: Array.isArray, texts: Array.isArray, recipients: Array.isArray }),
 } as const;
 
 const page = (item: Guard) => has({ items: isArrayOf(item), nextCursor: isOptional(isString) });
@@ -71,6 +84,11 @@ export const EventsDecoders = {
   workflow: decoder<WorkflowModel>(EventsShapes.workflow),
   intake: decoder<IntakeStatusModel>(EventsShapes.intake),
   importReport: decoder<EventImportReport>(EventsShapes.importReport),
+  digest: decoder<DigestModel>(EventsShapes.digest),
+  digests: decoder<readonly DigestModel[]>(isArrayOf(EventsShapes.digest)),
+  digestRun: decoder<DigestRunModel>(EventsShapes.digestRun),
+  digestRunPage: decoder<DigestRunPage>(page(EventsShapes.digestRun)),
+  digestPreview: decoder<DigestPreviewModel>(EventsShapes.digestPreview),
 } as const;
 
 /** Builds a decoder that accepts a value of the guarded shape and refuses anything else as a protocol failure. */

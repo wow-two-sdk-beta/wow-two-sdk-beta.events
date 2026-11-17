@@ -62,7 +62,6 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 | V04 Custom field schemas per workflow | feature | spec in `tasks-platform.md` |
 | V05 Webhooks for published, changed, cancelled and deadline events | feature | spec in `tasks-platform.md` |
 | V06 Calendar export with VTIMEZONE blocks | fix | spec in `tasks-platform.md` |
-| V07 Scheduled event digests with a delivery seam | feature | spec in `tasks-platform.md` |
 | A07 Events takes SCFD's AI classification | engineering | spec in `tasks-platform.md` · owner: ev-ai lane |
 | E32 Decide a per-source policy for event thumbnails | product | spec in `tasks-events-path.md` |
 

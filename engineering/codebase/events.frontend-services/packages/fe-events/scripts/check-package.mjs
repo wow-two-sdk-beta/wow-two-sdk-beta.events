@@ -60,6 +60,13 @@ const requiredNames = {
     'type EventImportBundle',
     'type EventImportRow',
     'type IntakeStatusModel',
+    'DigestDayValues',
+    'DigestLanguageValues',
+    'DigestRecipientStatusValues',
+    'type DigestModel',
+    'type DigestSpec',
+    'type DigestRunModel',
+    'type DigestPreviewModel',
   ],
   './kit': [
     'createEventsClient',
@@ -81,7 +88,17 @@ const requiredNames = {
     'type EventsFailure',
     'type EventsLocale',
   ],
-  './admin': ['ReviewQueue', 'ObservationsList', 'ObservationEvidence', 'IntakeStatusPanel', 'CatalogEventsTable', 'ImportPanel'],
+  './admin': [
+    'ReviewQueue',
+    'ObservationsList',
+    'ObservationEvidence',
+    'IntakeStatusPanel',
+    'CatalogEventsTable',
+    'ImportPanel',
+    'DigestsPanel',
+    'DigestEditor',
+    'DigestRunHistory',
+  ],
 };
 
 try {

@@ -29,10 +29,13 @@ to the consumer's Tailwind sources:
 |---|---|
 | `./contracts` | The TypeScript mirror of the be contract (camelCase JSON, enums as camelCase strings, localized text as `Record<locale, string>`), its constants and `EventsRoutes`, the route builders, with the query mappers |
 | `./kit` | `createEventsClient` (every route, `{ data }` unwrapped, failures mapped by status), date helpers honest about precision and certainty (`formatEventWhen`, `formatEventSpan`, `groupEventsByMonth`, `sortEventsByDate`), `downloadEventsCalendar`, and `EventsFeed`, `EventCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm` |
-| `./admin` | The reviewer's screens: `ReviewQueue`, `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable` |
+| `./admin` | The reviewer's and admin's screens: `ReviewQueue`, `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`, `ImportPanel`, and scheduled digests: `DigestsPanel` (list, editor, run history), `DigestEditor`, `DigestRunHistory`, `DigestRecipients`, `TelegramText` |
 
 - Dates never claim more than they know: a month stays a month (`Oct 2026`), an estimate reads `≈ Oct 2026 (expected)`,
   an unknown date `Dates not announced`, and undated events sort last.
 - A member's `proposeEvent` lands as a candidate awaiting review; only a reviewer publishes.
+- A product embeds a catalog's digests with `<DigestsPanel :client :catalog :locale :defaults :link-template />`:
+  `defaults` is a new digest's fields (its schedule, selection, recipients, language), `linkTemplate` fixes each event's
+  link to the product's own page, `channels` the channels offered (`['telegram']` by default). It needs `events:admin`.
 - A browser session through Identity's BFF passes `csrfToken: () => session.csrfToken`; the client echoes it as
   `X-Csrf-Token` on every unsafe request.

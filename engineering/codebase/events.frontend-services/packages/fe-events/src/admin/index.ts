@@ -7,3 +7,18 @@ export { default as IntakeStatusPanel } from './presentation/IntakeStatusPanel.v
 export { default as ImportPanel } from './presentation/ImportPanel.vue';
 export { default as CatalogEventsTable } from './presentation/CatalogEventsTable.vue';
 export { factChanges, type FactChange } from './review/FactsChanges';
+export { default as DigestsPanel } from './presentation/DigestsPanel.vue';
+export { default as DigestEditor } from './presentation/DigestEditor.vue';
+export { default as DigestRunHistory } from './presentation/DigestRunHistory.vue';
+export { default as DigestRecipients } from './presentation/DigestRecipients.vue';
+export { TelegramText } from './digests/TelegramText';
+export {
+  defaultDigestSpec,
+  digestDraft,
+  digestSpec,
+  formatInZone,
+  formatRecipients,
+  parseRecipients,
+  type DigestDraft,
+  type DigestDraftProblem,
+} from './digests/DigestDraft';

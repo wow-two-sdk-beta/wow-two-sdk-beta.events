@@ -8,10 +8,12 @@ Defer to `wow-two-ws/conventions/development/frontend/`.
 - `packages/fe-events` is `@wow-two-beta/fe-events`, published to npm: `./contracts` (the TypeScript mirror of the be
   contract and route builders), `./kit` (`createEventsClient`, date helpers honest about precision, `EventsFeed`,
   `EventCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm`) and `./admin` (`ReviewQueue`,
-  `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`). Sourced images and text show
+  `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`, `ImportPanel`, and the digests'
+  `DigestsPanel`, `DigestEditor`, `DigestRunHistory`). Sourced images and text show
   only in `./admin`, labelled source evidence (events-integration #50). It peers `@wow-two-beta/fe` at `>=0.0.n <0.1.0`, `n` the pinned
   version; `check:package` enforces it and fails when one of the three exports is missing.
-- `apps/web` is `@events/web`, private: the review console (`/`, `/observations`, `/events`, `/intake`), signed in
+- `apps/web` is `@events/web`, private: the review console (`/`, `/observations`, `/events`, `/intake`, `/imports`,
+  `/digests`), signed in
   through Identity's BFF at `/api/identity/*`. It takes `fe-events` by
   `workspace:*`, through its `exports` only — the way a product would; the package never imports `apps/`.
 - App source uses `bootstrap`, `presentation`, `application`, `domain`, and `integration` layers.

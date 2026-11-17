@@ -1,3 +1,4 @@
+import type { DigestRunQuery } from './DigestModels';
 import type { EventQuery } from './EventModel';
 import type { ObservationQuery, ReviewQuery } from './ReviewModels';
 import type { TrackingQuery } from './TrackingModels';
@@ -13,6 +14,7 @@ export const EventsRouteConstants = {
   imports: 'imports',
   calendar: 'events.ics',
   tracking: 'tracking',
+  digests: 'digests',
   workflow: 'api/events/v1/workflow',
   intake: 'api/events/v1/intake',
   signals: 'signals/identity',
@@ -50,6 +52,12 @@ export const EventsRoutes = {
   trackingHistory: (slug: string, eventId: string) =>
     `${catalog(slug)}/${EventsRouteConstants.tracking}/${segment(eventId)}/history`,
   imports: (slug: string) => `${catalog(slug)}/${EventsRouteConstants.imports}`,
+  digests: (slug: string) => `${catalog(slug)}/${EventsRouteConstants.digests}`,
+  digest: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.digests}/${segment(id)}`,
+  digestPreview: (slug: string, id: string) =>
+    `${catalog(slug)}/${EventsRouteConstants.digests}/${segment(id)}/preview`,
+  digestSend: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.digests}/${segment(id)}/send`,
+  digestRuns: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.digests}/${segment(id)}/runs`,
   workflow: () => EventsRouteConstants.workflow,
   intake: () => EventsRouteConstants.intake,
   intakePoll: () => `${EventsRouteConstants.intake}/poll`,
@@ -74,6 +82,11 @@ export function eventQueryParams(query: EventQuery = {}): EventsQueryParams {
     cursor: query.cursor,
     limit: query.limit,
   };
+}
+
+/** Maps a `DigestRunQuery` to its query parameters. */
+export function digestRunQueryParams(query: DigestRunQuery = {}): EventsQueryParams {
+  return { cursor: query.cursor, limit: query.limit };
 }
 
 /** Maps a `TrackingQuery` to its query parameters. */
