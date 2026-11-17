@@ -115,7 +115,7 @@ public sealed partial class ScfdContractPagesTests
         });
         data.GetRawText().Should().Contain("\"Ташкент\"", "the record keeps the source's spelling; only the fact takes the canonical city");
         facts.Offers.Should().ContainSingle().Which.Should().Be(new EventOffer { Kind = OfferKind.Ticket, MinPrice = 150000, MaxPrice = 150000, Currency = "UZS" });
-        facts.Website.Should().Be("https://afisha.example.test/venues/istiqlol");
+        facts.Website.Should().BeNull("SCFD marks the aggregator's own venue page `site`, and it is no website of the event");
         facts.TicketUrl.Should().Be("https://afisha.example.test/events/jazz-night/tickets");
         facts.Languages.Should().Equal("ru-Cyrl");
         facts.Images.Should().BeEmpty("sourced media stays evidence (events-integration #50)");

@@ -215,6 +215,47 @@ public sealed class ScfdEventMapperTests
         facts.Attendance.Should().Be(EventAttendance.Mixed);
     }
 
+    /// <summary>SCFD marks every in-page link <c>site</c> (events-dev, 2026-11-16): the aggregator's own pages, a social
+    /// profile and a map pin read as the event's website. Only a link on a host of its own is one.</summary>
+    [Theory]
+    [InlineData("https://afisha.example.test/venues/istiqlol")]
+    [InlineData("https://www.afisha.example.test/venues/istiqlol")]
+    [InlineData("https://en.afisha.example.test/venues/istiqlol")]
+    [InlineData("https://t.me/mstar")]
+    [InlineData("https://www.instagram.com/mstar/")]
+    [InlineData("https://vk.com/mstar")]
+    [InlineData("https://maps.google.com/?q=41.3,69.2")]
+    [InlineData("https://www.google.com/maps/place/Humo+Arena")]
+    [InlineData("https://yandex.uz/maps/10335/tashkent/")]
+    [InlineData("https://2gis.uz/tashkent/firm/1")]
+    public void TryMap_ShouldTakeNoWebsite_FromAnAggregatorSocialOrMapLink(string link)
+    {
+        var facts = Map(WithSiteLinks(link));
+
+        facts.Website.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryMap_ShouldKeepAnExternalOrganizerSite_AndSkipTheLinksBeforeIt()
+    {
+        var facts = Map(WithSiteLinks("https://afisha.example.test/venues/istiqlol", "https://t.me/mstar", "https://mstar.example.uz/expo", "https://other.example.uz"));
+
+        facts.Website.Should().Be("https://mstar.example.uz/expo");
+    }
+
+    [Fact]
+    public void TryMap_ShouldKeepTheOnlySiteLink_WhenThePayloadNamesNoSourceLink()
+    {
+        var facts = Map("""{"schema":"wow2.event.v1","title":"Show","contentLinks":[{"url":"https://mstar.example.uz","kind":"site"}]}""");
+
+        facts.Website.Should().Be("https://mstar.example.uz");
+    }
+
+    /// <summary>A payload whose post links sit on the aggregator, with one <c>site</c> content link per given URL.</summary>
+    private static string WithSiteLinks(params string[] urls) =>
+        """{"schema":"wow2.event.v1","title":"Show","links":[{"url":"https://afisha.example.test/events/jazz-night","role":"primary"}],"contentLinks":["""
+        + string.Join(',', urls.Select(url => "{\"url\":\"" + url + "\",\"kind\":\"site\"}")) + "]}";
+
     [Fact]
     public void MappingVersion_ShouldJoinTheStamp_WithinSixtyFourCharacters()
     {

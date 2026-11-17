@@ -1,9 +1,12 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
 using WoW.Two.Sdk.Beta.Be.Events.Review;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 using Events.Tests.Integration.Catalogs;
@@ -209,6 +212,29 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         (await EventsAsync(slug, new EventQuery())).Should().HaveCount(5).And.OnlyContain(item => item.Facts.Place!.Country == "UZ");
     }
 
+    /// <summary>An event stored before the website rule (events-dev, 2026-11-16) holds the aggregator's own venue page as its
+    /// website; the backlog pass re-maps it to none, once, and counts it (events-integration E06).</summary>
+    [Fact]
+    public async Task ReviewBacklog_ShouldRemapAnEventStoredWithTheAggregatorsPageAsItsWebsite()
+    {
+        var (slug, source) = await SourceAsync(auto => auto.Review = "auto");
+        const string venuePage = "https://afisha.example/venues/hall";
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Show", edit: data =>
+            data["contentLinks"] = new object[] { new { url = venuePage, kind = "site" } }));
+        await fixture.PollAsync(source);
+        var stored = (await EventsAsync(slug, new EventQuery())).Single();
+        stored.Facts.Website.Should().BeNull("the mapper no longer takes the aggregator's page");
+        await StoreWebsiteAsync(stored.Id, venuePage);
+        (await EventsAsync(slug, new EventQuery())).Single().Facts.Website.Should().Be(venuePage, "the stored event reads as before the rule");
+
+        var first = await BacklogAsync(source, batch: 100);
+        var second = await BacklogAsync(source, batch: 100);
+
+        first.Should().Be(new BacklogPass(Checked: 1, Remapped: 1, Published: 0));
+        second.Should().Be(new BacklogPass(Checked: 1, Remapped: 0, Published: 0), "a second pass finds nothing new");
+        (await EventsAsync(slug, new EventQuery())).Single().Facts.Website.Should().BeNull();
+    }
+
     [Fact]
     public async Task Intake_ShouldTakeTheClassifiersKind_WhenItIsACatalogKind()
     {
@@ -328,6 +354,16 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
     {
         await using var scope = fixture.Scope();
         return (await scope.ServiceProvider.GetRequiredService<ICatalogEventsBroker>().ListAsync(slug, query)).ValueOrThrow().Items;
+    }
+
+    /// <summary>Writes a website into an event's stored facts, as an older mapping left it.</summary>
+    private async Task StoreWebsiteAsync(Guid id, string website)
+    {
+        await using var scope = fixture.Scope();
+        var db = scope.ServiceProvider.GetRequiredService<EventsDbContext>();
+        var row = await db.Events.SingleAsync(item => item.Id == id);
+        row.Facts = EventsJson.Write(EventsJson.Read<EventFacts>(row.Facts) with { Website = website });
+        await db.SaveChangesAsync();
     }
 
     private async Task<BacklogPass> BacklogAsync(EventsIntakeSourceOptions source, int batch)

@@ -127,12 +127,55 @@ internal static partial class ScfdEventMapper
             Starts = starts ?? new EventWhen(),
             Ends = ends,
             Offers = Offers(data),
-            Website = Url(contentLinks.FirstOrDefault(link => IsLinkKind(link, "site", 4)), "url"),
+            Website = Website(data, contentLinks),
             TicketUrl = Url(contentLinks.FirstOrDefault(link => IsLinkKind(link, "ticket", 0)), "url"),
             Languages = locale is null ? [] : [locale],
         };
         return true;
     }
+
+    /// <summary>Reads the event's own website: the first <c>site</c> content link on a host of its own. SCFD marks every
+    /// in-page link <c>site</c>, so the aggregator's venue page, a social profile or a map pin reads as one too; the
+    /// website is none of these, and none is the honest answer when no link is left (events-integration E06).</summary>
+    private static string? Website(JsonElement data, List<JsonElement> contentLinks)
+    {
+        var sourceHosts = Links(data).Select(link => HostOf(link.Url)).OfType<string>().ToList();
+        foreach (var link in contentLinks.Where(link => IsLinkKind(link, "site", 4)))
+        {
+            if (Url(link, "url") is { } url && HostOf(url) is { } host
+                && !sourceHosts.Any(known => SameSite(host, known)) && !IsSocialOrMap(host, new Uri(url).AbsolutePath))
+                return url;
+        }
+
+        return null;
+    }
+
+    /// <summary>Hosts of social networks and messengers: a profile there is a contact, never an event's website.</summary>
+    private static readonly string[] SocialHosts =
+    [
+        "instagram.com", "facebook.com", "fb.com", "fb.me", "t.me", "telegram.me", "telegram.org", "telegram.dog", "vk.com", "vk.ru", "ok.ru",
+        "youtube.com", "youtu.be", "tiktok.com", "x.com", "twitter.com", "threads.net", "linkedin.com", "wa.me", "whatsapp.com", "viber.com",
+        "discord.gg", "signal.me",
+    ];
+
+    /// <summary>Hosts of map services, whole: a pin is a place, never an event's website.</summary>
+    private static readonly string[] MapHosts = ["2gis.com", "2gis.uz", "2gis.ru", "openstreetmap.org", "waze.com"];
+
+    private static string? HostOf(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Host)
+            ? (uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..] : uri.Host).ToLowerInvariant()
+            : null;
+
+    /// <summary>Tells whether two hosts are one site: equal, or one a subdomain of the other.</summary>
+    private static bool SameSite(string host, string other) =>
+        host == other || host.EndsWith("." + other, StringComparison.Ordinal) || other.EndsWith("." + host, StringComparison.Ordinal);
+
+    private static bool IsSocialOrMap(string host, string path) =>
+        SocialHosts.Concat(MapHosts).Any(known => SameSite(host, known))
+        || host.StartsWith("maps.", StringComparison.Ordinal)
+        || ((host.StartsWith("google.", StringComparison.Ordinal) || host.Contains(".google.", StringComparison.Ordinal)
+                || host.StartsWith("yandex.", StringComparison.Ordinal) || host.Contains(".yandex.", StringComparison.Ordinal) || host == "goo.gl")
+            && (path.StartsWith("/maps", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/navi", StringComparison.OrdinalIgnoreCase)));
 
     private static bool TryWhen(JsonElement data, string name, out EventWhen? when, out string reason)
     {

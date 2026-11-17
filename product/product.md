@@ -95,6 +95,9 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   reason, observed time, each link's URL, source, capture and source fields, the mapping version when SCFD sends it,
   and the raw payload.
 - review never blocks intake; a catalog that is not private takes nothing (#50).
+- a sourced event's website is the first `site` content link on a host of its own: SCFD marks every in-page link
+  `site`, so a link on a host of the post's own links (the aggregator, with `www.` and subdomains), a social, messenger
+  or map host reads as no website, and the event keeps none; a published event re-maps after the next poll.
 - a sourced place names a known Uzbek city in one Latin spelling (`Ташкент` and `Toshkent` read `Tashkent`), the
   spelling the catalog's own events use, so city filters and groups never split one city in two; a city the table does
   not know passes through as written, and the source's spelling stays in the observation's raw payload.
