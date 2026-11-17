@@ -38,6 +38,26 @@ internal static partial class ScfdEventMapper
             }
             : null;
 
+    /// <summary>Reads the post's state as an event source's state: <c>live</c> (a relisted link included), <c>suspect</c> or
+    /// <c>gone</c>; none when the payload names none or another.</summary>
+    public static EventSourceState? SourceState(JsonElement? data) =>
+        PostState(data) switch
+        {
+            "live" or "relisted" => EventSourceState.Live,
+            "suspect" => EventSourceState.Suspect,
+            "gone" => EventSourceState.Gone,
+            _ => null,
+        };
+
+    /// <summary>Reads when the source posted the post (<c>postedAt.value</c>), in UTC; a date with no time reads as that day's
+    /// start in UTC. None when the payload names none or an unreadable one.</summary>
+    public static DateTimeOffset? PostedAt(JsonElement? data) =>
+        data is { ValueKind: JsonValueKind.Object } value && value.TryGetProperty("postedAt", out var posted)
+        && String(posted, "value")?.Trim() is { } text && DatePattern().Match(text) is { Success: true } match && match.Groups["day"].Success
+        && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var at)
+            ? at.ToUniversalTime()
+            : null;
+
     /// <summary>Reads the post another post absorbed this one into, on a <c>post.merged</c> record; none otherwise.</summary>
     public static Guid? MergedInto(JsonElement? data) =>
         data is { ValueKind: JsonValueKind.Object } value && Guid.TryParse(String(value, "mergedInto"), out var survivor) ? survivor : null;

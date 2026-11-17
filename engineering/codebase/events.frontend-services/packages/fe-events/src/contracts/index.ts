@@ -27,12 +27,14 @@ export {
 export {
   EventReviewStateValues,
   EventSourceKindValues,
+  EventSourceStateValues,
   type EventModel,
   type EventPage,
   type EventQuery,
   type EventReviewState,
   type EventSourceKind,
   type EventSourceModel,
+  type EventSourceState,
   type EventSpec,
 } from './EventModel';
 export {

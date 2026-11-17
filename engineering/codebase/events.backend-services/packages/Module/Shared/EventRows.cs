@@ -72,6 +72,9 @@ internal static class EventRows
                 Url = source.Url,
                 FirstSeenAtUtc = source.FirstSeenAt,
                 LastSeenAtUtc = source.LastSeenAt,
+                Name = source.Name,
+                State = source.State is { } state ? EventsLabels.Parse<EventSourceState>(state) : null,
+                PostedAtUtc = source.PostedAt,
             })
             .ToList(),
         PendingChanges = pendingChanges,

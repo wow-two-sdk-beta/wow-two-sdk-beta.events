@@ -13,6 +13,17 @@ public sealed record EventSourceModel
     /// <summary>Gets the page the event was found on.</summary>
     public string? Url { get; init; }
 
+    /// <summary>Gets the source's name as people know it, such as <c>Afisha</c>: for SCFD, the subscription's source name,
+    /// else its source group, else the intake source's own name; none for an import or a curator's entry.</summary>
+    public string? Name { get; init; }
+
+    /// <summary>Gets where the source's listing stands, as the source last reported it; none when the source reports no
+    /// state (an import, a curator's entry, or an SCFD record from before Events kept it).</summary>
+    public EventSourceState? State { get; init; }
+
+    /// <summary>Gets when the source posted the listing (UTC); none when the source does not say.</summary>
+    public DateTimeOffset? PostedAtUtc { get; init; }
+
     /// <summary>Gets when the source first reported it (UTC).</summary>
     public required DateTimeOffset FirstSeenAtUtc { get; init; }
 

@@ -10,4 +10,7 @@ internal sealed class EventSourceEntity
     public string? Url { get; set; }
     public DateTimeOffset FirstSeenAt { get; set; }
     public DateTimeOffset LastSeenAt { get; set; }
+    public string? Name { get; set; }
+    public string? State { get; set; }
+    public DateTimeOffset? PostedAt { get; set; }
 }

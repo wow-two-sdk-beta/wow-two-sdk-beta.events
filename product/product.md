@@ -71,7 +71,7 @@ events for ocharo and not post them anywhere else".
 | `offers` | kind (`ticket` · `exhibitor` · `sponsorship` · `submission` · `other`), name, price min/max/currency (null when unknown, never 0), free, terms, url |
 | `website`, `ticketUrl`, `onlineUrl` | http(s), ≤ 2,048 |
 | `images` | curated references: url, attribution (#31: no bytes copied in P1; sourced images stay evidence, #50) |
-| `sources` | every source identity that reported it: kind (`scfd` · `import` · `manual`), id, url, first and last seen |
+| `sources` | every source identity that reported it: kind (`scfd` · `import` · `manual`), id, url, first and last seen; for SCFD also its name (the subscription's source name, else its group, else the intake source's), its listing's state (`live` · `suspect` · `gone` · `unmatched`) and when the source posted it |
 | `review` | `candidate` · `published` · `rejected` · `archived`; consumers see `published` |
 | `revision` | optimistic concurrency; `createdAt`, `updatedAt`, `publishedAt` |
 
@@ -95,7 +95,7 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   event no person decided and no organization tracks back to review, held by `source:{instance}`, so an off-topic event
   leaves the published feed; its content never applies, and only a revision that passes the filter again
   (`post.new`, `post.changed`, `post.extracted`) returns it to its classifier, never a relist or an unmerge. A tracked
-  event stays published.
+  event stays published, and its source reads `unmatched` until such a revision arrives.
 - evidence per observation: SCFD instance, subscription, pipeline, `EventId`, `ItemId`, `PostId`, `Revision`, type,
   reason, observed time, each link's URL, source, capture and source fields, the mapping version when SCFD sends it,
   and the raw payload.
@@ -164,6 +164,23 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   the revision; an exact deadline exports as its own all-day entry. The export reads as a catalog read: inside the
   owner organization (#50); token feed links are not built.
 
+## Digests
+
+- An organization defines digests of a catalog it reads (`events.admin`): a name, a schedule (days and local times in an
+  IANA zone, such as Monday 09:00 `Asia/Tashkent`), a selection, recipients, a language (`uz-Latn`, `ru`, `en`), an item
+  cap and a channel. Any product embeds the editor (`fe-events/admin` `DigestsPanel`) for its catalog.
+- Selection, as of the occurrence's local day: an event goes in when it matches a rule — new since the previous run,
+  starting within N days, an open deadline within N days — and every filter (statuses, kinds, cities, tracked only).
+  Published events only; an event that ended never goes out; month and year dates count by their whole span.
+- Each occurrence runs once (a run row unique on digest and occurrence) and renders one message per recipient language:
+  the title, the dates at their precision, the city, the nearest open deadline and a link from the digest's URL template
+  (or the host's per catalog). A preview renders the same text without sending; a send now runs outside the schedule.
+- Channels sit behind one seam (`IDigestDelivery`): Telegram through Identity's app notices (Identity owns the bot, apps
+  never talk to it; each recipient's message carries the run's idempotency key) and the host's log; email and webhooks
+  can follow. Run history keeps the selected count and each recipient's `sent`, `not_linked`, `muted` or `failed`.
+- Recipients are Identity `sub`s, or an organization role resolved through the host's `IDigestRecipientResolver`; until
+  Identity offers services a member list, a role reads nothing and the run notes it.
+
 ## Access
 
 | Scope (app) | Permission (person) | Opens |
@@ -172,7 +189,7 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 | `events.track` | `events:track` | tracking and workflow writes |
 | `events.review` | `events:review` | review, curation |
 | `events.import` | `events:admin` | imports |
-| `events.admin` | `events:admin` | catalogs, intake status |
+| `events.admin` | `events:admin` | catalogs, intake status, digests |
 
 - a person's call needs both; a service's call its scope alone (`api-communication.md`).
 - record rules run on Events' own rows: a private catalog reads only for its owner organization; tracking is keyed by

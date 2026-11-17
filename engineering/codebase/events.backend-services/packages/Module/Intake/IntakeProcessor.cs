@@ -55,6 +55,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private static readonly string Ignored = EventsLabels.Of(ObservationState.Ignored);
     private static readonly string Accepted = EventsLabels.Of(ObservationState.Accepted);
     private static readonly string Archived = EventsLabels.Of(EventReviewState.Archived);
+    private static readonly string UnmatchedState = EventsLabels.Of(EventSourceState.Unmatched);
 
     /// <summary>Holds the actor prefix of a decision the source's own lifecycle made: a listing gone, a post merged or
     /// no longer matching.</summary>
@@ -275,6 +276,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             else
                 await RecordAsync(page, observation, cancellationToken);
             await ApplyLifecycleAsync(page, observation, data, cancellationToken);
+            await DescribeSourceAsync(page, record, observation, data, cancellationToken);
         }
 
         return observation;
@@ -520,6 +522,49 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         item.Revision++;
         item.UpdatedAt = now;
     }
+
+    /// <summary>Keeps the post's event source as the source last reported it (E15): its name, its listing's state and when
+    /// it was posted, so a consumer shows "via Afisha" and a removed listing, whatever the source's review policy.</summary>
+    /// <remarks>
+    ///   - the name: the record's context <c>sourceName</c>, else <c>sourceGroup</c>, else the intake source's name
+    ///   - the state: the payload's <c>state</c>; <c>unmatched</c> on <c>post.unmatched</c>, which stays until a revision
+    ///     passes the filter again (<c>post.new</c>, <c>post.changed</c>, <c>post.extracted</c>), so a listing's gone or live
+    ///     record never hides it
+    ///   - the posted time: the payload's <c>postedAt</c>; a record that names none keeps the one before
+    ///   - a quarantined, superseded or stale record (an older revision than stored) changes nothing
+    /// </remarks>
+    private async Task DescribeSourceAsync(IntakePageState page, ScfdDeliveryRecord record, ObservationEntity observation, JsonElement? data, CancellationToken cancellationToken)
+    {
+        if (observation.State == Quarantined || observation.State == Superseded || observation.PostId is not { } postId)
+            return;
+
+        var instance = page.Source.Instance;
+        var latest = await db.SourcePosts.AsNoTracking()
+            .Where(row => row.SourceInstance == instance && row.CatalogId == page.Catalog.Id && row.PostId == postId)
+            .Select(row => (int?)row.LatestRevision)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (observation.Revision is { } revision && latest is { } stored && revision < stored)
+            return;
+
+        var sourceId = $"{instance}/{postId:D}";
+        var identity = db.Sources.Local.FirstOrDefault(row => row.CatalogId == page.Catalog.Id && row.Kind == Scfd && row.SourceId == sourceId)
+            ?? await db.Sources.FirstOrDefaultAsync(row => row.CatalogId == page.Catalog.Id && row.Kind == Scfd && row.SourceId == sourceId, cancellationToken);
+        if (identity is null)
+            return;
+
+        identity.Name = Fit(ContextValue(record, "sourceName") ?? ContextValue(record, "sourceGroup") ?? page.Source.Name, EventsConstants.MaxNameLength);
+        if (observation.Type == UnmatchedType)
+            identity.State = UnmatchedState;
+        else if ((identity.State != UnmatchedState || MatchingTypes.Contains(observation.Type)) && ScfdEventMapper.SourceState(data) is { } state)
+            identity.State = EventsLabels.Of(state);
+        identity.PostedAt = ScfdEventMapper.PostedAt(data) ?? identity.PostedAt;
+    }
+
+    private static string? ContextValue(ScfdDeliveryRecord record, string key) =>
+        record.Context?.FirstOrDefault(pair => string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase)).Value is { } value
+        && !string.IsNullOrWhiteSpace(value)
+            ? value.Trim()
+            : null;
 
     /// <summary>Tells whether no person decided the event: unreviewed, or reviewed by a classifier.</summary>
     private static bool Automatic(CatalogEventEntity item) =>

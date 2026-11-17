@@ -103,6 +103,30 @@ public sealed class EventsClientWireTests : IDisposable
         json.RootElement.GetProperty("rows")[0].GetProperty("legacy").GetProperty("date_precision").GetString().Should().Be("estimated");
     }
 
+    /// <summary>A tracked event's sources read with their name, listing state and posted time (E15), which a consumer shows
+    /// as "via Afisha" and "listing removed"; a source that names none reads none.</summary>
+    [Fact]
+    public async Task Tracking_ShouldReadEachSourcesNameStateAndPostedTime()
+    {
+        var id = Guid.Parse("0193f3a4-0000-7000-8000-000000000002");
+        service.Answer(HttpStatusCode.OK, $$$"""
+            {"data":{"event":{"id":"{{{id}}}","catalog":"fashion","facts":{"title":{"ru-Cyrl":"Показ"},"kind":"runway"},"review":"published",
+             "sources":[
+              {"kind":"scfd","id":"scfd/0193f3a4-0000-7000-8000-000000000003","url":"https://afisha.example.test/e/1","name":"Afisha",
+               "state":"unmatched","postedAtUtc":"2026-11-08T04:00:00+00:00","firstSeenAtUtc":"2026-11-10T09:00:00+00:00","lastSeenAtUtc":"2026-11-11T09:00:00+00:00"},
+              {"kind":"manual","id":"person-1","firstSeenAtUtc":"2026-11-10T09:00:00+00:00","lastSeenAtUtc":"2026-11-10T09:00:00+00:00"}],
+             "revision":3,"createdAtUtc":"2026-11-10T09:00:00+00:00","updatedAtUtc":"2026-11-11T09:00:00+00:00"},"tracking":null}}
+            """);
+
+        var tracked = Value(await service.Broker<IEventTrackingBroker>().GetAsync("fashion", id));
+
+        tracked.Event.Sources.Should().HaveCount(2);
+        tracked.Event.Sources[0].Should().Match<EventSourceModel>(source => source.Name == "Afisha" && source.State == EventSourceState.Unmatched
+            && source.PostedAtUtc == new DateTimeOffset(2026, 11, 8, 4, 0, 0, TimeSpan.Zero));
+        tracked.Event.Sources[1].Should().Match<EventSourceModel>(source => source.Name == null && source.State == null && source.PostedAtUtc == null);
+        service.Requests.Single().Url.Should().Be($"https://events.example.test/api/events/v1/catalogs/fashion/tracking/{id}");
+    }
+
     [Fact]
     public async Task Calendar_ShouldReturnTheFile_WithoutAnEnvelope()
     {

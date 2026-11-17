@@ -8,11 +8,21 @@ export type EventReviewState = (typeof EventReviewStateValues)[number];
 export const EventSourceKindValues = ['scfd', 'import', 'manual'] as const;
 export type EventSourceKind = (typeof EventSourceKindValues)[number];
 
+/** Mirrors `EventSourceState`: where a source's listing stands, as the source last reported it. */
+export const EventSourceStateValues = ['live', 'suspect', 'gone', 'unmatched'] as const;
+export type EventSourceState = (typeof EventSourceStateValues)[number];
+
 /** Mirrors `EventSourceModel`: one source identity that reported an event. */
 export interface EventSourceModel {
   readonly kind: EventSourceKind;
   readonly id: string;
   readonly url?: string | null;
+  /** The source's name as people know it, such as `Afisha`; none for an import or a curator's entry. */
+  readonly name?: string | null;
+  /** Where the source's listing stands; none when the source reports no state. */
+  readonly state?: EventSourceState | null;
+  /** When the source posted the listing (UTC); none when it does not say. */
+  readonly postedAtUtc?: string | null;
   readonly firstSeenAtUtc: string;
   readonly lastSeenAtUtc: string;
 }

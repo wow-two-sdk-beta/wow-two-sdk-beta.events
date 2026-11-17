@@ -171,6 +171,24 @@ public abstract class EventTrackingBrokerConformance : EventsConformance
         all.Items.Should().HaveCount(3);
     }
 
+    /// <summary>A tracking read carries each event's sources as the catalog reads them, with their name, listing state and
+    /// posted time (E15); a curator's own entry names no source, state or posted time.</summary>
+    [Fact]
+    public async Task Reads_ShouldCarryEachSource_AsTheCatalogReadsIt()
+    {
+        var (owner, catalog, target) = await EventAsync();
+        Value(await As(owner).Tracking.PutAsync(catalog, target.Id, new TrackingSpec()));
+
+        var read = Value(await As(owner).Events.GetAsync(catalog, target.Id));
+        var tracked = Value(await As(owner).Tracking.GetAsync(catalog, target.Id));
+        var listed = Value(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { TrackedOnly = true })).Items.Single();
+
+        read.Sources.Should().ContainSingle().Which.Should().Match<EventSourceModel>(source =>
+            source.Kind == EventSourceKind.Manual && source.Name == null && source.State == null && source.PostedAtUtc == null);
+        tracked.Event.Sources.Should().BeEquivalentTo(read.Sources, options => options.WithStrictOrdering());
+        listed.Event.Sources.Should().BeEquivalentTo(read.Sources, options => options.WithStrictOrdering());
+    }
+
     /// <summary>Creates an owner, a private catalog and one published event in it.</summary>
     private async Task<(EventsActor Owner, string Catalog, EventModel Event)> EventAsync()
     {

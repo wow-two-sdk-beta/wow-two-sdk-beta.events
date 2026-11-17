@@ -343,6 +343,33 @@ public sealed class ScfdEventMapperTests
         ScfdEventMapper.TimeZone(data, zone).Should().Be(expected);
     }
 
+    /// <summary>The post's state reads as an event source's state (E15), as a label or SCFD's number; a relisted link is live.</summary>
+    [Theory]
+    [InlineData("\"live\"", EventSourceState.Live)]
+    [InlineData("\"relisted\"", EventSourceState.Live)]
+    [InlineData("\"Suspect\"", EventSourceState.Suspect)]
+    [InlineData("\"gone\"", EventSourceState.Gone)]
+    [InlineData("2", EventSourceState.Gone)]
+    [InlineData("\"archived\"", null)]
+    [InlineData("null", null)]
+    public void SourceState_ShouldReadThePostsState(string state, EventSourceState? expected)
+    {
+        ScfdEventMapper.SourceState(Json($$"""{"state":{{state}}}""")).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("""{"postedAt":{"value":"2026-11-08T09:00:00.0000000+00:00","precision":"second","timeZone":"UTC"}}""", "2026-11-08T09:00:00+00:00")]
+    [InlineData("""{"postedAt":{"value":"2026-11-08T09:00:00+05:00","precision":"second"}}""", "2026-11-08T04:00:00+00:00")]
+    [InlineData("""{"postedAt":{"value":"2026-11-08","precision":"day"}}""", "2026-11-08T00:00:00+00:00")]
+    [InlineData("""{"postedAt":{"value":"2026-11","precision":"month"}}""", null)]
+    [InlineData("""{"postedAt":{"value":"yesterday"}}""", null)]
+    [InlineData("""{"postedAt":null}""", null)]
+    [InlineData("""{}""", null)]
+    public void PostedAt_ShouldReadTheSourcesPostedTimeInUtc(string json, string? expected)
+    {
+        ScfdEventMapper.PostedAt(Json(json)).Should().Be(expected is null ? null : DateTimeOffset.Parse(expected, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     private static EventFacts Map(string json)
     {
         ScfdEventMapper.TryMap(Json(json), Kinds, out var facts, out var reason).Should().BeTrue(reason);
