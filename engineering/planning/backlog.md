@@ -1,6 +1,6 @@
 # wow-two-sdk-beta.events — Backlog
 
-*Last updated: 2026-11-10*
+*Last updated: 2026-11-17*
 
 Every unbuilt item, grouped; top of each group = next. Shipped work lives in [`version-track/`](version-track/).
 Shape: wow-two-ws/conventions/planning/version-track/version-track.md
@@ -48,7 +48,6 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 
 | Item | Type | Notes |
 |---|---|---|
-| E00 Find why no SCFD event reached Ocharo dev after 11-13 | fix | spec in `tasks-events-path.md` |
 | E01 Pull all five default Ocharo SCFD subscriptions into Events | fix | spec in `tasks-events-path.md` |
 | E04 Hold events whose SCFD post stopped matching | fix | spec in `tasks-events-path.md` |
 | E33 Show sourced city names in the app's script | fix | spec in `tasks-events-path.md` |
