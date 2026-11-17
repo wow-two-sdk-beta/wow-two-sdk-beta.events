@@ -65,3 +65,11 @@ public sealed class ClientIntakeConformanceTests(ClientEventsFixture fixture) : 
     /// <inheritdoc />
     protected override EventsBrokerSet As(EventsActor actor) => fixture.For(actor);
 }
+
+/// <summary>Forms 2 and 3: the digests suite through the client against the service host.</summary>
+[Collection(ClientConformanceCollection.Name)]
+public sealed class ClientDigestsConformanceTests(ClientEventsFixture fixture) : EventDigestsBrokerConformance
+{
+    /// <inheritdoc />
+    protected override EventsBrokerSet As(EventsActor actor) => fixture.For(actor);
+}

@@ -153,6 +153,19 @@ services:
         Events:Intake:Sources:1:DefaultTimeZone: { from: Events:Intake:Sources:0:DefaultTimeZone }
         Events:Intake:Sources:1:OwnerOrg: { from: Events:Intake:Sources:0:OwnerOrg }
         Events:Intake:Sources:1:OwnerIssuer: { from: Events:Auth:Issuers:0:Issuer }
+        # Digests (V07): the scheduler runs each due occurrence once. Telegram goes through Ocharo's Identity's app notices
+        # with Events' own client there (the intake's `events` client, granted `identity.notices.send` in Identity's
+        # declaration); Identity is that instance (its issuer) and Resource its notice audience (its
+        # Identity:Notices:Audience). Both stay empty until the instance grants the scope: the channel is off, a Telegram
+        # digest's recipients read failed and the log channel stays; once Identity is set, the config check requires the
+        # rest. LinkTemplates:{catalog} links each event to the app that embeds the catalog, such as Ocharo's Events app's
+        # event page (O17).
+        Events:Digests:Telegram:Identity: { type: url }
+        Events:Digests:Telegram:TokenEndpoint: { from: Events:Intake:Sources:0:TokenEndpoint }
+        Events:Digests:Telegram:ClientId: { from: Events:Intake:Sources:0:ClientId }
+        Events:Digests:Telegram:ClientSecret: { from: Events:Intake:Sources:0:ClientSecret }
+        Events:Digests:Telegram:Resource: { type: url }
+        Events:Digests:LinkTemplates:ocharo-fashion: { type: url }
     # The console's data-protection key ring (DataProtection:KeysPath).
     volumes:
       keys: /var/lib/events/keys

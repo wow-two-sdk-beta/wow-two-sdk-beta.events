@@ -51,6 +51,29 @@ public sealed class ServiceVerbTests
         (last + report).Should().Contain("Filter must name the subscription's SCFD filter");
     }
 
+    /// <summary>The Telegram digest channel, once it names an Identity instance, needs Events' client there and the
+    /// instance's notice audience, or the deploy stops at the config check; complete, it passes.</summary>
+    [Fact]
+    public async Task ConfigCheck_ShouldRefuse_ATelegramDigestChannelWithoutItsClient_AndPassItComplete()
+    {
+        var settings = Source();
+        settings["Events:Digests:Telegram:Identity"] = "https://identity.test/";
+        settings["Events:Digests:Telegram:TokenEndpoint"] = "https://identity.test/connect/token";
+
+        var (exit, last, report) = await ConfigCheckAsync(settings);
+
+        exit.Should().Be(1, last);
+        (last + report).Should().Contain("Events:Digests:Telegram is incomplete");
+
+        settings["Events:Digests:Telegram:ClientId"] = "events";
+        settings["Events:Digests:Telegram:ClientSecret"] = "secret";
+        settings["Events:Digests:Telegram:Resource"] = "https://identity.test/notices/";
+
+        (exit, last, _) = await ConfigCheckAsync(settings);
+
+        exit.Should().Be(0, last);
+    }
+
     private static Dictionary<string, string?> Source() => new()
     {
         ["Events:Intake:Sources:0:Name"] = "afisha-fashion",

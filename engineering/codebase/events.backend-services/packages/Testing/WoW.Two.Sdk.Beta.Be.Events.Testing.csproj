@@ -2,7 +2,7 @@
 
   <!--
     The Events test kit: one conformance suite per broker (catalogs, catalog events, review, tracking, workflows,
-    imports, calendar, intake status) every implementation must pass, and a settable test principal.
+    imports, calendar, intake status, digests) every implementation must pass, and a settable test principal.
   -->
   <PropertyGroup>
     <Description>Events test kit: a conformance suite per Events broker that every implementation passes, and a settable test principal.</Description>

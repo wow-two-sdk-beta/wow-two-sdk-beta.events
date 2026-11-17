@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The Events contract: the brokers of catalogs, events, review, tracking, workflows, imports, calendar and intake, their models, constants, scopes and error catalogue. It references the kernel
+    The Events contract: the brokers of catalogs, events, review, tracking, workflows, imports, calendar, intake and digests, their models, constants, scopes and error catalogue. It references the kernel
     WoW2.Sdk.Beta.Be.Abstractions only (Result, AppError, IEvent) — no core, no framework reference, no third-party
     package — and holds no options binding, DI registration or I/O.
   -->

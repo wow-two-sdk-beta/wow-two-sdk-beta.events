@@ -10,11 +10,13 @@ using WoW.Two.Sdk.Beta.Be.Observability.HealthChecks;
 using WoW.Two.Sdk.Beta.Be.Events.Calendar;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
+using WoW.Two.Sdk.Beta.Be.Events.Digests;
 using WoW.Two.Sdk.Beta.Be.Events.Imports;
 using WoW.Two.Sdk.Beta.Be.Events.Intake;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Calendar;
 using WoW.Two.Sdk.Beta.Be.Events.Module.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Catalogs;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Digests;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Imports;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Review;
@@ -81,6 +83,15 @@ public static class EventsModuleServiceCollectionExtensions
         services.AddScoped<IEventWorkflowsBroker, ModuleWorkflowsBroker>();
         services.AddScoped<IEventImportsBroker, ModuleImportsBroker>();
         services.AddScoped<IEventCalendarBroker, ModuleCalendarBroker>();
+
+        // Digests: the broker, its runs and the log channel; AddEventDigests adds the hosted scheduler and its settings, a
+        // host adds channels (AddIdentityTelegramDigestDelivery) and may bind IDigestRecipientResolver to its Identity.
+        services.AddOptions<EventDigestsOptions>();
+        services.AddScoped<IEventDigestsBroker, ModuleDigestsBroker>();
+        services.TryAddScoped<DigestDrafter>();
+        services.TryAddScoped<DigestRunner>();
+        services.TryAddScoped<IDigestRecipientResolver, UnboundDigestRecipientResolver>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IDigestDelivery, LogDigestDelivery>());
         services.AddHealthChecks().AddDatabaseReadinessCheck<EventsDbContext>();
 
         return services.AddOptions<EventsModuleOptions>()

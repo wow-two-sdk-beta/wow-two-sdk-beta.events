@@ -23,6 +23,9 @@ internal sealed class EventsDbContext(DbContextOptions<EventsDbContext> options)
     public DbSet<TrackingEntity> Tracking => Set<TrackingEntity>();
     public DbSet<TrackingHistoryEntity> TrackingHistory => Set<TrackingHistoryEntity>();
     public DbSet<ImportMapEntity> ImportMap => Set<ImportMapEntity>();
+    public DbSet<DigestEntity> Digests => Set<DigestEntity>();
+    public DbSet<DigestRunEntity> DigestRuns => Set<DigestRunEntity>();
+    public DbSet<DigestDeliveryEntity> DigestDeliveries => Set<DigestDeliveryEntity>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -132,6 +135,37 @@ internal sealed class EventsDbContext(DbContextOptions<EventsDbContext> options)
         map.Property(row => row.OrganizationId).HasMaxLength(128);
         map.Property(row => row.LegacyId).HasMaxLength(256);
         map.Property(row => row.Source).HasMaxLength(128);
+
+        var digest = modelBuilder.Entity<DigestEntity>();
+        digest.ToTable("events_digests");
+        digest.HasKey(row => row.Id);
+        digest.Property(row => row.Issuer).HasMaxLength(512);
+        digest.Property(row => row.OrganizationId).HasMaxLength(128);
+        digest.Property(row => row.Name).HasMaxLength(200);
+        digest.Property(row => row.Channel).HasMaxLength(32);
+        digest.Property(row => row.TimeZone).HasMaxLength(64);
+        digest.Property(row => row.Schedule).HasColumnType("jsonb");
+        digest.Property(row => row.Selection).HasColumnType("jsonb");
+        digest.Property(row => row.Recipients).HasColumnType("jsonb");
+        digest.Property(row => row.Language).HasMaxLength(16);
+        digest.Property(row => row.Revision).IsConcurrencyToken();
+
+        var run = modelBuilder.Entity<DigestRunEntity>();
+        run.ToTable("events_digest_runs");
+        run.HasKey(row => row.Id);
+        run.Property(row => row.Trigger).HasMaxLength(16);
+        run.Property(row => row.Status).HasMaxLength(16);
+        run.Property(row => row.EventIds).HasColumnType("jsonb");
+        run.Property(row => row.Items).HasColumnType("jsonb");
+        run.Property(row => row.Texts).HasColumnType("jsonb");
+        run.Property(row => row.Notes).HasColumnType("jsonb");
+
+        var delivery = modelBuilder.Entity<DigestDeliveryEntity>();
+        delivery.ToTable("events_digest_deliveries");
+        delivery.HasKey(row => new { row.RunId, row.Subject });
+        delivery.Property(row => row.Subject).HasMaxLength(256);
+        delivery.Property(row => row.Language).HasMaxLength(16);
+        delivery.Property(row => row.Status).HasMaxLength(16);
 
         base.OnModelCreating(modelBuilder);
     }

@@ -1,17 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Form 1: the greetings capability in the consumer's process, over the consumer's PostgreSQL database. Ships its schema
+    Form 1: the Events capability in the consumer's process, over the consumer's PostgreSQL database. Ships its schema
     as the named set `events` (schema `events`) of embedded Migrations/NNN-name/{Apply,Rollback}.sql; the host's migrate
     verbs apply it, and a local run's boot.
   -->
   <PropertyGroup>
-    <Description>Events Form 1: the in-process greetings module over the consumer's PostgreSQL database, with its SQL migration set.</Description>
+    <Description>Events Form 1: the in-process Events module over the consumer's PostgreSQL database, with its SQL migration set, the SCFD intake and scheduled digests.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="WoW2.Sdk.Beta.Be" />
+    <!-- Identity's contract only: the Telegram digest channel calls its app notices; the host binds the implementation. -->
+    <PackageReference Include="WoW2.Sdk.Beta.Be.Identity.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>

@@ -6,7 +6,8 @@
 
   <!--
     Integration tier — the Form 1 module wired as a consumer wires it (AddEvents) over a real PostgreSQL (Docker,
-    Testcontainers) whose schema the module's own set builds, in its own schema. No HTTP.
+    Testcontainers) whose schema the module's own set builds, in its own schema. No HTTP. Digests send through Identity's
+    FakeAppNoticeBroker (Identity.Testing).
   -->
   <ItemGroup>
     <PackageReference Include="WoW2.Sdk.Beta.Be.Testing.Data" />
@@ -15,6 +16,7 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="WoW2.Sdk.Beta.Be.Identity.Testing" />
   </ItemGroup>
 
   <!-- SCFD's golden pages live in the unit tier (Intake/Contract/); this tier replays them through the real intake. -->

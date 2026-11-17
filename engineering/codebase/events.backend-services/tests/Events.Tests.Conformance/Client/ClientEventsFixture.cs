@@ -7,6 +7,7 @@ using WoW.Two.Sdk.Beta.Be.Events;
 using WoW.Two.Sdk.Beta.Be.Events.Calendar;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
+using WoW.Two.Sdk.Beta.Be.Events.Digests;
 using WoW.Two.Sdk.Beta.Be.Events.Client;
 using WoW.Two.Sdk.Beta.Be.Events.Imports;
 using WoW.Two.Sdk.Beta.Be.Events.Intake;
@@ -63,7 +64,8 @@ public sealed class ClientEventsFixture : IAsyncLifetime
             provider.GetRequiredService<IEventWorkflowsBroker>(),
             provider.GetRequiredService<IEventImportsBroker>(),
             provider.GetRequiredService<IEventCalendarBroker>(),
-            provider.GetRequiredService<IEventIntakeBroker>());
+            provider.GetRequiredService<IEventIntakeBroker>(),
+            provider.GetRequiredService<IEventDigestsBroker>());
     }
 
     async Task IAsyncLifetime.InitializeAsync()

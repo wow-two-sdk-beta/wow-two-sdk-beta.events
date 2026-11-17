@@ -28,6 +28,10 @@ public static class EventsRouteConstants
     /// <summary>Holds a catalog's calendar export, relative to the catalog.</summary>
     public const string Calendar = "events.ics";
 
+    /// <summary>Holds the caller organization's digests of a catalog, relative to the catalog; a digest's preview, send now
+    /// and runs are <c>digests/{id}/preview</c>, <c>digests/{id}/send</c> and <c>digests/{id}/runs</c>.</summary>
+    public const string Digests = "digests";
+
     /// <summary>Holds the caller organization's tracking of a catalog's events, relative to the catalog.</summary>
     public const string Tracking = "tracking";
 

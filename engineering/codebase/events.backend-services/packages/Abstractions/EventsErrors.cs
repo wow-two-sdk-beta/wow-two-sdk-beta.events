@@ -17,6 +17,9 @@ public static class EventsErrors
     /// <summary>Creates the error for tracking the caller's organization does not hold.</summary>
     public static AppError TrackingNotFound() => AppErrorFactory.NotFound("The tracking was not found.");
 
+    /// <summary>Creates the error for a digest the caller's organization does not hold.</summary>
+    public static AppError DigestNotFound() => AppErrorFactory.NotFound("The digest was not found.");
+
     /// <summary>Creates the error for a write whose expected revision is not the current one.</summary>
     public static AppError RevisionConflict() => AppErrorFactory.Conflict("The record changed since it was read; reload and retry.");
 

@@ -74,6 +74,17 @@ public sealed class EventsApiAuthTests(EventsApiFixture fixture)
     }
 
     [Fact]
+    public async Task Person_ShouldAnswer403_OnDigests_WithoutTheAdminPermission()
+    {
+        var person = Person(EventsPermissionConstants.Read, EventsPermissionConstants.Track, EventsPermissionConstants.Review);
+        using var client = Bearer(fixture.Host, fixture.Issuer.IssueExchangedToken(person, "desk", EventsApiFixture.Audience, AllScopes));
+
+        using var response = await client.GetAsync($"/{EventsRouteConstants.Catalogs}/ocharo-fashion/{EventsRouteConstants.Digests}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task Service_ShouldReadAPublicCatalog_WithTheScopeAlone()
     {
         var owner = Person(EventsPermissionConstants.Admin, EventsPermissionConstants.Read);

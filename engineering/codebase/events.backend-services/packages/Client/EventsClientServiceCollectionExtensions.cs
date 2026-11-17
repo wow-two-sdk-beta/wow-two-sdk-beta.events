@@ -19,6 +19,8 @@ using WoW.Two.Sdk.Beta.Be.Events.Intake;
 using WoW.Two.Sdk.Beta.Be.Events.Review;
 using WoW.Two.Sdk.Beta.Be.Events.Tracking;
 using WoW.Two.Sdk.Beta.Be.Events.Workflows;
+using WoW.Two.Sdk.Beta.Be.Events.Client.Digests;
+using WoW.Two.Sdk.Beta.Be.Events.Digests;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Client;
 
@@ -66,6 +68,7 @@ public static class EventsClientServiceCollectionExtensions
         services.AddTransient<IEventImportsBroker, ApiEventImportsBroker>();
         services.AddTransient<IEventCalendarBroker, ApiEventCalendarBroker>();
         services.AddTransient<IEventIntakeBroker, ApiEventIntakeBroker>();
+        services.AddTransient<IEventDigestsBroker, ApiEventDigestsBroker>();
 
         // The token clients read the Identity settings when first built; without Identity they are never created.
         services.AddOptions<OAuth2ClientCredentialsOptions>(EventsClientConstants.ServiceHttpClientName)

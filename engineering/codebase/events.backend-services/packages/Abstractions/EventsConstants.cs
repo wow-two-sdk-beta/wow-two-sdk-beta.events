@@ -47,4 +47,19 @@ public static class EventsConstants
 
     /// <summary>Holds the payload schema Events reads from SCFD.</summary>
     public const string EventSchema = "wow2.event.v1";
+
+    /// <summary>Holds the most events one digest message lists.</summary>
+    public const int MaxDigestItems = 50;
+
+    /// <summary>Holds the most recipient entries one digest names.</summary>
+    public const int MaxDigestRecipients = 200;
+
+    /// <summary>Holds the most local times one digest schedule holds.</summary>
+    public const int MaxDigestTimes = 24;
+
+    /// <summary>Holds the most days a digest selection looks ahead.</summary>
+    public const int MaxDigestDaysAhead = 366;
+
+    /// <summary>Holds the most characters a digest message holds as sent, tags included: Telegram's message limit.</summary>
+    public const int MaxDigestTextLength = 4_096;
 }

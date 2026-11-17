@@ -65,3 +65,11 @@ public sealed class ModuleIntakeConformanceTests(ModuleEventsFixture fixture) : 
     /// <inheritdoc />
     protected override EventsBrokerSet As(EventsActor actor) => fixture.For(actor);
 }
+
+/// <summary>Form 1: the digests suite against the in-process module.</summary>
+[Collection(ModuleConformanceCollection.Name)]
+public sealed class ModuleDigestsConformanceTests(ModuleEventsFixture fixture) : EventDigestsBrokerConformance
+{
+    /// <inheritdoc />
+    protected override EventsBrokerSet As(EventsActor actor) => fixture.For(actor);
+}

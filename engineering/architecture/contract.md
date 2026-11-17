@@ -1,6 +1,6 @@
 # wow-two-sdk-beta.events — Contract
 
-*Last updated: 2026-11-10*
+*Last updated: 2026-11-17*
 
 > One broker per capability, the same in every form. Rules: wow-two-ws/conventions/development/capability-forms.md
 > § Contract. Types: `packages/Abstractions` (namespaces under `WoW.Two.Sdk.Beta.Be.Events`).
@@ -17,11 +17,12 @@
 | `IEventImportsBroker` | `ImportAsync(catalog, EventImportBundle, dryRun)` | owner org; tracking lands in the caller's org |
 | `IEventCalendarBroker` | `ExportAsync(catalog, EventQuery)` → `CalendarFile` | as a catalog read |
 | `IEventIntakeBroker` | `GetStatusAsync()`, `PollAsync()` | operators (`events.admin`) |
+| `IEventDigestsBroker` | `ListAsync(catalog)`, `GetAsync`, `CreateAsync(DigestSpec)`, `UpdateAsync`, `DeleteAsync(expectedRevision)`, `PreviewAsync`, `SendNowAsync`, `ListRunsAsync(DigestRunQuery)` | the caller's active organization, which reads the catalog; its own digests only (`events.admin`) |
 
 - Every call acts for the current principal (the kernel's `ICurrentPrincipal`); a Form 1 host supplies its own.
 - Record rules live in the module, on Events' rows: a catalog the caller cannot read answers `NotFound`, never
   `Forbidden`; tracking keys by the caller's (`iss`, `org_id`), so another organization's tracking never answers.
-- Failures are `Result` errors from `EventsErrors`: `NotFound` (catalog, event, observation, tracking), `Conflict`
+- Failures are `Result` errors from `EventsErrors`: `NotFound` (catalog, event, observation, tracking, digest), `Conflict`
   (revision, key, review state), `Forbidden` (organization required, not the catalog's owner), `Validation`.
 - Wire enums are camelCase strings (`movedOnline`, `inviteOnly`, `earlyBird`); dates are ISO strings; a localized text
   is an object of locale → text.
@@ -62,6 +63,14 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 | `PUT api/events/v1/workflow` (body `WorkflowSpec`) | workflows `PutAsync` | `events.track` · `events:admin` |
 | `GET api/events/v1/intake` | intake `GetStatusAsync` | `events.admin` · `events:admin` |
 | `POST api/events/v1/intake/poll` | intake `PollAsync` | `events.admin` · `events:admin` |
+| `GET …/catalogs/{c}/digests` | digests `ListAsync` | `events.admin` · `events:admin` |
+| `GET …/catalogs/{c}/digests/{id}` | digests `GetAsync` | `events.admin` · `events:admin` |
+| `POST …/catalogs/{c}/digests` (body `DigestSpec`) | digests `CreateAsync` → 201 | `events.admin` · `events:admin` |
+| `PUT …/catalogs/{c}/digests/{id}` (body `DigestSpec`) | digests `UpdateAsync` | `events.admin` · `events:admin` |
+| `DELETE …/catalogs/{c}/digests/{id}?expectedRevision=` | digests `DeleteAsync` | `events.admin` · `events:admin` |
+| `POST …/catalogs/{c}/digests/{id}/preview` | digests `PreviewAsync` | `events.admin` · `events:admin` |
+| `POST …/catalogs/{c}/digests/{id}/send` | digests `SendNowAsync` | `events.admin` · `events:admin` |
+| `GET …/catalogs/{c}/digests/{id}/runs?cursor&limit` | digests `ListRunsAsync` | `events.admin` · `events:admin` |
 | `POST signals/identity` | Identity's revocation signals | signed by the trusted issuer |
 
 | Error type | Status |
@@ -94,6 +103,26 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 - One page per transaction: observations, source posts, event changes and the cursor commit together.
 - SCFD wire (`GET api/subscriptions/{id}/events?cursor=&limit=`, `{ data: { data: [DeliveryEvent], next, hasMore } }`)
   is read by Events' own reader until `Harvest.Client` is on a registry (events-integration #15).
+
+## Digests (V07)
+
+- `DigestSpec`: `name`, `enabled`, `channel` (`telegram`, `log`), `schedule` (`days` as `monday`…, `times` as `HH:mm`,
+  `timeZone` IANA), `selection` (`newSinceLastRun`, `startingWithinDays`, `deadlineWithinDays`, `statuses`, `kinds`,
+  `cities`, `trackedOnly`), `recipients` (`{ subject }` or `{ role }`, each with an optional `language`), `language`
+  (`uz-Latn`, `ru`, `en`), `itemCap` (1–50), `linkTemplate` (`{id}`, `{key}`, `{catalog}`), `expectedRevision`.
+  `DigestModel` adds `id`, `catalog`, `nextRunAtUtc`, `lastRunAtUtc`, `revision` and the times.
+- A run (`DigestRunModel`): `occurrenceAtUtc` (unique per digest), `trigger` (`schedule`, `manual`), `status` (`running`,
+  `completed`, `partial`, `failed`, `empty`, `missed`), `matched`, `selected`, `eventIds`, `texts` (one per language),
+  `recipients` (`subject`, `language`, `status`, `error`, `attempts`), `notes`. Recipient statuses are Identity's app
+  notice words: `pending`, `sent`, `not_linked`, `muted`, `failed`.
+- Texts are Telegram's HTML subset (`b`, `i`, `a href`), at most 4,096 characters; the preview returns the texts a send
+  now at that instant sends.
+- Seams the host binds: `IDigestDelivery` (one per channel; `AddIdentityTelegramDigestDelivery()` over Identity's
+  `IAppNoticeBroker`, the `log` channel always) and `IDigestRecipientResolver` (a role's members; unbound by default).
+- Scheduler (`AddEventDigests`, `Events:Digests`): `Enabled`, `PollInterval` (30 s), `CatchUpWindow` (6 h; an older
+  occurrence is recorded `missed`), `LeaseDuration` (5 min; a dead host's run resumes after it), `MaxAttempts` (5, for
+  rate limits and outages, after `Retry-After`), `LinkTemplates:{catalog}`. Each recipient's idempotency key is
+  `events-digest:{runId}:{sub}`, so a resumed run sends nothing twice.
 
 ## Imports — `wow2.events-import.v1`
 

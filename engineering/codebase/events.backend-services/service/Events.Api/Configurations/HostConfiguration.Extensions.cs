@@ -9,7 +9,8 @@ namespace Events.Api.Configurations;
 
 public static partial class HostConfiguration
 {
-    /// <summary>Hosts the Form 1 module over the service's PostgreSQL database, with its own migration set and the SCFD intake.</summary>
+    /// <summary>Hosts the Form 1 module over the service's PostgreSQL database, with its own migration set, the SCFD intake
+    /// and the digests' scheduler.</summary>
     private static WebApplicationBuilder AddEventsModule(this WebApplicationBuilder builder)
     {
         // Resolved on first use, so a test host's configuration overrides still reach the connection string.
@@ -18,6 +19,11 @@ public static partial class HostConfiguration
 
         // The SCFD pull: one poller per source of Events:Intake:Sources; none configured polls nothing.
         builder.Services.AddEventsIntake(builder.Configuration);
+
+        // Digests (V07): the scheduler of Events:Digests, the log channel, and Telegram through Identity's app notices
+        // when Events:Digests:Telegram names an Identity instance.
+        builder.Services.AddEventDigests(builder.Configuration);
+        builder.AddTelegramDigests();
         return builder;
     }
 

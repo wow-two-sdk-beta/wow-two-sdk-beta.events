@@ -1,6 +1,7 @@
 using WoW.Two.Sdk.Beta.Be.Events.Calendar;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
+using WoW.Two.Sdk.Beta.Be.Events.Digests;
 using WoW.Two.Sdk.Beta.Be.Events.Imports;
 using WoW.Two.Sdk.Beta.Be.Events.Intake;
 using WoW.Two.Sdk.Beta.Be.Events.Review;
@@ -18,6 +19,7 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Testing.Conformance;
 /// <param name="Imports">The imports broker.</param>
 /// <param name="Calendar">The calendar broker.</param>
 /// <param name="Intake">The intake broker.</param>
+/// <param name="Digests">The digests broker.</param>
 public sealed record EventsBrokerSet(
     IEventCatalogsBroker Catalogs,
     ICatalogEventsBroker Events,
@@ -26,4 +28,5 @@ public sealed record EventsBrokerSet(
     IEventWorkflowsBroker Workflows,
     IEventImportsBroker Imports,
     IEventCalendarBroker Calendar,
-    IEventIntakeBroker Intake);
+    IEventIntakeBroker Intake,
+    IEventDigestsBroker Digests);
