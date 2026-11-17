@@ -497,7 +497,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private static string FactsError(EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict) =>
         TryFacts(source, payload, kinds, verdict, out _, out var reason) ? string.Empty : reason;
 
-    private static bool TryFacts(
+    internal static bool TryFacts(
         EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict,
         out EventFacts facts, out string reason)
     {
@@ -505,7 +505,9 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         if (!ScfdEventMapper.TryMap(payload, kinds, out var mapped, out reason))
             return false;
 
-        if (!string.IsNullOrWhiteSpace(source.DefaultCountry) && mapped.Place?.Country is null)
+        // The source's country is the operator's knowledge of the source, so it covers the cities the operator names: a
+        // record naming another city (a foreign fair on a UZ source) keeps no country rather than a wrong one.
+        if (!string.IsNullOrWhiteSpace(source.DefaultCountry) && mapped.Place?.Country is null && InDefaultCountry(source, mapped.Place?.City))
             mapped = mapped with { Place = (mapped.Place ?? new EventPlace()) with { Country = source.DefaultCountry.Trim().ToUpperInvariant() } };
         // The kind, in order: the classifier's, when the catalog holds it; the record's own, when the mapper read one; the
         // source's DefaultKind, when the record maps to `other` and the catalog holds it.
@@ -523,6 +525,10 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         facts = valid;
         return true;
     }
+
+    /// <summary>Tells whether the source's default country covers the record's city: no city, no list of cities, or a city on it.</summary>
+    private static bool InDefaultCountry(EventsIntakeSourceOptions source, string? city) =>
+        city is null || source.DefaultCities.Count == 0 || source.DefaultCities.Any(known => CityNames.Same(known, city));
 
     /// <summary>Applies an automatic review to a candidate: publishes it when the classifier marks it relevant, otherwise
     /// keeps it a candidate with the classifier's reason; nothing under manual review.</summary>

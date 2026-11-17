@@ -51,4 +51,28 @@ public sealed class EventsIntakeRegistrationTests
         provider.GetRequiredService<IObservationFeed>().Should().BeOfType<ScfdObservationFeed>();
         provider.GetServices<IHostedService>().Should().ContainSingle().Which.Should().BeOfType<IntakePoller>();
     }
+
+    /// <summary>The list and the kind <c>deploy.yml</c> types: indexed keys bind to <c>DefaultCities</c>, a plain key to
+    /// <c>DefaultKind</c>.</summary>
+    [Fact]
+    public void AddEventsIntake_ShouldBindTheDefaultCitiesAndTheDefaultKind()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Events:Intake:Sources:0:Name"] = "afisha-exhibitions",
+            ["Events:Intake:Sources:0:Catalog"] = "ocharo-fashion",
+            ["Events:Intake:Sources:0:DefaultCountry"] = "UZ",
+            ["Events:Intake:Sources:0:DefaultCities:0"] = "Tashkent",
+            ["Events:Intake:Sources:0:DefaultCities:1"] = "Samarkand",
+            ["Events:Intake:Sources:0:DefaultKind"] = "exhibition",
+        }).Build();
+        var services = new ServiceCollection().AddLogging();
+
+        services.AddEventsIntake(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var source = provider.GetRequiredService<IOptions<EventsIntakeOptions>>().Value.Sources.Single();
+        source.DefaultCities.Should().Equal("Tashkent", "Samarkand");
+        source.DefaultKind.Should().Be("exhibition");
+    }
 }

@@ -235,6 +235,29 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         (await EventsAsync(slug, new EventQuery())).Single().Facts.Website.Should().BeNull();
     }
 
+    /// <summary>A foreign fair announced on a UZ source read as a local event, its country stamped by <c>DefaultCountry</c>
+    /// (events-integration E11): once the source names its cities, a published event of another city loses the country
+    /// through the backlog pass, once, and a Uzbek city keeps it.</summary>
+    [Fact]
+    public async Task Intake_ShouldLeaveTheCountryUnset_WhenTheCityIsNotOneOfTheSourcesDefaultCities()
+    {
+        var (slug, source) = await SourceAsync(auto => { auto.Review = "auto"; auto.DefaultCountry = "UZ"; });
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Salon de Paris", edit: data => data["place"] = new { mentions = new object[] { new { text = "Париж", kind = "city" } } }));
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Fashion in Tashkent", edit: data => data["place"] = new { mentions = new object[] { new { text = "Ташкент", kind = "city" } } }));
+        await fixture.PollAsync(source);
+        (await EventsAsync(slug, new EventQuery())).Should().OnlyContain(item => item.Facts.Place!.Country == "UZ", "no list of cities stamps every record");
+
+        source.DefaultCities.Add("Toshkent");
+        source.DefaultCities.Add("Samarkand");
+        var pass = await BacklogAsync(source, batch: 100);
+        var again = await BacklogAsync(source, batch: 100);
+
+        pass.Should().Be(new BacklogPass(Checked: 2, Remapped: 1, Published: 0));
+        again.Should().Be(new BacklogPass(Checked: 2, Remapped: 0, Published: 0), "a second pass finds nothing new");
+        var countries = (await EventsAsync(slug, new EventQuery())).ToDictionary(item => item.Facts.Title.Values.Single(), item => item.Facts.Place!.Country);
+        countries.Should().Equal(new Dictionary<string, string?> { ["Salon de Paris"] = null, ["Fashion in Tashkent"] = "UZ" });
+    }
+
     [Fact]
     public async Task Intake_ShouldTakeTheClassifiersKind_WhenItIsACatalogKind()
     {

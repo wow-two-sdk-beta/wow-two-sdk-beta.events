@@ -106,6 +106,10 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   as candidates; `manual` keeps every record for a person. The classifier is `filter` (SCFD's subscription filter passed
   the record) or `payload` (the record's own `classification`: classifier, verdict, confidence, reason), so an AI
   relevance step needs no rework here. The classifier and its verdict are recorded as the reviewer and the reason.
+- a source's `DefaultCountry` is the operator's knowledge of the source, so it covers the cities the source names
+  (`DefaultCities`, Uzbekistan's regional centres for the Afisha sources): a record naming another city (a foreign fair
+  announced on a UZ source) keeps no country, a record naming no city takes the source's, and a country the record names
+  stands. A source with no list gives the country to every record.
 - a sourced event's kind, in order: the classifier's, when the catalog's taxonomy holds it; the kind the record itself
   names; the source's `DefaultKind` (an exhibitions feed reads `exhibition`), when the record maps to `other` and the
   taxonomy holds it; else `other`. A reviewer's kind stands over all of them.

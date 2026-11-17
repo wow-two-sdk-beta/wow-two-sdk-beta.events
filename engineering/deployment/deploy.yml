@@ -90,6 +90,25 @@ services:
         Events:Intake:Sources:0:Filter: { default: ocharo-fashion-v1 }
         # afisha.uz lists Uzbekistan's events and its records name no country: the operator's knowledge of the source.
         Events:Intake:Sources:0:DefaultCountry: { default: UZ }
+        # The cities DefaultCountry covers (events-integration E11): a record naming another city, such as a foreign fair on
+        # this UZ source, keeps no country. Uzbekistan's regional centres by their Latin names; the city table matches each in
+        # its Russian, Uzbek Latin and Cyrillic spellings too. A record naming no city still takes the country.
+        Events:Intake:Sources:0:DefaultCities:0: { default: Tashkent }
+        Events:Intake:Sources:0:DefaultCities:1: { default: Samarkand }
+        Events:Intake:Sources:0:DefaultCities:2: { default: Bukhara }
+        Events:Intake:Sources:0:DefaultCities:3: { default: Khiva }
+        Events:Intake:Sources:0:DefaultCities:4: { default: Namangan }
+        Events:Intake:Sources:0:DefaultCities:5: { default: Andijan }
+        Events:Intake:Sources:0:DefaultCities:6: { default: Fergana }
+        Events:Intake:Sources:0:DefaultCities:7: { default: Margilan }
+        Events:Intake:Sources:0:DefaultCities:8: { default: Kokand }
+        Events:Intake:Sources:0:DefaultCities:9: { default: Nukus }
+        Events:Intake:Sources:0:DefaultCities:10: { default: Karshi }
+        Events:Intake:Sources:0:DefaultCities:11: { default: Termez }
+        Events:Intake:Sources:0:DefaultCities:12: { default: Navoi }
+        Events:Intake:Sources:0:DefaultCities:13: { default: Jizzakh }
+        Events:Intake:Sources:0:DefaultCities:14: { default: Gulistan }
+        Events:Intake:Sources:0:DefaultCities:15: { default: Urgench }
         # The organization that must own the catalog (its org_id at the issuer): intake refuses a catalog anyone else owns,
         # so a slug alone never routes sourced records. Without it the source pulls nothing.
         Events:Intake:Sources:0:OwnerOrg: { required: true }
@@ -109,6 +128,22 @@ services:
         Events:Intake:Sources:1:Classifier: { from: Events:Intake:Sources:0:Classifier }
         Events:Intake:Sources:1:Filter: { from: Events:Intake:Sources:0:Filter }
         Events:Intake:Sources:1:DefaultCountry: { from: Events:Intake:Sources:0:DefaultCountry }
+        Events:Intake:Sources:1:DefaultCities:0: { from: Events:Intake:Sources:0:DefaultCities:0 }
+        Events:Intake:Sources:1:DefaultCities:1: { from: Events:Intake:Sources:0:DefaultCities:1 }
+        Events:Intake:Sources:1:DefaultCities:2: { from: Events:Intake:Sources:0:DefaultCities:2 }
+        Events:Intake:Sources:1:DefaultCities:3: { from: Events:Intake:Sources:0:DefaultCities:3 }
+        Events:Intake:Sources:1:DefaultCities:4: { from: Events:Intake:Sources:0:DefaultCities:4 }
+        Events:Intake:Sources:1:DefaultCities:5: { from: Events:Intake:Sources:0:DefaultCities:5 }
+        Events:Intake:Sources:1:DefaultCities:6: { from: Events:Intake:Sources:0:DefaultCities:6 }
+        Events:Intake:Sources:1:DefaultCities:7: { from: Events:Intake:Sources:0:DefaultCities:7 }
+        Events:Intake:Sources:1:DefaultCities:8: { from: Events:Intake:Sources:0:DefaultCities:8 }
+        Events:Intake:Sources:1:DefaultCities:9: { from: Events:Intake:Sources:0:DefaultCities:9 }
+        Events:Intake:Sources:1:DefaultCities:10: { from: Events:Intake:Sources:0:DefaultCities:10 }
+        Events:Intake:Sources:1:DefaultCities:11: { from: Events:Intake:Sources:0:DefaultCities:11 }
+        Events:Intake:Sources:1:DefaultCities:12: { from: Events:Intake:Sources:0:DefaultCities:12 }
+        Events:Intake:Sources:1:DefaultCities:13: { from: Events:Intake:Sources:0:DefaultCities:13 }
+        Events:Intake:Sources:1:DefaultCities:14: { from: Events:Intake:Sources:0:DefaultCities:14 }
+        Events:Intake:Sources:1:DefaultCities:15: { from: Events:Intake:Sources:0:DefaultCities:15 }
         # The kind an exhibitions feed's records take when nothing names one (events-integration E12): the catalog's taxonomy
         # must hold it, and a classifier's kind or the record's own wins. afisha-fashion sets none and stays `other`.
         Events:Intake:Sources:1:DefaultKind: { default: exhibition }

@@ -77,6 +77,13 @@ public sealed class EventsIntakeSourceOptions
     /// names none: the operator's knowledge of the source, never a guess about one record.</summary>
     public string? DefaultCountry { get; set; }
 
+    /// <summary>Gets the cities <see cref="DefaultCountry"/> covers, each in any spelling the city table knows (<c>Ташкент</c>,
+    /// <c>Toshkent</c> and <c>Tashkent</c> name one city), or exactly as written for a city it does not know; compared
+    /// without case and apostrophes. A record names a city of its own: the default country applies only when that city is
+    /// one of these, so a foreign fair announced on a UZ source never reads as a local event. Empty applies the country to
+    /// every record, which is also what a record naming no city gets.</summary>
+    public IList<string> DefaultCities { get; init; } = new List<string>();
+
     /// <summary>Gets or sets the kind the source's records take when nothing else names one, such as <c>exhibition</c> for an
     /// exhibitions feed: applied when the record maps to <c>other</c>, no classifier gives a kind of the catalog and the
     /// catalog's taxonomy holds it. A classifier's kind, and a kind the record itself names, take precedence; none leaves

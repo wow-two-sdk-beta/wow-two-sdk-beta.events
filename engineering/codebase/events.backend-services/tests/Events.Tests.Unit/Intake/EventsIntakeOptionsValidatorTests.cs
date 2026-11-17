@@ -71,6 +71,24 @@ public sealed class EventsIntakeOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_ShouldAcceptDefaultCities_AndRefuseABlankOrOverlongName()
+    {
+        var named = Source("afisha-fashion");
+        named.DefaultCities.Add("Ташкент");
+        named.DefaultCities.Add("Qo'qon");
+        var blank = Source("afisha-exhibitions");
+        blank.DefaultCities.Add("  ");
+        var overlong = Source("anons-events");
+        overlong.DefaultCities.Add(new string('x', 201));
+
+        Validate(named).Succeeded.Should().BeTrue();
+        var failures = Validate(named, blank, overlong).Failures!.ToList();
+
+        failures.Should().HaveCount(2);
+        failures.Should().Contain(failure => failure.Contains("Sources:1:DefaultCities")).And.Contain(failure => failure.Contains("Sources:2:DefaultCities"));
+    }
+
+    [Fact]
     public void Validate_ShouldNotNeedAUrl_ForADisabledSource()
     {
         var source = Source("off");
