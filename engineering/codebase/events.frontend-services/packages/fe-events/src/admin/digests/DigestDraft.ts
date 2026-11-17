@@ -142,21 +142,80 @@ export function formatRecipients(recipients: readonly DigestRecipient[]): string
     .join('\n');
 }
 
-/** Writes an instant in a zone, such as a digest's next run in Tashkent time; the zone's name follows. */
+interface ZoneWords {
+  readonly months: readonly string[];
+  readonly weekdays: readonly string[];
+  /** Writes the date and time from its words; `weekday` is the name of the day, Sunday first in `weekdays`. */
+  readonly write: (day: number, month: string, year: number, weekday: string, time: string) => string;
+}
+
+/** Fixed names keep a digest's dates identical in every browser, whatever its ICU data (`uz` falls back to `M11`). */
+const zoneWords: Record<EventsLocale, ZoneWords> = {
+  en: {
+    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    write: (day, month, year, weekday, time) => `${weekday}, ${month} ${day}, ${year}, ${time}`,
+  },
+  ru: {
+    months: [
+      'января',
+      'февраля',
+      'марта',
+      'апреля',
+      'мая',
+      'июня',
+      'июля',
+      'августа',
+      'сентября',
+      'октября',
+      'ноября',
+      'декабря',
+    ],
+    weekdays: ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'],
+    write: (day, month, year, weekday, time) => `${day} ${month} ${year}, ${weekday} ${time}`,
+  },
+  uz: {
+    months: [
+      'yanvar',
+      'fevral',
+      'mart',
+      'aprel',
+      'may',
+      'iyun',
+      'iyul',
+      'avgust',
+      'sentabr',
+      'oktabr',
+      'noyabr',
+      'dekabr',
+    ],
+    weekdays: ['yakshanba', 'dushanba', 'seshanba', 'chorshanba', 'payshanba', 'juma', 'shanba'],
+    write: (day, month, year, weekday, time) => `${day}-${month} ${year}, ${weekday} ${time}`,
+  },
+};
+
+/**
+ * Writes an instant in a zone, such as a digest's next run in Tashkent time, with the kit's own month and weekday names
+ * (`23-noyabr 2026, dushanba 09:00` in Uzbek); the zone's name follows. The unreadable instant or zone comes back as it was.
+ */
 export function formatInZone(utc: string, timeZone: string, locale: EventsLocale): string {
-  const tag = locale === 'uz' ? 'uz-Latn' : locale;
   try {
-    const text = new Intl.DateTimeFormat(tag, {
+    const parts = new Intl.DateTimeFormat('en-US', {
       timeZone,
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
       year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
       hourCycle: 'h23',
-    }).format(new Date(utc));
-    return `${text} (${timeZone})`;
+    }).formatToParts(new Date(utc));
+    const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((item) => item.type === type)?.value);
+    const [year, month, day, hour, minute] = [part('year'), part('month'), part('day'), part('hour'), part('minute')];
+    if ([year, month, day, hour, minute].some(Number.isNaN)) return utc;
+    const words = zoneWords[locale];
+    const weekday = words.weekdays[new Date(Date.UTC(year, month - 1, day)).getUTCDay()]!;
+    const time = `${String(hour % 24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    return `${words.write(day, words.months[month - 1]!, year, weekday, time)} (${timeZone})`;
   } catch {
     return utc;
   }

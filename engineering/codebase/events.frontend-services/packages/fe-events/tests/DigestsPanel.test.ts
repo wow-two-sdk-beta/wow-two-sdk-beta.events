@@ -88,6 +88,7 @@ describe('digests panel', () => {
 
     expect(wrapper.get('[data-test="digest-item"]').text()).toContain('Ocharo weekly');
     expect(wrapper.get('[data-test="digest-next-run"]').text()).toContain('Mon, Nov 23, 2026, 09:00 (Asia/Tashkent)');
+    expect(wrapper.get('[data-test="digest-item"]').text()).toContain('Mon, Nov 23, 2026, 09:00 (Asia/Tashkent)');
     expect((wrapper.get('input[name="times"]').element as HTMLInputElement).value).toBe('09:00');
     expect((wrapper.get('textarea[name="recipients"]').element as HTMLTextAreaElement).value).toBe(
       `${linked}\n${unlinked} ru`,
@@ -144,11 +145,9 @@ describe('digests panel', () => {
     expect(requests.some((request) => request.method === 'POST')).toBe(false);
   });
 
-  it('previews the messages, then sends now after a confirmation', async () => {
-    vi.stubGlobal(
-      'confirm',
-      vi.fn(() => true),
-    );
+  it('previews the messages, then sends now after a confirmation in the app’s own dialog', async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
     const { wrapper, requests } = await render();
 
     await wrapper.get('[data-test="digest-preview"]').trigger('click');
@@ -159,16 +158,76 @@ describe('digests panel', () => {
 
     await wrapper.get('[data-test="digest-send"]').trigger('click');
     await flushPromises();
-    expect(requests.some((request) => request.method === 'POST' && request.url.endsWith('/digests/d1/send'))).toBe(
-      true,
+    await dialogIs(true);
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'Send this digest to 2 recipients now?',
     );
+    expect(sends(requests)).toBe(0);
+
+    await dialogButton('digest-send-accept').click();
+    await flushPromises();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(sends(requests)).toBe(1);
+    await dialogIs(false);
     expect(
       wrapper
         .findAll('[data-test="digest-sent"] [data-test="digest-recipient"]')
         .map((item) => item.attributes('data-status')),
     ).toEqual(['sent', 'not_linked']);
   });
+
+  it('sends nothing when the dialog is cancelled or dismissed with Escape', async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const { wrapper, requests } = await render();
+
+    await wrapper.get('[data-test="digest-send"]').trigger('click');
+    await flushPromises();
+    await dialogIs(true);
+    await dialogButton('digest-send-cancel').click();
+    await dialogIs(false);
+
+    await wrapper.get('[data-test="digest-send"]').trigger('click');
+    await flushPromises();
+    await dialogIs(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await dialogIs(false);
+
+    expect(sends(requests)).toBe(0);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-test="digest-sent"]').exists()).toBe(false);
+  });
+
+  it('asks in the reader’s language', async () => {
+    const { wrapper } = await render(serve(), { locale: 'uz' });
+
+    await wrapper.get('[data-test="digest-send"]').trigger('click');
+    await flushPromises();
+
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'Dayjest hozir 2 ta qabul qiluvchiga yuborilsinmi?',
+    );
+  });
 });
+
+/** Counts the send requests a panel made. */
+const sends = (requests: readonly Request[]) =>
+  requests.filter((request) => request.method === 'POST' && request.url.endsWith('/digests/d1/send')).length;
+
+/** Waits for the confirmation dialog to open, or to leave the document after its closing animation. */
+const dialogIs = (open: boolean) =>
+  vi.waitFor(() => {
+    const dialog = document.body.querySelector('[role="alertdialog"]');
+    if (open) expect(dialog?.closest('[data-state]')?.getAttribute('data-state')).toBe('open');
+    else expect(dialog).toBeNull();
+  });
+
+/** Finds a button of the open dialog, which sits in the document, outside the panel. */
+function dialogButton(name: string): HTMLButtonElement {
+  const button = document.body.querySelector<HTMLButtonElement>(`[data-test="${name}"]`);
+  if (!button) throw new Error(`No dialog button ${name}`);
+  return button;
+}
 
 describe('telegram text', () => {
   it('renders the subset and never a script or a foreign link', () => {

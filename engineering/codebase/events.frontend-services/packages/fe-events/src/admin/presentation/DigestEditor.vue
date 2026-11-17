@@ -1,6 +1,17 @@
 <script setup lang="ts">
+import { useConfirmation } from '@wow-two-beta/fe/foundation/hooks';
 import { Button } from '@wow-two-beta/fe/presentation/actions';
 import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
+import {
+  AlertModal,
+  AlertModalAction,
+  AlertModalCancel,
+  AlertModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@wow-two-beta/fe/presentation/overlays';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import {
   DigestChannelConstants,
@@ -88,6 +99,15 @@ const savedNotice = shallowRef(false);
 const confirmingDelete = shallowRef(false);
 const lastRun = shallowRef<DigestRunModel | null>(null);
 const shownPreview = shallowRef<DigestPreviewModel | null>(null);
+/** Asks the send-now confirmation in the app's own dialog; the request carries the recipient count. */
+const {
+  request: sendRequest,
+  confirm: confirmSend,
+  accept: acceptSend,
+  cancel: cancelSend,
+} = useConfirmation<number>();
+/** Keeps the count the dialog shows while it closes, after the request is cleared. */
+const sendCount = shallowRef(0);
 
 const failure = computed(
   () => load.failure.value ?? save.failure.value ?? remove.failure.value ?? preview.failure.value ?? send.failure.value,
@@ -180,7 +200,8 @@ async function showPreview() {
 async function sendNow() {
   if (!digest.value) return;
   const count = shownPreview.value?.recipients.length ?? digest.value.recipients.length;
-  if (!window.confirm(eventsText('digestConfirmSend', props.locale, { count }))) return;
+  sendCount.value = count;
+  if (!(await confirmSend(count))) return;
   const run = await send.run(digest.value.id);
   if (!run) return;
   lastRun.value = run;
@@ -444,6 +465,21 @@ watch([() => props.catalog, () => props.digestId, () => props.client], reload);
         </template>
       </div>
     </form>
+
+    <AlertModal :open="sendRequest !== null" @update:open="(open: boolean) => !open && cancelSend()">
+      <AlertModalContent data-test="digest-send-confirm">
+        <ModalHeader>
+          <ModalTitle>{{ eventsText('digestSendNow', locale) }}</ModalTitle>
+          <ModalDescription>{{ eventsText('digestConfirmSend', locale, { count: sendCount }) }}</ModalDescription>
+        </ModalHeader>
+        <ModalFooter>
+          <AlertModalCancel data-test="digest-send-cancel">{{ eventsText('cancel', locale) }}</AlertModalCancel>
+          <AlertModalAction data-test="digest-send-accept" @action="acceptSend">
+            {{ eventsText('digestSendNow', locale) }}
+          </AlertModalAction>
+        </ModalFooter>
+      </AlertModalContent>
+    </AlertModal>
 
     <section
       v-if="shownPreview"
