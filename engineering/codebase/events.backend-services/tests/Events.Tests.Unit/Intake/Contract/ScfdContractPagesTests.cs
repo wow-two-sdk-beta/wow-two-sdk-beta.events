@@ -17,7 +17,8 @@ public sealed partial class ScfdContractPagesTests
     private static readonly string[] Kinds = ["runway", "expo"];
 
     private static readonly string[] KnownTypes =
-        ["post.new", "post.changed", "post.extracted", "post.relisted", "post.unmerged", "post.merged", "post.purged", "link.state", "pipeline.run", "pipeline.health"];
+        ["post.new", "post.changed", "post.extracted", "post.relisted", "post.unmerged", "post.merged", "post.purged", "post.unmatched", "link.state",
+         "pipeline.run", "pipeline.health"];
 
     [Fact]
     public void Manifest_ShouldMatchEveryCopiedFile_ByteForByte()
@@ -77,9 +78,9 @@ public sealed partial class ScfdContractPagesTests
 
         var subscription = await feed.ReadSubscriptionAsync(ContractPages.Source(), CancellationToken.None);
 
-        subscription.Should().Be(new ScfdSubscription(FilterKey: null, Schema: EventsConstants.EventSchema, State: ScfdSubscription.ActiveState));
-        subscription.MismatchWith(ContractPages.Source()).Should().BeNull("a source that names no filter takes an unfiltered subscription");
-        subscription.MismatchWith(ContractPages.Source(named => named.Filter = "ocharo-fashion-v1")).Should().Be("filter-mismatch", "the golden subscription carries no filter");
+        subscription.Should().Be(new ScfdSubscription(FilterKey: "ocharo-fashion-v1", Schema: EventsConstants.EventSchema, State: ScfdSubscription.ActiveState));
+        subscription.MismatchWith(ContractPages.Source(named => named.Filter = "ocharo-fashion-v1")).Should().BeNull("the golden subscription carries Ocharo's filter");
+        subscription.MismatchWith(ContractPages.Source(named => named.Filter = "another-filter-v1")).Should().Be("filter-mismatch");
     }
 
     /// <summary>An empty page returns the cursor it was sent, and Events keeps <c>page.Next ?? cursor</c>: the cursor never
@@ -104,11 +105,11 @@ public sealed partial class ScfdContractPagesTests
         record.Type.Should().Be("post.new");
         record.Reason.Should().Be("ingest");
         ScfdEventMapper.TryMap(data, Kinds, out var facts, out _).Should().BeTrue();
-        facts.Title.Should().Equal(new Dictionary<string, string> { ["ru-Cyrl"] = "Вечер живого джаза" });
+        facts.Title.Should().Equal(new Dictionary<string, string> { ["ru-Cyrl"] = "Показ коллекций молодых дизайнеров" });
         facts.Kind.Should().Be("other", "the record names no kind");
         facts.Starts.Should().Be(new EventWhen { Value = "2026-12-05T19:00", Precision = DatePrecision.Minute, Certainty = DateCertainty.Announced });
         facts.Ends.Should().Be(new EventWhen { Value = "2026-12-06", Precision = DatePrecision.Day, Certainty = DateCertainty.Announced });
-        facts.Organizer.Should().Be(new EventOrganizer { Name = "Tashkent Jazz Club", Website = "https://jazz.example.test/" });
+        facts.Organizer.Should().Be(new EventOrganizer { Name = "Tashkent Designers Club", Website = "https://designers.example.test/" });
         facts.Place.Should().Be(new EventPlace
         {
             Venue = "Дворец Истиклол", Address = "ул. Амира Темура, 107", City = "Tashkent", Latitude = 41.3139, Longitude = 69.2803,
@@ -116,19 +117,66 @@ public sealed partial class ScfdContractPagesTests
         data.GetRawText().Should().Contain("\"Ташкент\"", "the record keeps the source's spelling; only the fact takes the canonical city");
         facts.Offers.Should().ContainSingle().Which.Should().Be(new EventOffer { Kind = OfferKind.Ticket, MinPrice = 150000, MaxPrice = 150000, Currency = "UZS" });
         facts.Website.Should().BeNull("SCFD marks the aggregator's own venue page `site`, and it is no website of the event");
-        facts.TicketUrl.Should().Be("https://afisha.example.test/events/jazz-night/tickets");
+        facts.TicketUrl.Should().Be("https://afisha.example.test/events/designers-show/tickets");
         facts.Languages.Should().Equal("ru-Cyrl");
         facts.Images.Should().BeEmpty("sourced media stays evidence (events-integration #50)");
         facts.Summary.Should().BeEmpty("sourced text stays evidence");
+        facts.Deadlines.Should().BeEmpty("the page states none");
+        facts.TimeZone.Should().BeNull("the mapper alone knows no source's zone");
 
-        ScfdEventMapper.MappingVersion(data).Should().Be("wow2.event.v1/norm@1/rules@4/schema.org.event");
+        ScfdEventMapper.MappingVersion(data).Should().Be("wow2.event.v1/norm@1/rules@5/schema.org.event");
         ScfdEventMapper.PostState(data).Should().Be("live");
         ScfdEventMapper.MergedInto(data).Should().BeNull();
         var link = ScfdEventMapper.Links(data).Should().ContainSingle("the capture is the link's own").Subject;
-        link.Url.Should().Be("https://afisha.example.test/events/jazz-night");
+        link.Url.Should().Be("https://afisha.example.test/events/designers-show");
         link.SourceId.Should().Be("00000000-0000-7000-8000-000000000007");
         link.CaptureId.Should().Be("00000000-0000-7000-8000-000000000008");
-        link.CapturedAtUtc.Should().Be(new DateTimeOffset(2026, 11, 10, 9, 2, 0, TimeSpan.Zero));
+        link.CapturedAtUtc.Should().Be(new DateTimeOffset(2026, 11, 10, 9, 3, 0, TimeSpan.Zero));
+    }
+
+    /// <summary>The start's stated offset (<c>+05:00</c>) is Tashkent's own on its date, so a source whose events happen in
+    /// <c>Asia/Tashkent</c> gives the event that zone (E08); another zone, or none, gives none.</summary>
+    [Fact]
+    public async Task NewPost_ShouldTakeTheSourcesTimeZone_WhenTheStartsOffsetIsItsOwn()
+    {
+        var data = (await ReadAsync("01-new.json")).Records.Single().Data!.Value;
+
+        Facts(data, "Asia/Tashkent").TimeZone.Should().Be("Asia/Tashkent");
+        Facts(data, "Europe/Moscow").TimeZone.Should().BeNull("Moscow's offset is +03:00");
+        Facts(data, null).TimeZone.Should().BeNull("the source names no zone");
+        Facts(data, "Mars/Olympus").TimeZone.Should().BeNull("an unknown zone sets none");
+    }
+
+    /// <summary>The deadline page (harvest E07): a Craftfair-shaped post states one application deadline in the top-level
+    /// <c>deadlines</c> list, which maps to one application deadline at its stated minute (E08).</summary>
+    [Fact]
+    public async Task DeadlinePage_ShouldMapOneApplicationDeadline()
+    {
+        var record = (await ReadAsync("09-deadline.json")).Records.Single();
+
+        record.Type.Should().Be("post.new");
+        var facts = Facts(record.Data!.Value, "Asia/Tashkent");
+        facts.Deadlines.Should().Equal(new EventDeadline
+        {
+            Kind = DeadlineKind.Application,
+            At = new EventWhen { Value = "2026-10-26T23:59", Precision = DatePrecision.Minute, Certainty = DateCertainty.Announced },
+        });
+        facts.Starts.Should().Be(new EventWhen { Value = "2026-11-25", Precision = DatePrecision.Day, Certainty = DateCertainty.Announced });
+        facts.TimeZone.Should().BeNull("a start with no time states no offset");
+    }
+
+    /// <summary>The unmatched page (harvest E03): a post delivered as new, then once as <c>post.unmatched</c> at its next
+    /// revision with that revision's payload, which still maps; intake holds its event (E04).</summary>
+    [Fact]
+    public async Task UnmatchedPage_ShouldCarryTheSamePostOnceAsUnmatchedAtItsNextRevision()
+    {
+        var records = (await ReadAsync("10-unmatched.json")).Records;
+
+        records.Select(record => record.Type).Should().Equal("post.new", IntakeProcessor.UnmatchedType);
+        records[1].PostId.Should().Be(records[0].PostId);
+        records[1].Revision.Should().Be(records[0].Revision + 1);
+        ScfdEventMapper.PostState(records[1].Data).Should().Be("live", "the listing is still up; only the filter no longer passes it");
+        Title(records[1]).Should().NotBe(Title(records[0]), "the revision that stopped matching is off-topic content");
     }
 
     [Fact]
@@ -165,7 +213,7 @@ public sealed partial class ScfdContractPagesTests
         page.Records.Select(record => (record.Type, Post: record.PostId, record.Revision, State: ScfdEventMapper.PostState(record.Data), MergedInto: ScfdEventMapper.MergedInto(record.Data)))
             .Should().Equal(expected);
         Title(page.Records[4]).Should().NotBe(Title(page.Records[5]), "the unmerge restores the survivor's own content, which Events applies as a revision");
-        Title(page.Records[5]).Should().Be("Вечер живого джаза");
+        Title(page.Records[5]).Should().Be("Показ коллекций молодых дизайнеров");
     }
 
     /// <summary>The classification object harvest defines (<c>PostClassification</c>) is what Events' <c>payload</c>
@@ -253,6 +301,14 @@ public sealed partial class ScfdContractPagesTests
     }
 
     private static string? Title(ScfdDeliveryRecord record) => record.Data!.Value.GetProperty("title").GetString();
+
+    /// <summary>Reads a payload's facts as an Afisha source in the given zone delivers them.</summary>
+    private static EventFacts Facts(JsonElement data, string? zone)
+    {
+        var source = ContractPages.Source(zoned => zoned.DefaultTimeZone = zone);
+        IntakeProcessor.TryFacts(source, data, Kinds, null, out var facts, out var reason).Should().BeTrue(reason);
+        return facts;
+    }
 
     [GeneratedRegex("^[A-Za-z0-9+/]+={0,2}$")]
     private static partial Regex CursorPattern();

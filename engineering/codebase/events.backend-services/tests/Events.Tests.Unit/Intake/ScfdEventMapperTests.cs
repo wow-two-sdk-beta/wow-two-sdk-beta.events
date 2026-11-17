@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using WoW.Two.Sdk.Beta.Be.Events;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 
@@ -294,6 +295,52 @@ public sealed class ScfdEventMapperTests
         ScfdEventMapper.PostId(data).Should().Be(post);
         ScfdEventMapper.Revision(data).Should().Be(7);
         ScfdEventMapper.PostId(Json("\"text\"")).Should().BeNull();
+    }
+
+    /// <summary>Stated deadlines map at their own precision (E08); one whose date is unreadable is left out rather than
+    /// failing the record, and a kind Events does not know reads as <c>other</c>.</summary>
+    [Fact]
+    public void TryMap_ShouldReadTheStatedDeadlines_AndLeaveOutAnUnreadableOne()
+    {
+        var facts = Map("""
+            {"schema":"wow2.event.v1","title":"Fair","deadlines":[
+              {"kind":"application","value":"2026-10-26","precision":"day","raw":"26 October","status":"open"},
+              {"kind":"application","value":"soon","precision":"day"},
+              {"kind":"stand-booking","value":"2026-11","precision":"month"},
+              {"kind":"application","value":null,"precision":"day"}]}
+            """);
+
+        facts.Deadlines.Should().Equal(
+            new EventDeadline { Kind = DeadlineKind.Application, At = new EventWhen { Value = "2026-10-26", Precision = DatePrecision.Day } },
+            new EventDeadline { Kind = DeadlineKind.Other, At = new EventWhen { Value = "2026-11", Precision = DatePrecision.Month } });
+        Map("""{"schema":"wow2.event.v1","title":"Fair","deadlines":[]}""").Deadlines.Should().BeEmpty();
+        Map("""{"schema":"wow2.event.v1","title":"Fair"}""").Deadlines.Should().BeEmpty("a payload from before harvest E07 names none");
+    }
+
+    [Fact]
+    public void TryMap_ShouldKeepAtMostTheListLimitOfDeadlines()
+    {
+        var many = string.Join(',', Enumerable.Range(1, EventsConstants.MaxListLength + 10).Select(day => $$"""{"kind":"application","value":"2026-10-{{day % 28 + 1:00}}","precision":"day"}"""));
+
+        Map($$"""{"schema":"wow2.event.v1","title":"Fair","deadlines":[{{many}}]}""").Deadlines.Should().HaveCount(EventsConstants.MaxListLength);
+    }
+
+    /// <summary>A zone is set only when the start states an offset and that offset is the zone's own on that date.</summary>
+    [Theory]
+    [InlineData("2026-12-05T19:00:00+05:00", "Asia/Tashkent", "Asia/Tashkent")]
+    [InlineData("2026-12-05T19:00+05:00", "Asia/Tashkent", "Asia/Tashkent")]
+    [InlineData("2026-12-05T14:00:00Z", "Asia/Tashkent", null)]
+    [InlineData("2026-12-05T19:00:00", "Asia/Tashkent", null)]
+    [InlineData("2026-12-05", "Asia/Tashkent", null)]
+    [InlineData("2026-07-05T19:00:00+02:00", "Europe/Berlin", "Europe/Berlin")]
+    [InlineData("2026-12-05T19:00:00+02:00", "Europe/Berlin", null)]
+    [InlineData("2026-12-05T19:00:00+05:00", null, null)]
+    [InlineData("2026-12-05T19:00:00+05:00", "Not/AZone", null)]
+    public void TimeZone_ShouldBeTheSourcesZone_OnlyWhenTheStartsOffsetIsItsOwnOnThatDate(string starts, string? zone, string? expected)
+    {
+        var data = Json($$$"""{"schema":"wow2.event.v1","title":"Show","starts":{"value":"{{{starts}}}","precision":"minute"}}""");
+
+        ScfdEventMapper.TimeZone(data, zone).Should().Be(expected);
     }
 
     private static EventFacts Map(string json)

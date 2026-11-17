@@ -3,21 +3,21 @@
   "files": [
     {
       "name": "subscription.json",
-      "sha256": "0faa965f0e9b787ecc05c4167bbb2e3305faa6d4f58d5ea7df431de6e2b350ab",
+      "sha256": "8d1149a214133eaeec7461c42d2b84a2687c41bda08cea6a14a707d2e04f7b72",
       "cases": [
         "subscription"
       ]
     },
     {
       "name": "01-new.json",
-      "sha256": "2fd46c808cf67995b3614eafe0ee4c503eb718163e2d1f76d456d94cdb20769d",
+      "sha256": "88bd98903fa9af59093ee1d18ce52d39acae6a7ea4f41fb53fc86804eab27b56",
       "cases": [
         "post.new"
       ]
     },
     {
       "name": "03-changed.json",
-      "sha256": "1e80a36ac33f3e5bafbfc4a42ca9cff501080f8eac840e9ec9c66079b9e8fad4",
+      "sha256": "4ee7b22ca205ee73e0e083326fa36bce3bff25055553a9eb596db5fd13a42a86",
       "cases": [
         "post.changed"
       ]
@@ -31,7 +31,7 @@
     },
     {
       "name": "05-lifecycle.json",
-      "sha256": "47b4fd18f90c289fc876566ad0670c32b48ce56d8afd4a6062a5fce62d8a0024",
+      "sha256": "cb685c41dd5e0cfcb075114f6f9c89feb7932a16f9aac4db970d9b80bf6e96e2",
       "cases": [
         "post.new",
         "link.state:gone",
@@ -44,7 +44,7 @@
     },
     {
       "name": "06-classification.json",
-      "sha256": "52df68ea4deb6e8a1756940f20e21ac581bc8b5b8b6e7074803b35a0d95c24df",
+      "sha256": "6ebfb5a00c786286b1138e20b82fc3539f299aa7553703ae4815612247451eef",
       "cases": [
         "relevant:runway:0.9",
         "irrelevant",
@@ -54,7 +54,7 @@
     },
     {
       "name": "07-afisha-place.json",
-      "sha256": "ef238f55b13c80061b770d6d3041e633faf8580eef8f2bcc33a9244ca112ad63",
+      "sha256": "6b23dc01835d633e3f435c9ac815e6ae89ccaa88df28147664db9f1aa55b8044",
       "cases": [
         "place:before-city-fix",
         "place:after-city-fix"
@@ -62,9 +62,24 @@
     },
     {
       "name": "08-purged.json",
-      "sha256": "1ef1732a73edb0dc5cb2875830b4e4bfbf6cf7997c7de8961b11425ae83f0867",
+      "sha256": "b13055bbe8fbc6bfd65fb1949e229487af0b6c5cf226544be3ec9461cbb92c15",
       "cases": [
         "post.purged"
+      ]
+    },
+    {
+      "name": "09-deadline.json",
+      "sha256": "86176bfd66e83a2bcf7bec096dd4524332efdc7b79b770e4b5a3f342314c5ede",
+      "cases": [
+        "deadline:application:closed"
+      ]
+    },
+    {
+      "name": "10-unmatched.json",
+      "sha256": "300d66e4f8a15e96c7c7d951174604b4ebeefba52a25ea2b73d9465d98af793d",
+      "cases": [
+        "post.new",
+        "post.unmatched"
       ]
     }
   ]

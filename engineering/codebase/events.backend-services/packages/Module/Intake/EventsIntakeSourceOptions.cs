@@ -90,6 +90,11 @@ public sealed class EventsIntakeSourceOptions
     /// the record <c>other</c>.</summary>
     public string? DefaultKind { get; set; }
 
+    /// <summary>Gets or sets the IANA time zone the source's events happen in, such as <c>Asia/Tashkent</c>: an event takes it
+    /// as its <c>TimeZone</c> when its start states an offset and that offset is this zone's on that date; a start with no
+    /// time, or another zone's offset, keeps none. None sets no zone.</summary>
+    public string? DefaultTimeZone { get; set; }
+
     /// <summary>Gets or sets the organization that must own the source's catalog, its id at its issuer: intake refuses a
     /// catalog another organization owns, so a slug alone never routes sourced records (cross-lane review, 2026-11-10).
     /// Without it the source pulls nothing.</summary>

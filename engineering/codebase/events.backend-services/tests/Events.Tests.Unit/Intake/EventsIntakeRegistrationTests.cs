@@ -52,8 +52,8 @@ public sealed class EventsIntakeRegistrationTests
         provider.GetServices<IHostedService>().Should().ContainSingle().Which.Should().BeOfType<IntakePoller>();
     }
 
-    /// <summary>The list and the kind <c>deploy.yml</c> types: indexed keys bind to <c>DefaultCities</c>, a plain key to
-    /// <c>DefaultKind</c>.</summary>
+    /// <summary>The list, the kind and the zone <c>deploy.yml</c> types: indexed keys bind to <c>DefaultCities</c>, plain keys
+    /// to <c>DefaultKind</c> and <c>DefaultTimeZone</c>.</summary>
     [Fact]
     public void AddEventsIntake_ShouldBindTheDefaultCitiesAndTheDefaultKind()
     {
@@ -65,6 +65,7 @@ public sealed class EventsIntakeRegistrationTests
             ["Events:Intake:Sources:0:DefaultCities:0"] = "Tashkent",
             ["Events:Intake:Sources:0:DefaultCities:1"] = "Samarkand",
             ["Events:Intake:Sources:0:DefaultKind"] = "exhibition",
+            ["Events:Intake:Sources:0:DefaultTimeZone"] = "Asia/Tashkent",
         }).Build();
         var services = new ServiceCollection().AddLogging();
 
@@ -74,5 +75,6 @@ public sealed class EventsIntakeRegistrationTests
         var source = provider.GetRequiredService<IOptions<EventsIntakeOptions>>().Value.Sources.Single();
         source.DefaultCities.Should().Equal("Tashkent", "Samarkand");
         source.DefaultKind.Should().Be("exhibition");
+        source.DefaultTimeZone.Should().Be("Asia/Tashkent");
     }
 }

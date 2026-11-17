@@ -53,6 +53,8 @@ internal sealed partial class EventsIntakeOptionsValidator : IValidateOptions<Ev
                 failures.Add($"{at}:DefaultCountry must be an upper-case ISO 3166-1 alpha-2 code");
             if (!string.IsNullOrWhiteSpace(source.DefaultKind) && !EventFactsValidator.KeyPattern().IsMatch(source.DefaultKind.Trim().ToLowerInvariant()))
                 failures.Add($"{at}:DefaultKind must be a kind key ({EventsConstants.KeyPattern})");
+            if (!string.IsNullOrWhiteSpace(source.DefaultTimeZone) && !TimeZoneInfo.TryFindSystemTimeZoneById(source.DefaultTimeZone.Trim(), out _))
+                failures.Add($"{at}:DefaultTimeZone must be an IANA time zone the host knows, such as Asia/Tashkent");
             if (source.DefaultCities is null || source.DefaultCities.Any(city => string.IsNullOrWhiteSpace(city) || city.Trim().Length > EventsConstants.MaxNameLength))
                 failures.Add($"{at}:DefaultCities must hold city names of 1 to {EventsConstants.MaxNameLength} characters");
             if (source.MinConfidence is < 0 or > 1)

@@ -70,6 +70,25 @@ public sealed class EventsIntakeOptionsValidatorTests
             result.Failures.Should().ContainSingle().Which.Should().Contain("Sources:0:DefaultKind");
     }
 
+    [Theory]
+    [InlineData("Asia/Tashkent", true)]
+    [InlineData(" Asia/Tashkent ", true)]
+    [InlineData(null, true)]
+    [InlineData("  ", true)]
+    [InlineData("Asia/Toshkent", false)]
+    [InlineData("+05:00", false)]
+    public void Validate_ShouldTakeADefaultTimeZone_OnlyAsAKnownIanaZone(string? zone, bool valid)
+    {
+        var source = Source("afisha-fashion");
+        source.DefaultTimeZone = zone;
+
+        var result = Validate(source);
+
+        result.Succeeded.Should().Be(valid, result.FailureMessage);
+        if (!valid)
+            result.Failures.Should().ContainSingle().Which.Should().Contain("Sources:0:DefaultTimeZone");
+    }
+
     [Fact]
     public void Validate_ShouldAcceptDefaultCities_AndRefuseABlankOrOverlongName()
     {

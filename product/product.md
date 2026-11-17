@@ -115,6 +115,10 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   (`DefaultCities`, Uzbekistan's regional centres for the Afisha sources): a record naming another city (a foreign fair
   announced on a UZ source) keeps no country, a record naming no city takes the source's, and a country the record names
   stands. A source with no list gives the country to every record.
+- a sourced event takes the deadlines SCFD states (`deadlines[]`: an application deadline a reader found) at their own
+  precision, so "deadlines first" lists it; one with an unreadable date is left out. Its time zone is the source's
+  `DefaultTimeZone` when the start's stated offset is that zone's own on that date, and none otherwise: a guessed zone
+  would move the event's hour.
 - a sourced event's kind, in order: the classifier's, when the catalog's taxonomy holds it; the kind the record itself
   names; the source's `DefaultKind` (an exhibitions feed reads `exhibition`), when the record maps to `other` and the
   taxonomy holds it; else `other`. A reviewer's kind stands over all of them.

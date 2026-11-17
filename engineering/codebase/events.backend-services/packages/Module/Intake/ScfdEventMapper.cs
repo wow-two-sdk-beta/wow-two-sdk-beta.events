@@ -126,6 +126,7 @@ internal static partial class ScfdEventMapper
             Status = Status(schemaOrg),
             Starts = starts ?? new EventWhen(),
             Ends = ends,
+            Deadlines = Deadlines(data),
             Offers = Offers(data),
             Website = Website(data, contentLinks),
             TicketUrl = Url(contentLinks.FirstOrDefault(link => IsLinkKind(link, "ticket", 0)), "url"),
@@ -177,6 +178,58 @@ internal static partial class ScfdEventMapper
                 || host.StartsWith("yandex.", StringComparison.Ordinal) || host.Contains(".yandex.", StringComparison.Ordinal) || host == "goo.gl")
             && (path.StartsWith("/maps", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/navi", StringComparison.OrdinalIgnoreCase)));
 
+    /// <summary>Reads the start's IANA time zone: the source's zone, when the start value states an offset and that offset
+    /// is the zone's own on that date (SCFD keeps the offset the page stated; Events' dates are local and carry none).
+    /// None when the source names no zone or an unknown one, the start has no time or offset, or the offset is another
+    /// zone's: a guessed zone would move the event's hour.</summary>
+    /// <param name="data">The payload.</param>
+    /// <param name="zone">The source's zone, such as <c>Asia/Tashkent</c>.</param>
+    public static string? TimeZone(JsonElement data, string? zone)
+    {
+        if (string.IsNullOrWhiteSpace(zone) || !data.TryGetProperty("starts", out var starts) || String(starts, "value")?.Trim() is not { } value
+            || !OffsetPattern().IsMatch(value)
+            || !DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+            || !TimeZoneInfo.TryFindSystemTimeZoneById(zone.Trim(), out var info))
+            return null;
+
+        return info.GetUtcOffset(at) == at.Offset ? zone.Trim() : null;
+    }
+
+    /// <summary>Reads the deadlines the source states (<c>deadlines[]</c>, harvest E07): each one's kind and when, at its
+    /// own precision, at most <see cref="EventsConstants.MaxListLength"/>. A deadline whose date is unreadable is left out
+    /// rather than failing the record: the event stands without it.</summary>
+    private static List<EventDeadline> Deadlines(JsonElement data)
+    {
+        var deadlines = new List<EventDeadline>();
+        if (!data.TryGetProperty("deadlines", out var array) || array.ValueKind != JsonValueKind.Array)
+            return deadlines;
+
+        foreach (var deadline in array.EnumerateArray().Where(deadline => deadline.ValueKind == JsonValueKind.Object))
+        {
+            if (!TryReadWhen(deadline, "deadline", out var at, out _) || at is null)
+                continue;
+
+            deadlines.Add(new EventDeadline { Kind = DeadlineKindOf(String(deadline, "kind")), At = at });
+            if (deadlines.Count == EventsConstants.MaxListLength)
+                break;
+        }
+
+        return deadlines;
+    }
+
+    /// <summary>Reads a deadline's kind label; SCFD sends <c>application</c> today, and a label Events does not know reads
+    /// as <see cref="DeadlineKind.Other"/>.</summary>
+    private static DeadlineKind DeadlineKindOf(string? label) =>
+        label?.Trim().ToLowerInvariant().Replace("_", "-", StringComparison.Ordinal) switch
+        {
+            "application" => DeadlineKind.Application,
+            "registration" => DeadlineKind.Registration,
+            "early-bird" or "earlybird" => DeadlineKind.EarlyBird,
+            "submission" => DeadlineKind.Submission,
+            "payment" => DeadlineKind.Payment,
+            _ => DeadlineKind.Other,
+        };
+
     private static bool TryWhen(JsonElement data, string name, out EventWhen? when, out string reason)
     {
         when = null;
@@ -184,6 +237,14 @@ internal static partial class ScfdEventMapper
         if (!data.TryGetProperty(name, out var date) || date.ValueKind == JsonValueKind.Null)
             return true;
 
+        return TryReadWhen(date, name, out when, out reason);
+    }
+
+    /// <summary>Reads one SCFD date, <c>{ value, precision }</c>, at the precision it states.</summary>
+    private static bool TryReadWhen(JsonElement date, string name, out EventWhen? when, out string reason)
+    {
+        when = null;
+        reason = string.Empty;
         var value = date.ValueKind == JsonValueKind.Object ? String(date, "value")?.Trim() : null;
         var precision = date.ValueKind == JsonValueKind.Object ? String(date, "precision")?.Trim().ToLowerInvariant() : null;
         var match = value is null ? null : DatePattern().Match(value);
@@ -422,6 +483,9 @@ internal static partial class ScfdEventMapper
 
     [GeneratedRegex(@"^(?<year>\d{4})(-(?<month>\d{2})(-(?<day>\d{2})([T ](?<hour>\d{2})(:(?<minute>\d{2}))?)?)?)?")]
     private static partial Regex DatePattern();
+
+    [GeneratedRegex(@"T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$")]
+    private static partial Regex OffsetPattern();
 
     [GeneratedRegex("^[a-z]{2,3}$")]
     private static partial Regex LanguagePattern();

@@ -14,7 +14,7 @@ namespace Events.Tests.Integration.Intake;
 /// <summary>The contract replay with SCFD (the services sweep): harvest's golden pages pulled in order through the real
 /// feed and the real intake over PostgreSQL, each pull sending the cursor the page before it served. One automatic
 /// source with the <c>payload</c> classifier takes every page: new, changed, empty, lifecycle, classification, the
-/// Afisha place and the purge.</summary>
+/// Afisha place, the purge, the application deadline and the unmatched post.</summary>
 public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixture<IntakeFixture>
 {
     [Fact]
@@ -30,6 +30,7 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
             auto.Review = EventsIntakeSourceOptions.AutoReview;
             auto.Classifier = EventsIntakeSourceOptions.PayloadClassifier;
             auto.MinConfidence = 0.5;
+            auto.DefaultTimeZone = "Asia/Tashkent";
             auto.OwnerOrg = fixture.Principal.OrganizationId;
             auto.OwnerIssuer = fixture.Principal.Issuer;
         });
@@ -53,7 +54,7 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
         var db = read.ServiceProvider.GetRequiredService<EventsDbContext>();
         var cursor = await db.IntakeCursors.AsNoTracking().SingleAsync(row => row.SourceName == source.Name);
         cursor.Cursor.Should().Be(served[^1].Next);
-        cursor.Received.Should().Be(16);
+        cursor.Received.Should().Be(19);
         cursor.Quarantined.Should().Be(0);
 
         var events = read.ServiceProvider.GetRequiredService<ICatalogEventsBroker>();
@@ -64,17 +65,31 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
         var runway = published.Should().ContainSingle().Subject;
         runway.Facts.Kind.Should().Be("runway");
         runway.ReviewedBy.Should().Be("classifier:model:contract@1");
-        candidates.Should().HaveCount(7, "the two jazz posts, three undecided or irrelevant classifications and the two Afisha places wait for a person");
+        candidates.Should().HaveCount(9,
+            "the two designer-show posts, three undecided or irrelevant classifications, the two Afisha places, the craft fair and the unmatched market wait for a person");
 
         // 01, 03, 05: one event per post through its revisions, the gone listing, the merge and the unmerge.
-        var jazz = candidates.Where(item => item.Facts.Title.Values.Single().StartsWith("Вечер живого джаза", StringComparison.Ordinal)).ToList();
-        jazz.Select(item => item.Facts.Title.Values.Single()).Should().BeEquivalentTo(
-            ["Вечер живого джаза", "Вечер живого джаза (копия анонса)"], "the unmerge restored each post's own content");
-        jazz.Should().OnlyContain(item => item.ReviewedBy == "classifier:payload", "nothing stays held by the source after the listing returned and the unmerge");
+        var shows = candidates.Where(item => item.Facts.Title.Values.Single().StartsWith("Показ коллекций молодых дизайнеров", StringComparison.Ordinal)).ToList();
+        shows.Select(item => item.Facts.Title.Values.Single()).Should().BeEquivalentTo(
+            ["Показ коллекций молодых дизайнеров", "Показ коллекций молодых дизайнеров (копия анонса)"], "the unmerge restored each post's own content");
+        shows.Should().OnlyContain(item => item.ReviewedBy == "classifier:payload", "nothing stays held by the source after the listing returned and the unmerge");
+        shows.Should().OnlyContain(item => item.Facts.TimeZone == "Asia/Tashkent", "each start states +05:00, Tashkent's offset (E08)");
 
         // 07: the Afisha place before the city fix names no city; after it, the city mention gives it.
-        candidates.Single(item => item.Facts.Title.Values.Single() == "Вечер камерной музыки").Facts.Place!.City.Should().BeNull();
-        candidates.Single(item => item.Facts.Title.Values.Single() == "Концерт молодёжного оркестра").Facts.Place!.City.Should().Be("Tashkent");
+        candidates.Single(item => item.Facts.Title.Values.Single() == "Показ мод выпускников колледжа").Facts.Place!.City.Should().BeNull();
+        candidates.Single(item => item.Facts.Title.Values.Single() == "Ярмарка вышивки и текстиля").Facts.Place!.City.Should().Be("Tashkent");
+
+        // 09: the stated application deadline becomes the event's one deadline (E08).
+        candidates.Single(item => item.Facts.Title.Values.Single() == "Craft Fair 2026").Facts.Deadlines.Should().Equal(new EventDeadline
+        {
+            Kind = DeadlineKind.Application,
+            At = new EventWhen { Value = "2026-10-26T23:59", Precision = DatePrecision.Minute, Certainty = DateCertainty.Announced },
+        });
+
+        // 10: the post that stopped matching holds its event for a person, with the content it matched with (E04).
+        var unmatched = candidates.Single(item => item.Facts.Title.Values.Single() == "Маркет ремесленников и дизайнеров");
+        unmatched.ReviewedBy.Should().Be($"{IntakeProcessor.SourceActor}{source.Instance}");
+        unmatched.ReviewReason.Should().Be(IntakeProcessor.UnmatchedReason);
 
         // 08: the purge clears every delivered payload of the post, and keeps its rows.
         var purged = served[0].Records.Single().PostId;

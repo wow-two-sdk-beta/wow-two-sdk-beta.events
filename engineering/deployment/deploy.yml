@@ -111,6 +111,9 @@ services:
         Events:Intake:Sources:0:DefaultCities:15: { default: Urgench }
         # The organization that must own the catalog (its org_id at the issuer): intake refuses a catalog anyone else owns,
         # so a slug alone never routes sourced records. Without it the source pulls nothing.
+        # The zone afisha.uz's events happen in (events-integration E08): an event takes it when its start's stated offset is
+        # this zone's own on that date, so start times keep their zone; a start with no time keeps none.
+        Events:Intake:Sources:0:DefaultTimeZone: { default: Asia/Tashkent }
         Events:Intake:Sources:0:OwnerOrg: { required: true }
         Events:Intake:Sources:0:OwnerIssuer: { from: Events:Auth:Issuers:0:Issuer }
         Events:Intake:Sources:1:Name: { default: afisha-exhibitions }
@@ -147,6 +150,7 @@ services:
         # The kind an exhibitions feed's records take when nothing names one (events-integration E12): the catalog's taxonomy
         # must hold it, and a classifier's kind or the record's own wins. afisha-fashion sets none and stays `other`.
         Events:Intake:Sources:1:DefaultKind: { default: exhibition }
+        Events:Intake:Sources:1:DefaultTimeZone: { from: Events:Intake:Sources:0:DefaultTimeZone }
         Events:Intake:Sources:1:OwnerOrg: { from: Events:Intake:Sources:0:OwnerOrg }
         Events:Intake:Sources:1:OwnerIssuer: { from: Events:Auth:Issuers:0:Issuer }
     # The console's data-protection key ring (DataProtection:KeysPath).

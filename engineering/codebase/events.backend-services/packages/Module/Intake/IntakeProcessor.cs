@@ -541,8 +541,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         return null;
     }
 
-    /// <summary>Reads a payload's facts as this source delivers them: the mapping, the source's default country, the
-    /// classifier's kind, then validation; none when the payload is malformed.</summary>
+    /// <summary>Reads a payload's facts as this source delivers them: the mapping, the source's default country and time
+    /// zone, the classifier's kind, then validation; none when the payload is malformed.</summary>
     private static EventFacts? Facts(EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict) =>
         TryFacts(source, payload, kinds, verdict, out var facts, out _) ? facts : null;
 
@@ -562,6 +562,9 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         // record naming another city (a foreign fair on a UZ source) keeps no country rather than a wrong one.
         if (!string.IsNullOrWhiteSpace(source.DefaultCountry) && mapped.Place?.Country is null && InDefaultCountry(source, mapped.Place?.City))
             mapped = mapped with { Place = (mapped.Place ?? new EventPlace()) with { Country = source.DefaultCountry.Trim().ToUpperInvariant() } };
+        // The source's zone, when the start's stated offset is that zone's own (E08).
+        if (ScfdEventMapper.TimeZone(payload, source.DefaultTimeZone) is { } zone)
+            mapped = mapped with { TimeZone = zone };
         // The kind, in order: the classifier's, when the catalog holds it; the record's own, when the mapper read one; the
         // source's DefaultKind, when the record maps to `other` and the catalog holds it.
         if (verdict?.Kind is { } kind && kinds.Contains(kind))
