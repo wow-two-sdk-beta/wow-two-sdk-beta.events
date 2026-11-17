@@ -62,7 +62,7 @@ public sealed class ScfdEventMapperTests
 
         facts.Place.Should().BeEquivalentTo(new EventPlace
         {
-            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Ташкент", Latitude = 41.3153, Longitude = 69.2727,
+            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Tashkent", Latitude = 41.3153, Longitude = 69.2727,
         });
     }
 
@@ -75,7 +75,7 @@ public sealed class ScfdEventMapperTests
              "place":{"mentions":[{"kind":4,"text":"Venue"},{"kind":0,"text":"Ташкент"},{"kind":3,"text":"Street 2"},{"kind":5,"text":"Whole address"}]}}
             """);
 
-        facts.Place.Should().BeEquivalentTo(new EventPlace { Venue = "Venue", Address = "Whole address", City = "Ташкент" });
+        facts.Place.Should().BeEquivalentTo(new EventPlace { Venue = "Venue", Address = "Whole address", City = "Tashkent" });
     }
 
     /// <summary>A source's own schema.org location fills what no mention names: the city from addressLocality, and its
@@ -93,8 +93,40 @@ public sealed class ScfdEventMapperTests
 
         facts.Place.Should().BeEquivalentTo(new EventPlace
         {
-            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Ташкент", Latitude = 41.3153, Longitude = 69.2727,
+            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Tashkent", Latitude = 41.3153, Longitude = 69.2727,
         });
+    }
+
+    /// <summary>Afisha writes <c>Ташкент</c> where the catalog's own events say <c>Tashkent</c> (events-dev, 2026-11-16): a
+    /// known city takes one Latin spelling, whichever script or apostrophe the source used, so Ocharo's city filter and
+    /// grouping never split one city in two. The same city from schema.org's <c>addressLocality</c> maps alike.</summary>
+    [Theory]
+    [InlineData("Ташкент", "Tashkent")]
+    [InlineData("Самарканд", "Samarkand")]
+    [InlineData("Бухара", "Bukhara")]
+    [InlineData("Toshkent", "Tashkent")]
+    [InlineData("  ТАШКЕНТ ", "Tashkent")]
+    [InlineData("Qo‘qon", "Kokand")]
+    [InlineData("Farg'ona", "Fergana")]
+    [InlineData("Tashkent", "Tashkent")]
+    public void TryMap_ShouldNameAKnownCityInOneLatinSpelling(string written, string city)
+    {
+        var fromMention = Map("""{"schema":"wow2.event.v1","title":"Show","place":{"mentions":[{"kind":"city","text":"CITY"}]}}""".Replace("CITY", written));
+        var fromSchemaOrg = Map("""
+            {"schema":"wow2.event.v1","title":"Show",
+             "schemaOrg":{"location":{"address":{"addressLocality":"CITY"}}}}
+            """.Replace("CITY", written));
+
+        fromMention.Place!.City.Should().Be(city);
+        fromSchemaOrg.Place!.City.Should().Be(city);
+    }
+
+    [Fact]
+    public void TryMap_ShouldPassAnUnknownCityThrough_AsTheSourceWroteIt()
+    {
+        var facts = Map("""{"schema":"wow2.event.v1","title":"Show","place":{"mentions":[{"kind":"city","text":"Париж"}]}}""");
+
+        facts.Place!.City.Should().Be("Париж");
     }
 
     private static string LiveRecord(string place) => $$$"""

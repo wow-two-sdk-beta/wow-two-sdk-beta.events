@@ -111,8 +111,9 @@ public sealed partial class ScfdContractPagesTests
         facts.Organizer.Should().Be(new EventOrganizer { Name = "Tashkent Jazz Club", Website = "https://jazz.example.test/" });
         facts.Place.Should().Be(new EventPlace
         {
-            Venue = "Дворец Истиклол", Address = "ул. Амира Темура, 107", City = "Ташкент", Latitude = 41.3139, Longitude = 69.2803,
+            Venue = "Дворец Истиклол", Address = "ул. Амира Темура, 107", City = "Tashkent", Latitude = 41.3139, Longitude = 69.2803,
         });
+        data.GetRawText().Should().Contain("\"Ташкент\"", "the record keeps the source's spelling; only the fact takes the canonical city");
         facts.Offers.Should().ContainSingle().Which.Should().Be(new EventOffer { Kind = OfferKind.Ticket, MinPrice = 150000, MaxPrice = 150000, Currency = "UZS" });
         facts.Website.Should().Be("https://afisha.example.test/venues/istiqlol");
         facts.TicketUrl.Should().Be("https://afisha.example.test/events/jazz-night/tickets");
@@ -216,7 +217,7 @@ public sealed partial class ScfdContractPagesTests
         });
         after.Place.Should().Be(new EventPlace
         {
-            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Ташкент", Latitude = 41.3153, Longitude = 69.2727,
+            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Tashkent", Latitude = 41.3153, Longitude = 69.2727,
         });
     }
 

@@ -96,7 +96,7 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         after.PendingChanges.Should().Be(0);
         after.Facts.Place.Should().BeEquivalentTo(new EventPlace
         {
-            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Ташкент", Country = "UZ", Latitude = 41.3153, Longitude = 69.2727,
+            Venue = "Дворец творчества молодёжи", Address = "просп. Мустакиллик, 2", City = "Tashkent", Country = "UZ", Latitude = 41.3153, Longitude = 69.2727,
         });
     }
 

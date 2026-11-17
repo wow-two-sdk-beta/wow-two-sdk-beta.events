@@ -1,6 +1,6 @@
 # wow-two-sdk-beta.events — Capability spec
 
-*Last updated: 2026-11-10*
+*Last updated: 2026-11-17*
 
 > The capability's definition: what it does, for whom, in which forms. State and decisions: `context.md`; one spec per
 > feature group in `features/`. Rules: wow-two-ws/conventions/development/capability-forms.md.
@@ -95,6 +95,9 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   reason, observed time, each link's URL, source, capture and source fields, the mapping version when SCFD sends it,
   and the raw payload.
 - review never blocks intake; a catalog that is not private takes nothing (#50).
+- a sourced place names a known Uzbek city in one Latin spelling (`Ташкент` and `Toshkent` read `Tashkent`), the
+  spelling the catalog's own events use, so city filters and groups never split one city in two; a city the table does
+  not know passes through as written, and the source's spelling stays in the observation's raw payload.
 - each source has a review policy (#53, the developer: "why someone needs to accept anything ? we'll use ai
   classification ofc"): `auto` publishes what its classifier marks relevant into the private catalog and holds the rest
   as candidates; `manual` keeps every record for a person. The classifier is `filter` (SCFD's subscription filter passed

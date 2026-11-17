@@ -257,6 +257,9 @@ internal static partial class ScfdEventMapper
         }
 
         address ??= street;
+        // One Latin spelling per known city, so a sourced event groups with the catalog's own events; the source's
+        // spelling stays in the observation's raw payload, and a city the table does not know passes through.
+        city = city is null ? null : CityNames.Canonical(city);
         return venue is null && address is null && city is null && region is null && country is null && latitude is null
             ? null
             : new EventPlace { Venue = venue, Address = address, City = city, Region = region, Country = country, Latitude = latitude, Longitude = longitude };

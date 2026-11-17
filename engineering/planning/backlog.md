@@ -50,7 +50,6 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 |---|---|---|
 | E01 Pull all five default Ocharo SCFD subscriptions into Events | fix | spec in `tasks-events-path.md` |
 | E04 Hold events whose SCFD post stopped matching | fix | spec in `tasks-events-path.md` |
-| E33 Show sourced city names in the app's script | fix | spec in `tasks-events-path.md` |
 | E12 Give sourced events a kind from their subscription | feature | spec in `tasks-events-path.md` |
 | E06 Stop taking aggregator pages as the event website | fix | spec in `tasks-events-path.md` |
 | E08 Map SCFD deadlines and time zones into event facts | feature | spec in `tasks-events-path.md` |

@@ -74,7 +74,7 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
 
         // 07: the Afisha place before the city fix names no city; after it, the city mention gives it.
         candidates.Single(item => item.Facts.Title.Values.Single() == "Вечер камерной музыки").Facts.Place!.City.Should().BeNull();
-        candidates.Single(item => item.Facts.Title.Values.Single() == "Концерт молодёжного оркестра").Facts.Place!.City.Should().Be("Ташкент");
+        candidates.Single(item => item.Facts.Title.Values.Single() == "Концерт молодёжного оркестра").Facts.Place!.City.Should().Be("Tashkent");
 
         // 08: the purge clears every delivered payload of the post, and keeps its rows.
         var purged = served[0].Records.Single().PostId;
