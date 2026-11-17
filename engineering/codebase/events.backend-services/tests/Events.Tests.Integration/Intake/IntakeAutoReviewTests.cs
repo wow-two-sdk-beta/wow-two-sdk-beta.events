@@ -221,6 +221,72 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         (await EventsAsync(slug, new EventQuery())).Single().Facts.Kind.Should().Be("runway");
     }
 
+    /// <summary>Without AI a sourced event is <c>other</c> and Ocharo's format badge says nothing: the source's
+    /// <c>DefaultKind</c> (an exhibitions feed) gives a kind-less record its kind, once the catalog's taxonomy holds it.</summary>
+    [Fact]
+    public async Task Intake_ShouldGiveAKindlessRecordTheSourcesDefaultKind()
+    {
+        var (slug, source) = await SourceAsync(auto => { auto.Review = "auto"; auto.DefaultKind = "exhibition"; }, "runway", "exhibition");
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Craft expo"));
+
+        await fixture.PollAsync(source);
+
+        (await EventsAsync(slug, new EventQuery())).Single().Facts.Kind.Should().Be("exhibition");
+    }
+
+    /// <summary>The order of kinds: a classifier's kind, then the record's own, then the source's default; a payload
+    /// classification naming <c>runway</c> wins over <c>DefaultKind: exhibition</c>, and one naming none leaves the default.</summary>
+    [Fact]
+    public async Task Intake_ShouldKeepTheClassifiersKind_OverTheSourcesDefaultKind()
+    {
+        var (slug, source) = await SourceAsync(auto => { auto.Review = "auto"; auto.Classifier = "payload"; auto.DefaultKind = "exhibition"; }, "runway", "exhibition");
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Показ мод", edit: data =>
+            data["classification"] = new { classifier = "relevance-ai@1", verdict = "relevant", kind = "runway" }));
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Ярмарка", edit: data =>
+            data["classification"] = new { classifier = "relevance-ai@1", verdict = "relevant" }));
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Own kind named", edit: data =>
+        {
+            data["kind"] = "runway";
+            data["classification"] = new { classifier = "relevance-ai@1", verdict = "relevant" };
+        }));
+
+        await fixture.PollAsync(source);
+
+        var kinds = (await EventsAsync(slug, new EventQuery())).ToDictionary(item => item.Facts.Title.Values.Single(), item => item.Facts.Kind);
+        kinds.Should().Equal(new Dictionary<string, string> { ["Показ мод"] = "runway", ["Ярмарка"] = "exhibition", ["Own kind named"] = "runway" });
+    }
+
+    [Fact]
+    public async Task Intake_ShouldKeepOther_WhenTheCatalogsTaxonomyLacksTheDefaultKind()
+    {
+        var (slug, source) = await SourceAsync(auto => { auto.Review = "auto"; auto.DefaultKind = "exhibition"; }, "runway");
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Craft expo"));
+
+        await fixture.PollAsync(source);
+
+        (await EventsAsync(slug, new EventQuery())).Single().Facts.Kind.Should().Be("other");
+    }
+
+    /// <summary>An event the classifier already published as <c>other</c> takes a default kind the source gains later,
+    /// through the backlog pass, once.</summary>
+    [Fact]
+    public async Task Intake_ShouldRemapAPublishedEventOnce_WhenTheSourceGainsADefaultKind()
+    {
+        var (slug, source) = await SourceAsync(auto => auto.Review = "auto", "runway", "exhibition");
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Craft expo"));
+        await fixture.PollAsync(source);
+        var before = (await EventsAsync(slug, new EventQuery())).Single();
+        before.Facts.Kind.Should().Be("other");
+
+        source.DefaultKind = "exhibition";
+        await fixture.PollAsync(source);
+        await fixture.PollAsync(source);
+
+        var after = (await EventsAsync(slug, new EventQuery())).Single();
+        after.Facts.Kind.Should().Be("exhibition");
+        after.Revision.Should().Be(before.Revision + 1, "a second poll with nothing new changes nothing");
+    }
+
     [Fact]
     public async Task Intake_ShouldKeepCandidates_WhenTheSourceReviewsManually()
     {
@@ -250,11 +316,11 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         data["schemaOrg"] = document.RootElement.GetProperty("schemaOrg").Clone();
     }
 
-    private async Task<(string Slug, EventsIntakeSourceOptions Source)> SourceAsync(Action<EventsIntakeSourceOptions>? configure = null)
+    private async Task<(string Slug, EventsIntakeSourceOptions Source)> SourceAsync(Action<EventsIntakeSourceOptions>? configure = null, params string[] kinds)
     {
         fixture.Principal.ActAsMember(Guid.NewGuid().ToString("N"));
         var slug = $"auto-{Guid.NewGuid():N}";
-        await TestCatalogs.CreateAsync(fixture.Services, slug, CatalogVisibility.Private, "runway");
+        await TestCatalogs.CreateAsync(fixture.Services, slug, CatalogVisibility.Private, kinds.Length == 0 ? ["runway"] : kinds);
         return (slug, fixture.AddSource(slug, configure));
     }
 

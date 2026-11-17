@@ -109,6 +109,9 @@ services:
         Events:Intake:Sources:1:Classifier: { from: Events:Intake:Sources:0:Classifier }
         Events:Intake:Sources:1:Filter: { from: Events:Intake:Sources:0:Filter }
         Events:Intake:Sources:1:DefaultCountry: { from: Events:Intake:Sources:0:DefaultCountry }
+        # The kind an exhibitions feed's records take when nothing names one (events-integration E12): the catalog's taxonomy
+        # must hold it, and a classifier's kind or the record's own wins. afisha-fashion sets none and stays `other`.
+        Events:Intake:Sources:1:DefaultKind: { default: exhibition }
         Events:Intake:Sources:1:OwnerOrg: { from: Events:Intake:Sources:0:OwnerOrg }
         Events:Intake:Sources:1:OwnerIssuer: { from: Events:Auth:Issuers:0:Issuer }
     # The console's data-protection key ring (DataProtection:KeysPath).

@@ -51,6 +51,25 @@ public sealed class EventsIntakeOptionsValidatorTests
         failures.Should().HaveCount(6);
     }
 
+    [Theory]
+    [InlineData("exhibition", true)]
+    [InlineData("Trade-Fair", true)]
+    [InlineData(null, true)]
+    [InlineData("  ", true)]
+    [InlineData("not a kind", false)]
+    [InlineData("-exhibition", false)]
+    public void Validate_ShouldTakeADefaultKind_OnlyAsAKindKey(string? defaultKind, bool valid)
+    {
+        var source = Source("afisha-exhibitions");
+        source.DefaultKind = defaultKind;
+
+        var result = Validate(source);
+
+        result.Succeeded.Should().Be(valid, result.FailureMessage);
+        if (!valid)
+            result.Failures.Should().ContainSingle().Which.Should().Contain("Sources:0:DefaultKind");
+    }
+
     [Fact]
     public void Validate_ShouldNotNeedAUrl_ForADisabledSource()
     {

@@ -103,6 +103,9 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   as candidates; `manual` keeps every record for a person. The classifier is `filter` (SCFD's subscription filter passed
   the record) or `payload` (the record's own `classification`: classifier, verdict, confidence, reason), so an AI
   relevance step needs no rework here. The classifier and its verdict are recorded as the reviewer and the reason.
+- a sourced event's kind, in order: the classifier's, when the catalog's taxonomy holds it; the kind the record itself
+  names; the source's `DefaultKind` (an exhibitions feed reads `exhibition`), when the record maps to `other` and the
+  taxonomy holds it; else `other`. A reviewer's kind stands over all of them.
 
 ## Review
 

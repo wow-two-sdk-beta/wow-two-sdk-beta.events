@@ -507,8 +507,12 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         if (!string.IsNullOrWhiteSpace(source.DefaultCountry) && mapped.Place?.Country is null)
             mapped = mapped with { Place = (mapped.Place ?? new EventPlace()) with { Country = source.DefaultCountry.Trim().ToUpperInvariant() } };
+        // The kind, in order: the classifier's, when the catalog holds it; the record's own, when the mapper read one; the
+        // source's DefaultKind, when the record maps to `other` and the catalog holds it.
         if (verdict?.Kind is { } kind && kinds.Contains(kind))
             mapped = mapped with { Kind = kind };
+        else if (mapped.Kind == ProposedFacts.UnknownKind && source.DefaultKind?.Trim().ToLowerInvariant() is { Length: > 0 } fallback && kinds.Contains(fallback))
+            mapped = mapped with { Kind = fallback };
 
         if (EventFactsValidator.Validate(mapped, ProposedFacts.SourcedKinds(kinds), out var valid) is { } invalid)
         {

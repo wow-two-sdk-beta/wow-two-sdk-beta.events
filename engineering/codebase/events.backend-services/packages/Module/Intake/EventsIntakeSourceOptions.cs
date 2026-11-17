@@ -77,6 +77,12 @@ public sealed class EventsIntakeSourceOptions
     /// names none: the operator's knowledge of the source, never a guess about one record.</summary>
     public string? DefaultCountry { get; set; }
 
+    /// <summary>Gets or sets the kind the source's records take when nothing else names one, such as <c>exhibition</c> for an
+    /// exhibitions feed: applied when the record maps to <c>other</c>, no classifier gives a kind of the catalog and the
+    /// catalog's taxonomy holds it. A classifier's kind, and a kind the record itself names, take precedence; none leaves
+    /// the record <c>other</c>.</summary>
+    public string? DefaultKind { get; set; }
+
     /// <summary>Gets or sets the organization that must own the source's catalog, its id at its issuer: intake refuses a
     /// catalog another organization owns, so a slug alone never routes sourced records (cross-lane review, 2026-11-10).
     /// Without it the source pulls nothing.</summary>

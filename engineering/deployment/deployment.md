@@ -44,12 +44,13 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
   ring in `DataProtection:KeysPath` (`/var/lib/events/keys`, the `keys` volume) named `DataProtection:ApplicationName`;
   keep both as deployed, or every reviewer is signed out. A rollback names its set: `migrate rollback --set events …`.
 - Intake: `Events:Intake:Sources:N` (`Name`, `Catalog`, `BaseUrl`, `SubscriptionId`, `TokenEndpoint`, `ClientId`,
-  `ClientSecret`, `Scope`, `Resource`, `Review`, `Classifier`, `Filter`, `MinConfidence`, `DefaultCountry`, `OwnerOrg`, `OwnerIssuer`, …); none polls nothing. `Review`
+  `ClientSecret`, `Scope`, `Resource`, `Review`, `Classifier`, `Filter`, `MinConfidence`, `DefaultCountry`, `DefaultKind`, `OwnerOrg`, `OwnerIssuer`, …); none polls nothing. `Review`
   `auto` publishes what the classifier marks relevant (`classifier:{name}` as the reviewer, its verdict as the reason) and
   holds the rest as candidates; `manual` keeps every record for a person. A person's review takes the event off automatic
   changes, and `POST …/review/{id}/reopen` returns any published event to review. After each poll an `auto` source maps its
   unreviewed and classifier-reviewed events again from their latest payload, so a better mapping reaches stored events
-  once. `OwnerOrg` (required) pins the organization that must own the source's catalog: a catalog anyone else owns, or a
+  once. `DefaultKind` (a kind key, such as `exhibition`) gives a record that maps to `other` that kind when the catalog's taxonomy
+  holds it; the classifier's kind and the record's own kind win, and `afisha-fashion` sets none. `OwnerOrg` (required) pins the organization that must own the source's catalog: a catalog anyone else owns, or a
   source pinning none, pulls nothing. Intake status and `intake/poll` cover only sources whose catalogs the caller's
   organization owns. Before each pull a source reads its subscription (`GET api/subscriptions/{id}`) and pulls nothing
   unless it carries the source's `Filter` (when one is set), schema `wow2.event.v1` and state `active`; the mismatch is
