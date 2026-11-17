@@ -158,8 +158,12 @@ services:
         # declaration); Identity is that instance (its issuer) and Resource its notice audience (its
         # Identity:Notices:Audience). Both stay empty until the instance grants the scope: the channel is off, a Telegram
         # digest's recipients read failed and the log channel stays; once Identity is set, the config check requires the
-        # rest. LinkTemplates:{catalog} links each event to the app that embeds the catalog, such as Ocharo's Events app's
-        # event page (O17).
+        # rest. Role recipients (role:member, every member; role:editor, its holders) read Identity's organization members
+        # at each run through a second token for the same Resource with MembersScope (default identity.members.read): the
+        # declaration grants client `events` that scope too, lists it on the resource and sets Identity:Members:Audience to
+        # the resource's Uri; until then only role recipients read nothing, noted on the run. Identity must be the
+        # instance's issuer, since a digest of another issuer's organization reads no role. LinkTemplates:{catalog} links
+        # each event to the app that embeds the catalog, such as Ocharo's Events app's event page (O17).
         Events:Digests:Telegram:Identity: { type: url }
         Events:Digests:Telegram:TokenEndpoint: { from: Events:Intake:Sources:0:TokenEndpoint }
         Events:Digests:Telegram:ClientId: { from: Events:Intake:Sources:0:ClientId }

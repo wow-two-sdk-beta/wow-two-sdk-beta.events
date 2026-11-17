@@ -178,8 +178,9 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - Channels sit behind one seam (`IDigestDelivery`): Telegram through Identity's app notices (Identity owns the bot, apps
   never talk to it; each recipient's message carries the run's idempotency key) and the host's log; email and webhooks
   can follow. Run history keeps the selected count and each recipient's `sent`, `not_linked`, `muted` or `failed`.
-- Recipients are Identity `sub`s, or an organization role resolved through the host's `IDigestRecipientResolver`; until
-  Identity offers services a member list, a role reads nothing and the run notes it.
+- Recipients are Identity `sub`s, or an organization role resolved at each run through the host's
+  `IDigestRecipientResolver`: bound to Identity's organization members (`AddIdentityDigestRecipients`), `role:member` reads
+  every member and `role:editor` (any catalog role) its holders; a member with no Telegram link reads `not_linked`.
 
 ## Access
 

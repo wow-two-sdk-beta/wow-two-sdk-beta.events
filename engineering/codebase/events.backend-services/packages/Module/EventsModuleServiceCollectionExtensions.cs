@@ -85,7 +85,8 @@ public static class EventsModuleServiceCollectionExtensions
         services.AddScoped<IEventCalendarBroker, ModuleCalendarBroker>();
 
         // Digests: the broker, its runs and the log channel; AddEventDigests adds the hosted scheduler and its settings, a
-        // host adds channels (AddIdentityTelegramDigestDelivery) and may bind IDigestRecipientResolver to its Identity.
+        // host adds channels (AddIdentityTelegramDigestDelivery) and may bind IDigestRecipientResolver to its Identity
+        // (AddIdentityDigestRecipients).
         services.AddOptions<EventDigestsOptions>();
         services.AddScoped<IEventDigestsBroker, ModuleDigestsBroker>();
         services.TryAddScoped<DigestDrafter>();

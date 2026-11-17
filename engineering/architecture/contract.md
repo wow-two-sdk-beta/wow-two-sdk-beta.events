@@ -108,7 +108,8 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 
 - `DigestSpec`: `name`, `enabled`, `channel` (`telegram`, `log`), `schedule` (`days` as `monday`…, `times` as `HH:mm`,
   `timeZone` IANA), `selection` (`newSinceLastRun`, `startingWithinDays`, `deadlineWithinDays`, `statuses`, `kinds`,
-  `cities`, `trackedOnly`), `recipients` (`{ subject }` or `{ role }`, each with an optional `language`), `language`
+  `cities`, `trackedOnly`), `recipients` (`{ subject }` or `{ role }`, each with an optional `language`; role `member` is every
+  member of the organization, another its Identity role's holders), `language`
   (`uz-Latn`, `ru`, `en`), `itemCap` (1–50), `linkTemplate` (`{id}`, `{key}`, `{catalog}`), `expectedRevision`.
   `DigestModel` adds `id`, `catalog`, `nextRunAtUtc`, `lastRunAtUtc`, `revision` and the times.
 - A run (`DigestRunModel`): `occurrenceAtUtc` (unique per digest), `trigger` (`schedule`, `manual`), `status` (`running`,
@@ -118,7 +119,16 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 - Texts are Telegram's HTML subset (`b`, `i`, `a href`), at most 4,096 characters; the preview returns the texts a send
   now at that instant sends.
 - Seams the host binds: `IDigestDelivery` (one per channel; `AddIdentityTelegramDigestDelivery()` over Identity's
-  `IAppNoticeBroker`, the `log` channel always) and `IDigestRecipientResolver` (a role's members; unbound by default).
+  `IAppNoticeBroker`, the `log` channel always) and `IDigestRecipientResolver` (a role's members; unbound by default, a
+  role reading nothing and the run noting it). `AddIdentityDigestRecipients(o => o.Issuer = …)` binds it to Identity's
+  `IMemberBroker` (Identity 10.0.32-beta+, `GET /api/identity/v1/organizations/{id}/members`, scope `identity.members.read`):
+  each run reads the organization's members, `role:member` all of them, linked to the bot or not, so the Telegram channel
+  records `not_linked` for those without a link; another issuer's organization, Identity's refusal or an unreachable
+  instance reads nothing and the run notes why with Identity's code.
+- The service binds both when `Events:Digests:Telegram:Identity` is set: the notice client (`Scope`, default
+  `identity.notices.send`) and the member client (`MembersScope`, default `identity.members.read`), each its own token for
+  `Resource`, the instance's notice audience, which is also its `Identity:Members:Audience`. The instance's declaration
+  grants Events' client both scopes and lists both on that resource; without the member scope only role recipients fail.
 - Scheduler (`AddEventDigests`, `Events:Digests`): `Enabled`, `PollInterval` (30 s), `CatchUpWindow` (6 h; an older
   occurrence is recorded `missed`), `LeaseDuration` (5 min; a dead host's run resumes after it), `MaxAttempts` (5, for
   rate limits and outages, after `Retry-After`), `LinkTemplates:{catalog}`. Each recipient's idempotency key is

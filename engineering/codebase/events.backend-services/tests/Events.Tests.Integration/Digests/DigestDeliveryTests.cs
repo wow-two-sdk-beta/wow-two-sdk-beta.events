@@ -4,15 +4,18 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Digests;
+using WoW.Two.Sdk.Beta.Be.Events.Module;
+using WoW.Two.Sdk.Beta.Be.Events.Testing.Principals;
 using WoW.Two.Sdk.Beta.Be.Foundation.Errors;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
+using WoW.Two.Sdk.Beta.Be.Identity.Members;
 using WoW.Two.Sdk.Beta.Be.Identity.Notices;
 
 namespace Events.Tests.Integration.Digests;
 
 /// <summary>Covers what a digest sends and to whom: new events since the last run, each recipient's Telegram result, the
 /// preview's text against the sent one, a message per recipient language, the selection's rules and filters, and role
-/// recipients through the host's resolver.</summary>
+/// recipients through the host's resolver, Identity's organization members among them.</summary>
 /// <param name="fixture">The module's database.</param>
 public sealed class DigestDeliveryTests(DigestFixture fixture) : IClassFixture<DigestFixture>
 {
@@ -219,6 +222,77 @@ public sealed class DigestDeliveryTests(DigestFixture fixture) : IClassFixture<D
         resolved.Notes.Should().BeEmpty();
         resolver.Asked.Should().Equal(("https://identity.test/", organization, "member"));
     }
+
+    [Fact]
+    public async Task MemberRole_ShouldReachEveryLinkedMember_AndRecordNotLinkedForTheRest()
+    {
+        var notices = new FakeAppNoticeBroker();
+        var organization = Guid.NewGuid();
+        var (owner, editor, viewer, unlinked) = (Sub(), Sub(), Sub(), Sub());
+        var members = new FakeMemberBroker()
+            .AddMember(organization, owner, "owner")
+            .AddMember(organization, editor, "editor")
+            .AddMember(organization, viewer, "viewer")
+            .AddMember(organization, unlinked, "editor", hasTelegramLink: false)
+            .AddMember(Guid.NewGuid(), Sub(), "owner");
+        notices.Link(owner).Link(editor).Link(viewer);
+        await using var host = fixture.StartHost(new FakeTimeProvider(Start), notices, services => services
+            .AddSingleton<IMemberBroker>(members)
+            .AddIdentityDigestRecipients(recipients => recipients.Issuer = TestPrincipal.DefaultIssuer));
+        host.Principal.ActAsMember(organization.ToString("D"));
+        var catalog = await host.CatalogAsync(organization.ToString("D"));
+        await host.EventAsync(catalog, Facts("Team fair", "2026-12-01"));
+        var everyone = (await host.DigestsAsync(broker => broker.CreateAsync(catalog.Slug, Spec() with
+        {
+            Recipients = [new DigestRecipient { Role = DigestRecipientRoleConstants.Member }],
+        }))).Value();
+        var editors = (await host.DigestsAsync(broker => broker.CreateAsync(catalog.Slug, Spec() with
+        {
+            Name = "Editors",
+            Recipients = [new DigestRecipient { Role = "editor" }],
+        }))).Value();
+
+        var run = (await host.DigestsAsync(broker => broker.SendNowAsync(catalog.Slug, everyone.Id))).Value();
+        var preview = (await host.DigestsAsync(broker => broker.PreviewAsync(catalog.Slug, editors.Id))).Value();
+
+        run.Status.Should().Be(DigestRunStatus.Completed);
+        run.Notes.Should().BeEmpty();
+        run.Recipients.Select(recipient => (recipient.Subject, recipient.Status)).Should().Equal(
+            (owner, DigestRecipientStatusConstants.Sent),
+            (editor, DigestRecipientStatusConstants.Sent),
+            (viewer, DigestRecipientStatusConstants.Sent),
+            (unlinked, DigestRecipientStatusConstants.NotLinked));
+        host.Notices.Sent.Select(notice => notice.Subject).Should().Equal(owner, editor, viewer);
+        preview.Recipients.Select(recipient => recipient.Subject).Should().Equal(editor, unlinked);
+        members.Asked.Should().Equal((organization, (string?)null), (organization, "editor"));
+    }
+
+    [Fact]
+    public async Task MemberRole_ShouldReadNothing_AndNoteWhy_ForAnotherIssuersOrganization()
+    {
+        var notices = new FakeAppNoticeBroker();
+        var organization = Guid.NewGuid();
+        var members = new FakeMemberBroker().AddMember(organization, Sub(), "owner");
+        var person = Sub();
+        notices.Link(person);
+        await using var host = fixture.StartHost(new FakeTimeProvider(Start), notices, services => services
+            .AddSingleton<IMemberBroker>(members)
+            .AddIdentityDigestRecipients(recipients => recipients.Issuer = "https://other-identity.test/"));
+        host.Principal.ActAsMember(organization.ToString("D"));
+        var catalog = await host.CatalogAsync(organization.ToString("D"));
+        var digest = (await host.DigestsAsync(broker => broker.CreateAsync(catalog.Slug, Spec(person) with
+        {
+            Recipients = [new DigestRecipient { Role = DigestRecipientRoleConstants.Member }, new DigestRecipient { Subject = person }],
+        }))).Value();
+
+        var preview = (await host.DigestsAsync(broker => broker.PreviewAsync(catalog.Slug, digest.Id))).Value();
+
+        preview.Recipients.Select(recipient => recipient.Subject).Should().Equal(person);
+        preview.Notes.Should().ContainSingle().Which.Should().Contain("is not the bound Identity");
+        members.Asked.Should().BeEmpty();
+    }
+
+    private static string Sub() => Guid.NewGuid().ToString("D");
 
     private async Task<(DigestHost Host, string Person, string Organization)> StartAsync()
     {

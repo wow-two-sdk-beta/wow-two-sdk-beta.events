@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using WoW.Two.Sdk.Beta.Be.Events.Digests;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Digests;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Digests.Identity;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Digests.Telegram;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Module;
@@ -50,6 +51,27 @@ public static class EventsDigestsServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IDigestDelivery, IdentityTelegramDigestDelivery>());
+        return services;
+    }
+
+    /// <summary>Binds <see cref="IDigestRecipientResolver"/> to Identity's organization members: a role recipient reads the
+    /// digest organization's members at each run, <see cref="DigestRecipientRoleConstants.Member"/> every one of them and
+    /// another role (<c>owner</c>, <c>admin</c>, <c>editor</c>, <c>viewer</c>, <c>billing</c>) its holders.</summary>
+    /// <remarks>The host registers Identity's <c>IMemberBroker</c>: in process beside Identity's module
+    /// (<c>AddOrganizations</c>), or over an instance with <c>services.AddIdentityMembers(instance).AddOAuth2ClientCredentials(…)</c>
+    /// from Identity's client package, whose client needs the <c>identity.members.read</c> scope. Call it before or after
+    /// <c>AddEvents</c>; it replaces the unbound resolver.</remarks>
+    /// <param name="services">The service collection to configure.</param>
+    /// <param name="configure">Sets the bound Identity's issuer; none takes every digest's issuer.</param>
+    /// <returns>The service collection.</returns>
+    public static IServiceCollection AddIdentityDigestRecipients(this IServiceCollection services, Action<IdentityDigestRecipientOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        var options = services.AddOptions<IdentityDigestRecipientOptions>();
+        if (configure is not null)
+            options.Configure(configure);
+        services.Replace(ServiceDescriptor.Scoped<IDigestRecipientResolver, IdentityMemberDigestRecipientResolver>());
         return services;
     }
 

@@ -1,9 +1,11 @@
+using WoW.Two.Sdk.Beta.Be.Identity.Members;
 using WoW.Two.Sdk.Beta.Be.Identity.Notices;
 
 namespace Events.Api.Digests;
 
-/// <summary>Holds the Telegram digest channel's link to Identity's app notices (<c>Events:Digests:Telegram</c>): the
-/// instance and Events' own client there, which needs <see cref="AppNoticeConstants.Scope"/>.</summary>
+/// <summary>Holds the Telegram digest channel's link to Identity (<c>Events:Digests:Telegram</c>): the instance and Events' own
+/// client there, which needs <see cref="AppNoticeConstants.Scope"/> for the app notices and <see cref="MemberConstants.Scope"/>
+/// for the organization members a digest's role recipients read.</summary>
 public sealed class DigestTelegramSettings
 {
     /// <summary>Holds the configuration section.</summary>
@@ -21,11 +23,15 @@ public sealed class DigestTelegramSettings
     /// <summary>Gets or sets Events' client secret at the instance.</summary>
     public string ClientSecret { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the scope the token asks for.</summary>
+    /// <summary>Gets or sets the scope the app notice client's token asks for.</summary>
     public string Scope { get; set; } = AppNoticeConstants.Scope;
 
-    /// <summary>Gets or sets the resource the token is issued for: the instance's notice audience
-    /// (Identity's <c>Identity:Notices:Audience</c>).</summary>
+    /// <summary>Gets or sets the scope the member client's token asks for. Its own token, so an instance that has not granted
+    /// it yet fails only the role recipients (the run notes it), never the notices.</summary>
+    public string MembersScope { get; set; } = MemberConstants.Scope;
+
+    /// <summary>Gets or sets the resource both tokens are issued for: the instance's notice audience (Identity's
+    /// <c>Identity:Notices:Audience</c>), which is also its member audience (<c>Identity:Members:Audience</c>).</summary>
     public string Resource { get; set; } = string.Empty;
 
     /// <summary>Gets whether the channel is on: the instance's address is set.</summary>
