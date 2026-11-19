@@ -33,7 +33,9 @@ to the consumer's Tailwind sources:
 
 - Dates never claim more than they know: a month stays a month (`Oct 2026`), an estimate reads `≈ Oct 2026 (expected)`,
   an unknown date `Dates not announced`, and undated events sort last.
-- A member's `proposeEvent` lands as a candidate awaiting review; only a reviewer publishes.
+- A member's `proposeEvent` publishes at once in a private catalog (the member's organization is its only reader) and
+  lands as a candidate awaiting review in a shared or public one; there only a reviewer publishes. `EventsFeed` says
+  which and reloads to show a published proposal.
 - A product embeds a catalog's digests with `<DigestsPanel :client :catalog :locale :defaults :link-template />`:
   `defaults` is a new digest's fields (its schedule, selection, recipients, language), `linkTemplate` fixes each event's
   link to the product's own page, `channels` the channels offered (`['telegram']` by default). It needs `events:admin`.

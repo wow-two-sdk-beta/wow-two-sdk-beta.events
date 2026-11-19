@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
+using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
@@ -10,17 +11,20 @@ using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 namespace WoW.Two.Sdk.Beta.Be.Events.Module.CatalogEvents;
 
 /// <summary>Integrates a catalog's events in process: readers see published events, the owner organization sees and
-/// writes every state.</summary>
+/// writes every state. A member's proposal publishes at once in a private catalog, whose only reader is the proposer's
+/// own organization, and waits for a reviewer as a candidate in a shared or public one.</summary>
 /// <param name="db">The module's store.</param>
 /// <param name="callers">Who calls.</param>
 /// <param name="time">The clock rows are stamped with.</param>
 internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCallerService callers, TimeProvider time) : ICatalogEventsBroker
 {
     private const int MaxSourceSubjectLength = 200;
+    private const string PrivateProposalReason = "owner-organization proposal in a private catalog";
     private static readonly string Published = EventsLabels.Of(EventReviewState.Published);
     private static readonly string Archived = EventsLabels.Of(EventReviewState.Archived);
     private static readonly string Candidate = EventsLabels.Of(EventReviewState.Candidate);
     private static readonly string Manual = EventsLabels.Of(EventSourceKind.Manual);
+    private static readonly string Private = EventsLabels.Of(CatalogVisibility.Private);
 
     /// <inheritdoc />
     public async Task<Result<EventPage>> ListAsync(string catalog, EventQuery query, CancellationToken cancellationToken = default)
@@ -141,6 +145,14 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
         if (await EventWrites.KeyTakenAsync(db, found.Id, facts.Key, Guid.Empty, cancellationToken))
             return Result<EventModel>.Fail(EventsErrors.KeyTaken());
 
+        // In a private catalog the proposer's organization is the only reader, so its proposal needs no other reviewer.
+        var reason = review == EventReviewState.Published ? "entered by a curator" : null;
+        if (review == EventReviewState.Candidate && found.Visibility == Private)
+        {
+            review = EventReviewState.Published;
+            reason = PrivateProposalReason;
+        }
+
         var now = time.StoredUtcNow();
         var row = new CatalogEventEntity
         {
@@ -153,8 +165,8 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
             PublishedAt = review == EventReviewState.Published ? now : null,
         };
         await EventWrites.ApplyAsync(db, row, facts, isNew: true, cancellationToken);
-        if (review == EventReviewState.Published)
-            ReviewStamp.ByPerson(row, caller, "entered by a curator", now);
+        if (reason is not null)
+            ReviewStamp.ByPerson(row, caller, reason, now);
         db.Events.Add(row);
 
         // A curator's identity per event: the source key is unique per catalog, so it names the event too.

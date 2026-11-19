@@ -18,7 +18,8 @@ import FailureNotice from './FailureNotice.vue';
 
 /**
  * Lists a catalog's published events grouped by the month they start in, undated last, with search, kind and country
- * filters, past events on request, a calendar download, and — for members — a proposal that waits for review.
+ * filters, past events on request, a calendar download, and — for members — a proposal: in a private catalog it publishes
+ * at once and the feed reloads to show it; in a shared or public one it waits for review.
  */
 defineOptions({ name: 'EventsFeed' });
 
@@ -42,7 +43,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   open: [id: string];
-  /** Fires with the candidate a proposal created; it is not in the feed until a reviewer publishes it. */
+  /** Fires with the event a proposal created: published (a private catalog) or a candidate awaiting review. */
   proposed: [event: EventModel];
 }>();
 
@@ -56,6 +57,7 @@ const items = shallowRef<readonly EventModel[]>([]);
 const nextCursor = shallowRef<string | null>(null);
 const proposing = shallowRef(false);
 const proposedTitle = shallowRef<string | null>(null);
+const proposedPublished = shallowRef(false);
 const calendarFailure = shallowRef<EventsFailure | null>(null);
 const calendarPending = shallowRef(false);
 const downloadFailed = shallowRef(false);
@@ -115,7 +117,9 @@ async function downloadCalendar() {
 function proposed(event: EventModel) {
   proposing.value = false;
   proposedTitle.value = eventTitle(event.facts, props.locale);
+  proposedPublished.value = event.review === 'published';
   emit('proposed', event);
+  if (proposedPublished.value) void load();
 }
 </script>
 
@@ -147,7 +151,7 @@ function proposed(event: EventModel) {
       role="status"
       data-test="proposal-sent"
     >
-      {{ eventsText('proposed', locale, { title: proposedTitle }) }}
+      {{ eventsText(proposedPublished ? 'proposedPublished' : 'proposed', locale, { title: proposedTitle }) }}
     </p>
     <section
       v-if="proposing"

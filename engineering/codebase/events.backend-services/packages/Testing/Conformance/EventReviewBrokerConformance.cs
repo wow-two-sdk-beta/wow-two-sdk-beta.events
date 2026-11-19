@@ -15,7 +15,7 @@ public abstract class EventReviewBrokerConformance : EventsConformance
     public async Task ListAsync_ShouldQueueACandidate()
     {
         var owner = NewMember();
-        var catalog = await CreateCatalogAsync(owner);
+        var catalog = await CreateReviewedCatalogAsync(owner);
         var candidate = await ProposeEventAsync(owner, catalog.Slug);
         var published = await CreateEventAsync(owner, catalog.Slug);
 
@@ -29,7 +29,7 @@ public abstract class EventReviewBrokerConformance : EventsConformance
     public async Task AcceptAsync_ShouldPublishTheCandidate_WithTheEdits()
     {
         var owner = NewMember();
-        var catalog = await CreateCatalogAsync(owner);
+        var catalog = await CreateReviewedCatalogAsync(owner);
         var candidate = await ProposeEventAsync(owner, catalog.Slug);
 
         var accepted = Value(await As(owner).Review.AcceptAsync(catalog.Slug, candidate.Id, new ReviewDecision { ExpectedRevision = candidate.Revision, Facts = Facts("Reviewed title") }));
@@ -58,7 +58,7 @@ public abstract class EventReviewBrokerConformance : EventsConformance
     public async Task AcceptAsync_ShouldFailConflict_WhenTheRevisionIsStale()
     {
         var owner = NewMember();
-        var catalog = await CreateCatalogAsync(owner);
+        var catalog = await CreateReviewedCatalogAsync(owner);
         var candidate = await ProposeEventAsync(owner, catalog.Slug);
 
         var accepted = await As(owner).Review.AcceptAsync(catalog.Slug, candidate.Id, new ReviewDecision { ExpectedRevision = candidate.Revision + 1 });
@@ -71,7 +71,7 @@ public abstract class EventReviewBrokerConformance : EventsConformance
     public async Task RejectAsync_ShouldRejectTheCandidate_ThenRefuseToAcceptIt()
     {
         var owner = NewMember();
-        var catalog = await CreateCatalogAsync(owner);
+        var catalog = await CreateReviewedCatalogAsync(owner);
         var candidate = await ProposeEventAsync(owner, catalog.Slug);
 
         var rejected = Value(await As(owner).Review.RejectAsync(catalog.Slug, candidate.Id, candidate.Revision));
@@ -86,7 +86,7 @@ public abstract class EventReviewBrokerConformance : EventsConformance
     public async Task MergeAsync_ShouldArchiveTheCandidate_IntoThePublishedEvent()
     {
         var owner = NewMember();
-        var catalog = await CreateCatalogAsync(owner);
+        var catalog = await CreateReviewedCatalogAsync(owner);
         var target = await CreateEventAsync(owner, catalog.Slug);
         var candidate = await ProposeEventAsync(owner, catalog.Slug);
 
@@ -109,7 +109,7 @@ public abstract class EventReviewBrokerConformance : EventsConformance
     public async Task ListAsync_ShouldFailNotFound_ForAnotherOrganization()
     {
         var owner = NewMember();
-        var catalog = await CreateCatalogAsync(owner);
+        var catalog = await CreateReviewedCatalogAsync(owner);
         var candidate = await ProposeEventAsync(owner, catalog.Slug);
         var other = As(NewMember());
 

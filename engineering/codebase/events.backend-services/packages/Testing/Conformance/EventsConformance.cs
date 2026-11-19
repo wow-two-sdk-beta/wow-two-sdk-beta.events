@@ -36,6 +36,12 @@ public abstract class EventsConformance
     protected async Task<CatalogModel> CreateCatalogAsync(EventsActor owner, CatalogVisibility visibility = CatalogVisibility.Private) =>
         Value(await As(owner).Catalogs.PutAsync(NewSlug(), new CatalogSpec { Name = "Conformance catalog", Visibility = visibility }));
 
+    /// <summary>Creates a catalog where a member's proposal waits for review as a candidate: a shared one, which reads as
+    /// private until sharing lands. In a private catalog a proposal publishes at once.</summary>
+    /// <param name="owner">The owner.</param>
+    /// <returns>The catalog.</returns>
+    protected Task<CatalogModel> CreateReviewedCatalogAsync(EventsActor owner) => CreateCatalogAsync(owner, CatalogVisibility.Shared);
+
     /// <summary>Creates a published event by hand, as a curator.</summary>
     /// <param name="owner">The catalog's owner.</param>
     /// <param name="catalog">The catalog's slug.</param>
@@ -44,11 +50,11 @@ public abstract class EventsConformance
     protected async Task<EventModel> CreateEventAsync(EventsActor owner, string catalog, EventFacts? facts = null) =>
         Value(await As(owner).Events.CreateAsync(catalog, new EventSpec { Facts = facts ?? Facts() }));
 
-    /// <summary>Proposes a candidate, as a member.</summary>
+    /// <summary>Proposes an event, as a member: a candidate in a shared or public catalog, published in a private one.</summary>
     /// <param name="owner">The catalog's owner.</param>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="facts">The facts; <see cref="Facts"/> with a fresh title when none.</param>
-    /// <returns>The candidate.</returns>
+    /// <returns>The event.</returns>
     protected async Task<EventModel> ProposeEventAsync(EventsActor owner, string catalog, EventFacts? facts = null) =>
         Value(await As(owner).Events.ProposeAsync(catalog, new EventSpec { Facts = facts ?? Facts() }));
 

@@ -5,12 +5,13 @@ using Microsoft.Extensions.DependencyInjection;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
 using WoW.Two.Sdk.Beta.Be.Events.Review;
+using WoW.Two.Sdk.Beta.Be.Events.Tracking;
 using WoW.Two.Sdk.Beta.Be.Foundation.Errors;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 
 namespace Events.Tests.Integration.CatalogEvents;
 
-/// <summary>The module's catalog events: curators' writes, readers' views, and the list's filters.</summary>
+/// <summary>The module's catalog events: curators' writes, members' proposals, readers' views, and the list's filters.</summary>
 public sealed class CatalogEventsBrokerTests(ModuleFixture fixture) : IClassFixture<ModuleFixture>
 {
     [Fact]
@@ -57,6 +58,39 @@ public sealed class CatalogEventsBrokerTests(ModuleFixture fixture) : IClassFixt
 
         TestResults.ErrorOf(created).Type.Should().Be(AppErrorType.Forbidden);
         TestResults.ErrorOf(proposed).Type.Should().Be(AppErrorType.Forbidden);
+    }
+
+    [Fact]
+    public async Task ProposeAsync_ShouldPublishAtOnce_InAPrivateCatalog_AndStayACandidateInASharedOne()
+    {
+        var privateSlug = await OwnCatalogAsync();
+        var privateOwner = fixture.Principal.OrganizationId!;
+        var proposed = (await Events(broker => broker.ProposeAsync(privateSlug, new EventSpec
+        {
+            Facts = TestCatalogs.Facts("Member's show", "2026-12-05"),
+        }))).ValueOrThrow();
+        fixture.Principal.ActAsMember(privateOwner, "person-2");
+        var tracked = (await Tracking(broker => broker.ListAsync(privateSlug, new TrackingQuery()))).ValueOrThrow();
+        var queue = (await Review(broker => broker.ListAsync(privateSlug, new ReviewQuery()))).ValueOrThrow();
+
+        var sharedSlug = await OwnCatalogAsync(CatalogVisibility.Shared);
+        var candidate = (await Events(broker => broker.ProposeAsync(sharedSlug, new EventSpec
+        {
+            Facts = TestCatalogs.Facts("Member's shared show", "2026-12-06"),
+        }))).ValueOrThrow();
+        var sharedTracked = (await Tracking(broker => broker.ListAsync(sharedSlug, new TrackingQuery()))).ValueOrThrow();
+
+        proposed.Review.Should().Be(EventReviewState.Published);
+        proposed.PublishedAtUtc.Should().Be(fixture.Clock.GetUtcNow());
+        proposed.ReviewedBy.Should().Be("person:person-1");
+        proposed.ReviewReason.Should().Be("owner-organization proposal in a private catalog");
+        proposed.Sources.Should().ContainSingle().Which.Kind.Should().Be(EventSourceKind.Manual);
+        tracked.Items.Should().ContainSingle().Which.Event.Id.Should().Be(proposed.Id);
+        queue.Items.Should().BeEmpty();
+        candidate.Review.Should().Be(EventReviewState.Candidate);
+        candidate.PublishedAtUtc.Should().BeNull();
+        candidate.ReviewedBy.Should().BeNull();
+        sharedTracked.Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -270,5 +304,11 @@ public sealed class CatalogEventsBrokerTests(ModuleFixture fixture) : IClassFixt
     {
         await using var scope = fixture.Scope();
         return await call(scope.ServiceProvider.GetRequiredService<IEventReviewBroker>());
+    }
+
+    private async Task<T> Tracking<T>(Func<IEventTrackingBroker, Task<T>> call)
+    {
+        await using var scope = fixture.Scope();
+        return await call(scope.ServiceProvider.GetRequiredService<IEventTrackingBroker>());
     }
 }

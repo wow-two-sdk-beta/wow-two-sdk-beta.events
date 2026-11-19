@@ -26,6 +26,8 @@ public sealed class ReviewBrokerTests(IntakeFixture fixture) : IClassFixture<Int
         fixture.Feed.Append(source, ScfdRecords.Post(changed, 2, "Changed", "post.changed"), ScfdRecords.Post(Guid.NewGuid(), 1, "Fresh candidate"));
         await fixture.PollAsync(source);
         fixture.Clock.Advance(TimeSpan.FromMinutes(1));
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Later candidate"));
+        await fixture.PollAsync(source);
         var proposed = (await Events(broker => broker.ProposeAsync(slug, new EventSpec { Facts = TestCatalogs.Facts("Member's proposal") }))).ValueOrThrow();
 
         var first = (await Review(broker => broker.ListAsync(slug, new ReviewQuery { Limit = 2 }))).ValueOrThrow();
@@ -34,8 +36,10 @@ public sealed class ReviewBrokerTests(IntakeFixture fixture) : IClassFixture<Int
         first.Items.Select(item => item.Event.Review).Should().Equal(EventReviewState.Candidate, EventReviewState.Candidate);
         first.Items[0].Event.Facts.Title.Values.Should().Equal("Fresh candidate");
         first.Items[0].Observations.Should().ContainSingle().Which.State.Should().Be(ObservationState.Applied);
-        first.Items[1].Event.Id.Should().Be(proposed.Id);
-        first.Items[1].Observations.Should().BeEmpty();
+        first.Items[1].Event.Facts.Title.Values.Should().Equal("Later candidate");
+        first.Items[1].Observations.Should().ContainSingle();
+        proposed.Review.Should().Be(EventReviewState.Published, "a proposal in the private catalog publishes at once");
+        first.Items.Concat(rest.Items).Select(item => item.Event.Id).Should().NotContain(proposed.Id);
         rest.Items.Should().ContainSingle();
         rest.Items[0].Event.Id.Should().Be(toPublish.Id);
         rest.Items[0].Observations.Should().ContainSingle().Which.Proposed!.Title.Values.Should().Equal("Changed");

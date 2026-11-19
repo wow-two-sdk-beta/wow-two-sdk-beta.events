@@ -137,8 +137,11 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - an event the classifier published follows its source's newer revisions by itself until a person reviews it; from
   then on a newer revision waits as a pending change.
 - curators create and edit published events by hand; a curator's own entry is reviewed by definition.
-- members of the owner organization propose events (`POST …/catalogs/{c}/candidates`, `events.track`): a proposal is a
-  candidate and publishes only when a reviewer accepts it.
+- members of the owner organization propose events (`POST …/catalogs/{c}/candidates`, `events.track`). In a private
+  catalog the owner organization is the only reader, so a proposal publishes at once, reviewed by the proposer
+  (`person:{sub}`, "owner-organization proposal in a private catalog"), and the organization's lists and tracking show
+  it right away (OE03, 2026-11-19: Ocharo's "Add event" had vanished, as no Ocharo role can accept a candidate in the
+  app). In a shared or public catalog a proposal stays a candidate and publishes only when a reviewer accepts it.
 - the review console is Events' own page set; reviewers sign in through the catalog owner's Identity (P1: Ocharo's)
   and need `events:review` in the owner organization.
 

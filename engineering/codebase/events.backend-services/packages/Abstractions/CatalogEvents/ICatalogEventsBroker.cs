@@ -4,7 +4,8 @@ namespace WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 
 /// <summary>Integrates a catalog's events — list, read, curate and archive them — in process or over the service.</summary>
 /// <remarks>Every call acts for the current principal. Reading needs a catalog the caller can see; anyone but the owner
-/// organization reads published events only. Curating needs the owner organization; a curator's entry publishes.</remarks>
+/// organization reads published events only. Curating needs the owner organization; a curator's entry publishes, and so
+/// does a member's proposal in a private catalog.</remarks>
 public interface ICatalogEventsBroker
 {
     /// <summary>Lists a catalog's events.</summary>
@@ -29,13 +30,15 @@ public interface ICatalogEventsBroker
     /// <see cref="EventsErrors.KeyTaken"/> for a key already used.</returns>
     Task<Result<EventModel>> CreateAsync(string catalog, EventSpec spec, CancellationToken cancellationToken = default);
 
-    /// <summary>Proposes an event: a member of the owner organization enters it, and it waits for a reviewer as a
-    /// candidate (nothing a member proposes publishes unreviewed).</summary>
+    /// <summary>Proposes an event: a member of the owner organization enters it. In a private catalog, whose only reader
+    /// is that organization, it publishes at once, reviewed by the proposer (reason "owner-organization proposal in a
+    /// private catalog"), so the organization's lists and tracking show it right away. In a shared or public catalog it
+    /// waits for a reviewer as a candidate (nothing a member proposes reaches another organization unreviewed).</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="spec">The facts; the expected revision is ignored.</param>
     /// <param name="cancellationToken">The token that cancels the call.</param>
-    /// <returns>The candidate; <see cref="EventsErrors.NotCatalogOwner"/> for another organization;
-    /// <see cref="EventsErrors.KeyTaken"/> for a key already used.</returns>
+    /// <returns>The event, published or a candidate as above; <see cref="EventsErrors.NotCatalogOwner"/> for another
+    /// organization; <see cref="EventsErrors.KeyTaken"/> for a key already used.</returns>
     Task<Result<EventModel>> ProposeAsync(string catalog, EventSpec spec, CancellationToken cancellationToken = default);
 
     /// <summary>Replaces an event's facts.</summary>

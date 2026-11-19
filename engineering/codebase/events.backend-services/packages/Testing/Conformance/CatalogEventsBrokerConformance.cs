@@ -1,14 +1,15 @@
 using AwesomeAssertions;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
+using WoW.Two.Sdk.Beta.Be.Events.Tracking;
 using WoW.Two.Sdk.Beta.Be.Foundation.Errors;
 using Xunit;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Testing.Conformance;
 
-/// <summary>The contract of <see cref="ICatalogEventsBroker"/>: the owner organization writes; a curator's entry publishes
-/// and a member's proposal waits as a candidate; readers outside the owner see published events only; writes carry the
-/// revision they read.</summary>
+/// <summary>The contract of <see cref="ICatalogEventsBroker"/>: the owner organization writes; a curator's entry publishes,
+/// and so does a member's proposal in a private catalog, while in a shared or public one it waits as a candidate; readers
+/// outside the owner see published events only; writes carry the revision they read.</summary>
 public abstract class CatalogEventsBrokerConformance : EventsConformance
 {
     /// <summary>A curator's entry publishes, at revision 1, in the catalog.</summary>
@@ -28,17 +29,49 @@ public abstract class CatalogEventsBrokerConformance : EventsConformance
         created.Facts.Starts.Precision.Should().Be(DatePrecision.Day);
     }
 
-    /// <summary>A member's proposal waits as a candidate the owner reads.</summary>
+    /// <summary>A member's proposal in a private catalog publishes at once: the organization's event list and its
+    /// tracking list show it.</summary>
     [Fact]
-    public async Task ProposeAsync_ShouldKeepTheEventACandidate()
+    public async Task ProposeAsync_ShouldPublishTheEvent_InAPrivateCatalog()
     {
         var owner = NewMember();
         var catalog = await CreateCatalogAsync(owner);
 
-        var proposed = await ProposeEventAsync(owner, catalog.Slug);
+        var proposed = await ProposeEventAsync(owner, catalog.Slug, Facts("Member's private proposal", "2099-04-01"));
+
+        proposed.Review.Should().Be(EventReviewState.Published);
+        proposed.PublishedAtUtc.Should().NotBeNull();
+        Value(await As(owner).Events.ListAsync(catalog.Slug, new EventQuery())).Items.Select(item => item.Id).Should().Equal(proposed.Id);
+        Value(await As(NewMember(owner.OrganizationId)).Tracking.ListAsync(catalog.Slug, new TrackingQuery())).Items
+            .Select(item => item.Event.Id).Should().Equal(proposed.Id);
+    }
+
+    /// <summary>A member's proposal in a shared or public catalog waits as a candidate the owner reads, and no list shows it.</summary>
+    /// <param name="visibility">The catalog's visibility.</param>
+    [Theory]
+    [InlineData(CatalogVisibility.Shared)]
+    [InlineData(CatalogVisibility.Public)]
+    public async Task ProposeAsync_ShouldKeepTheEventACandidate_InASharedOrPublicCatalog(CatalogVisibility visibility)
+    {
+        var owner = NewMember();
+        var catalog = await CreateCatalogAsync(owner, visibility);
+
+        var proposed = await ProposeEventAsync(owner, catalog.Slug, Facts("Member's shared proposal", "2099-04-01"));
 
         proposed.Review.Should().Be(EventReviewState.Candidate);
         Value(await As(owner).Events.GetAsync(catalog.Slug, proposed.Id)).Review.Should().Be(EventReviewState.Candidate);
+        Value(await As(owner).Tracking.ListAsync(catalog.Slug, new TrackingQuery())).Items.Should().BeEmpty();
+    }
+
+    /// <summary>Another organization proposes nothing into a public catalog it reads.</summary>
+    [Fact]
+    public async Task ProposeAsync_ShouldFailForbidden_ForAnotherOrganization()
+    {
+        var catalog = await CreateCatalogAsync(NewMember(), CatalogVisibility.Public);
+
+        var proposed = await As(NewMember()).Events.ProposeAsync(catalog.Slug, new EventSpec { Facts = Facts() });
+
+        Error(proposed).Type.Should().Be(AppErrorType.Forbidden);
     }
 
     /// <summary>The owner lists published events by default, and candidates when it asks for them.</summary>
@@ -46,7 +79,7 @@ public abstract class CatalogEventsBrokerConformance : EventsConformance
     public async Task ListAsync_ShouldListPublishedEvents_AndCandidatesOnlyWhenAsked()
     {
         var owner = NewMember();
-        var catalog = await CreateCatalogAsync(owner);
+        var catalog = await CreateReviewedCatalogAsync(owner);
         var published = await CreateEventAsync(owner, catalog.Slug);
         var candidate = await ProposeEventAsync(owner, catalog.Slug);
 

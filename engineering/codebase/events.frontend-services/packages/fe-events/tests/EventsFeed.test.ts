@@ -80,6 +80,30 @@ describe('events feed', () => {
     expect(wrapper.findAll('[data-test="event-card"]')).toHaveLength(3);
   });
 
+  it('shows a proposal the private catalog published at once, reloading the feed', async () => {
+    const added = eventModel('c2', { title: { und: 'Pop-up Show' } }, { review: 'published' });
+    let lists = 0;
+    const { wrapper, requests } = await render({ canPropose: true }, (request) => {
+      if (request.method === 'POST') return envelope(added, { status: 201 });
+      lists += 1;
+      return lists === 1 ? page() : envelope({ items: [added], nextCursor: null });
+    });
+
+    [...wrapper.element.querySelectorAll('button')]
+      .find((item) => item.textContent?.trim() === 'Propose an event')
+      ?.click();
+    await flushPromises();
+    await wrapper.get('input[name="title"]').setValue('Pop-up Show');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(requests.filter((request) => request.method === 'GET')).toHaveLength(2);
+    expect(wrapper.get('[data-test="proposal-sent"]').text()).toContain('is in the list now');
+    expect(wrapper.get('[data-test="proposal-sent"]').text()).not.toContain('awaiting review');
+    expect(wrapper.emitted('proposed')).toEqual([[added]]);
+    expect(wrapper.findAll('[data-test="event-card"]')).toHaveLength(1);
+  });
+
   it('keeps a proposal with an unreadable date in the form', async () => {
     const { wrapper, requests } = await render({ canPropose: true }, page);
 

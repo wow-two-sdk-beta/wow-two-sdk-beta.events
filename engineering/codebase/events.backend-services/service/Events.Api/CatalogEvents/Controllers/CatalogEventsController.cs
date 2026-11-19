@@ -46,11 +46,12 @@ public sealed class CatalogEventsController(ICatalogEventsBroker events) : Event
     public async Task<IActionResult> Create(string catalog, [FromBody] EventSpec spec, CancellationToken ct) =>
         AnswerCreated(await events.CreateAsync(catalog, spec, ct), created => Location(catalog, created.Id));
 
-    /// <summary>Proposes an event: a member's entry waits for a reviewer as a candidate.</summary>
+    /// <summary>Proposes an event: a member's entry publishes at once in a private catalog and waits for a reviewer as a
+    /// candidate in a shared or public one.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="spec">The facts.</param>
     /// <param name="ct">The token that cancels the request.</param>
-    /// <returns>The candidate, <c>201</c>.</returns>
+    /// <returns>The event, <c>201</c>.</returns>
     [HttpPost(EventsRouteConstants.Candidates)]
     [Authorize(Policy = EventsScopeConstants.Track)]
     [ProducesResponseType<ApiResponse<EventModel>>(StatusCodes.Status201Created)]

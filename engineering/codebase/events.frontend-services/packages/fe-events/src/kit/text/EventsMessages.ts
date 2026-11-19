@@ -190,6 +190,11 @@ export const EventsMessages = {
     'Отправлено на проверку: «{title}» ожидает проверки и пока не опубликовано.',
     'Tekshiruvga yuborildi: “{title}” tekshiruvni kutmoqda va hali e’lon qilinmagan.',
   ),
+  proposedPublished: entry(
+    'Added: “{title}” is in the list now.',
+    'Добавлено: «{title}» уже в списке.',
+    'Qo‘shildi: “{title}” endi ro‘yxatda.',
+  ),
   titleRequired: entry(
     'Enter a title of up to 200 characters.',
     'Введите название до 200 символов.',

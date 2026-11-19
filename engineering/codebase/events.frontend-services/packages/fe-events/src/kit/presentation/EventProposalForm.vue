@@ -11,8 +11,8 @@ import EventFactsFields from './EventFactsFields.vue';
 import FailureNotice from './FailureNotice.vue';
 
 /**
- * Lets a member propose an event: it lands as a candidate awaiting review (`POST …/candidates`) and is never published
- * by sending it.
+ * Lets a member propose an event (`POST …/candidates`): in a private catalog, whose only readers are the member's own
+ * organization, it publishes at once; in a shared or public one it lands as a candidate awaiting review.
  */
 defineOptions({ name: 'EventProposalForm' });
 
@@ -27,7 +27,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  /** Fires with the candidate the service created. */
+  /** Fires with the event the service created: published, or a candidate awaiting review. */
   proposed: [event: EventModel];
   cancel: [];
 }>();
