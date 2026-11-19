@@ -1,6 +1,6 @@
 # wow-two-sdk-beta.events — Contract
 
-*Last updated: 2026-11-17*
+*Last updated: 2026-11-20*
 
 > One broker per capability, the same in every form. Rules: wow-two-ws/conventions/development/capability-forms.md
 > § Contract. Types: `packages/Abstractions` (namespaces under `WoW.Two.Sdk.Beta.Be.Events`).
@@ -16,7 +16,7 @@
 | `IEventWorkflowsBroker` | `GetAsync()`, `PutAsync(WorkflowSpec)` | the caller's active organization |
 | `IEventImportsBroker` | `ImportAsync(catalog, EventImportBundle, dryRun)` | owner org; tracking lands in the caller's org |
 | `IEventCalendarBroker` | `ExportAsync(catalog, EventQuery)` → `CalendarFile` | as a catalog read |
-| `IEventIntakeBroker` | `GetStatusAsync()`, `PollAsync()` | operators (`events.admin`) |
+| `IEventIntakeBroker` | `GetStatusAsync()`, `PollAsync()`, `GetFreshnessAsync(catalog)` | status and poll: operators (`events.admin`); freshness: any member of the catalog's owner organization (`events.read`), another organization, an unknown catalog and a public catalog's outside reader read `NotFound` |
 | `IEventDigestsBroker` | `ListAsync(catalog)`, `GetAsync`, `CreateAsync(DigestSpec)`, `UpdateAsync`, `DeleteAsync(expectedRevision)`, `PreviewAsync`, `SendNowAsync`, `ListRunsAsync(DigestRunQuery)` | the caller's active organization, which reads the catalog; its own digests only (`events.admin`) |
 
 - Every call acts for the current principal (the kernel's `ICurrentPrincipal`); a Form 1 host supplies its own.
@@ -64,6 +64,7 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 | `PUT api/events/v1/workflow` (body `WorkflowSpec`) | workflows `PutAsync` | `events.track` · `events:admin` |
 | `GET api/events/v1/intake` | intake `GetStatusAsync` | `events.admin` · `events:admin` |
 | `POST api/events/v1/intake/poll` | intake `PollAsync` | `events.admin` · `events:admin` |
+| `GET …/catalogs/{c}/freshness` | intake `GetFreshnessAsync`: `{ lastReceivedAtUtc, newestObservedAtUtc, failingSources }` over the catalog's intake sources — the latest `lastReceivedAtUtc` and `newestObservedAtUtc` among their cursors (`null` before the first record, and with no source), and `failingSources`, how many active sources failed their last poll; no cursor value, error text, address or token; only the owner organization reads it, anyone else (a public catalog's outside reader, a service with no organization included) gets 404 | `events.read` · `events:read` |
 | `GET …/catalogs/{c}/digests` | digests `ListAsync` | `events.admin` · `events:admin` |
 | `GET …/catalogs/{c}/digests/{id}` | digests `GetAsync` | `events.admin` · `events:admin` |
 | `POST …/catalogs/{c}/digests` (body `DigestSpec`) | digests `CreateAsync` → 201 | `events.admin` · `events:admin` |
@@ -102,6 +103,10 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 - `AddEventsIntake()` registers the SCFD pull: each source in `Events:Intake:Sources` names a catalog, an SCFD base
   URL, a subscription, a token client and a poll interval; the poller is a hosted service.
 - One page per transaction: observations, source posts, event changes and the cursor commit together.
+- Freshness (`GET …/catalogs/{c}/freshness`, E23) is the member-facing read of the same cursors: a consumer shows "sources
+  updated {time}" from `lastReceivedAtUtc` and warns past its own threshold or when `failingSources` is above zero; a quiet
+  week keeps `failingSources` at zero while `lastReceivedAtUtc` ages, and a stalled pull raises it. The operator's status
+  (`GET api/events/v1/intake`, `events.admin`) keeps the cursors, errors and counts.
 - SCFD wire (`GET api/subscriptions/{id}/events?cursor=&limit=`, `{ data: { data: [DeliveryEvent], next, hasMore } }`)
   is read by Events' own reader until `Harvest.Client` is on a registry (events-integration #15).
 

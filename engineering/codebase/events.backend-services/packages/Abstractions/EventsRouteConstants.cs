@@ -38,6 +38,9 @@ public static class EventsRouteConstants
     /// <summary>Holds the caller organization's workflow.</summary>
     public const string Workflow = Root + "/workflow";
 
+    /// <summary>Holds a catalog's intake freshness, relative to the catalog.</summary>
+    public const string Freshness = "freshness";
+
     /// <summary>Holds the intake's status.</summary>
     public const string Intake = Root + "/intake";
 

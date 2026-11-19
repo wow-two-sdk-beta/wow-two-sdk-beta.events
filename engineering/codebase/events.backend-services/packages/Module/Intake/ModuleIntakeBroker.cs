@@ -10,10 +10,11 @@ using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 namespace WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 
 /// <summary>Integrates the intake's operations in process: every configured source's freshness, what waits for review,
-/// and an on-demand poll. Without <c>AddEventsIntake</c> no source is configured, and the status lists none.</summary>
+/// an on-demand poll and one catalog's freshness for its members. Without <c>AddEventsIntake</c> no source is configured,
+/// and the status lists none.</summary>
 /// <param name="db">The module's store.</param>
 /// <param name="options">The intake's settings, read per scope.</param>
-/// <param name="callers">Who calls: the status and the poll cover only catalogs its organization owns.</param>
+/// <param name="callers">Who calls: the status, the poll and the freshness cover only catalogs its organization owns.</param>
 /// <param name="poller">Polls one source; registered by <c>AddEventsIntake</c>.</param>
 internal sealed class ModuleIntakeBroker(
     EventsDbContext db,
@@ -83,6 +84,36 @@ internal sealed class ModuleIntakeBroker(
         }
 
         return await GetStatusAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<IntakeFreshnessModel>> GetFreshnessAsync(string catalog, CancellationToken cancellationToken = default)
+    {
+        // Another organization, an unknown slug and a public catalog's outside reader read the same 404: whether a source
+        // feeds a catalog is the owner's to know. Only times and a count leave: the cursor and the error text are never read.
+        var slug = catalog ?? string.Empty;
+        var caller = callers.Current;
+        var row = caller.HasOrganization
+            ? await db.Catalogs.AsNoTracking().FirstOrDefaultAsync(found => found.Slug == slug, cancellationToken)
+            : null;
+        if (row is null || !CatalogAccess.IsOwner(row, caller))
+            return Result<IntakeFreshnessModel>.Fail(EventsErrors.CatalogNotFound());
+
+        var sources = options.Value.Sources.Where(source => source is not null && string.Equals(source.Catalog, slug, StringComparison.Ordinal)).ToList();
+        var names = sources.Select(source => source.Name).ToList();
+        var cursors = await db.IntakeCursors.AsNoTracking()
+            .Where(cursor => names.Contains(cursor.SourceName))
+            .Select(cursor => new { cursor.SourceName, cursor.LastReceivedAt, cursor.NewestObservedAt, cursor.ConsecutiveFailures })
+            .ToListAsync(cancellationToken);
+
+        // A source switched off keeps its old cursor row: its times still count, but its last failure no longer does.
+        var active = sources.Where(IntakeSources.IsActive).Select(source => source.Name).ToHashSet(StringComparer.Ordinal);
+        return Result<IntakeFreshnessModel>.Ok(new IntakeFreshnessModel
+        {
+            LastReceivedAtUtc = cursors.Max(cursor => cursor.LastReceivedAt),
+            NewestObservedAtUtc = cursors.Max(cursor => cursor.NewestObservedAt),
+            FailingSources = cursors.Count(cursor => cursor.ConsecutiveFailures > 0 && active.Contains(cursor.SourceName)),
+        });
     }
 
     /// <summary>Finds the configured sources whose catalogs the caller's organization owns, and every catalog it owns.</summary>

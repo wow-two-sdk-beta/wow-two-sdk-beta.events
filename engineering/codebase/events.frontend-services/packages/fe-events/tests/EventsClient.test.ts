@@ -18,6 +18,7 @@ describe('routes', () => {
     expect(EventsRoutes.trackingSummary('ocharo')).toBe('api/events/v1/catalogs/ocharo/tracking/summary');
     expect(EventsRoutes.calendar('ocharo')).toBe('api/events/v1/catalogs/ocharo/events.ics');
     expect(EventsRoutes.intakePoll()).toBe('api/events/v1/intake/poll');
+    expect(EventsRoutes.freshness('ocharo hq')).toBe('api/events/v1/catalogs/ocharo%20hq/freshness');
     expect(eventsQueryString({ from: '2026-01-01', text: '', limit: undefined, includeUndated: false })).toBe(
       '?from=2026-01-01&includeUndated=false',
     );
@@ -160,6 +161,37 @@ describe('writes', () => {
     await client.getTrackingSummary('ocharo', '2026-11-10');
 
     expect(requests[0]!.url).toBe(`${serviceUrl}/api/events/v1/catalogs/ocharo/tracking/summary?today=2026-11-10`);
+  });
+});
+
+describe('intake freshness', () => {
+  it('reads a catalog\'s freshness from its own route and unwraps it', async () => {
+    const freshness = { lastReceivedAtUtc: '2026-11-20T08:00:00Z', newestObservedAtUtc: '2026-11-20T07:40:00Z', failingSources: 1 };
+    const { client, requests } = fakeService(() => envelope(freshness));
+
+    const result = await client.getIntakeFreshness('ocharo');
+
+    expect(requests[0]!.method).toBe('GET');
+    expect(requests[0]!.url).toBe(`${serviceUrl}/api/events/v1/catalogs/ocharo/freshness`);
+    expect(result).toEqual({ ok: true, value: freshness });
+  });
+
+  it('accepts a catalog that has received nothing: no times, no failing source', async () => {
+    const { client } = fakeService(() => envelope({ lastReceivedAtUtc: null, failingSources: 0 }));
+
+    const result = await client.getIntakeFreshness('ocharo');
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses an answer without the count as a protocol failure, and maps another organization\'s 404 to notFound', async () => {
+    const { client } = fakeService(() => envelope({ lastReceivedAtUtc: null }), problem(404));
+
+    const malformed = await client.getIntakeFreshness('ocharo');
+    const hidden = await client.getIntakeFreshness('ocharo');
+
+    expect(!malformed.ok && malformed.failure.reason).toBe('protocol');
+    expect(!hidden.ok && hidden.failure.reason).toBe('notFound');
   });
 });
 

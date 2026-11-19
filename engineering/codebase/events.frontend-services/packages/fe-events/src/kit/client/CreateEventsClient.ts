@@ -23,6 +23,7 @@ import {
   type EventQuery,
   type EventSpec,
   type EventsQueryParams,
+  type IntakeFreshnessModel,
   type IntakeStatusModel,
   type MergeDecision,
   type ObservationModel,
@@ -150,6 +151,12 @@ export interface EventsClient {
 
   getIntakeStatus(signal?: AbortSignal): EventsResult<IntakeStatusModel>;
   pollIntake(signal?: AbortSignal): EventsResult<IntakeStatusModel>;
+  /**
+   * Reads how fresh a catalog's intake is (`events.read`, `events:read`): when its sources last received records, the
+   * newest observed time and how many sources fail. Only the owner organization's members read it; another
+   * organization's call fails as not found.
+   */
+  getIntakeFreshness(catalog: string, signal?: AbortSignal): EventsResult<IntakeFreshnessModel>;
 
   /** Lists the caller's organization's digests of a catalog (`events:admin`). */
   listDigests(catalog: string, signal?: AbortSignal): EventsResult<readonly DigestModel[]>;
@@ -297,6 +304,8 @@ export function createEventsClient(options: EventsClientOptions = {}): EventsCli
 
     getIntakeStatus: (signal) => get(EventsRoutes.intake(), EventsDecoders.intake, signal),
     pollIntake: (signal) => post(EventsRoutes.intakePoll(), EventsDecoders.intake, undefined, signal),
+    getIntakeFreshness: (catalog, signal) =>
+      get(EventsRoutes.freshness(catalog), EventsDecoders.intakeFreshness, signal),
 
     listDigests: (catalog, signal) => get(EventsRoutes.digests(catalog), EventsDecoders.digests, signal),
     getDigest: (catalog, id, signal) => get(EventsRoutes.digest(catalog, id), EventsDecoders.digest, signal),

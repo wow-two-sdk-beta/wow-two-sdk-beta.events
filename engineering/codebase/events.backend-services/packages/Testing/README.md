@@ -5,7 +5,7 @@ The Events test kit:
 - a conformance suite per broker, in `WoW.Two.Sdk.Beta.Be.Events.Testing.Conformance`:
   `EventCatalogsBrokerConformance`, `CatalogEventsBrokerConformance`, `EventReviewBrokerConformance`,
   `EventTrackingBrokerConformance`, `EventWorkflowsBrokerConformance`, `EventImportsBrokerConformance`,
-  `EventCalendarBrokerConformance`, `EventIntakeBrokerConformance` (the status's shape only) and
+  `EventCalendarBrokerConformance`, `EventIntakeBrokerConformance` (the status's shape, and who reads a catalog's freshness) and
   `EventDigestsBrokerConformance` (through the `log` channel)
 - the contract's rules they prove: owner versus another organization (a private catalog's reads answer 404, never
   403), published events only for a reader outside the owner, revision conflicts, review state rules, import id-map

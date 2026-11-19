@@ -9,6 +9,7 @@ import type {
   EventImportReport,
   EventModel,
   EventPage,
+  IntakeFreshnessModel,
   IntakeStatusModel,
   ObservationModel,
   ObservationPage,
@@ -47,6 +48,11 @@ export const EventsShapes = {
   workflow: has({ stages: isArrayOf(has({ key: isString })), defaultStage: isString, revision: isNumber }),
   historyEntry: has({ toStage: isString, atUtc: isString }),
   intake: has({ sources: isArrayOf(has({ name: isString, catalog: isString })), candidates: isNumber }),
+  intakeFreshness: has({
+    failingSources: isNumber,
+    lastReceivedAtUtc: isOptional(isString),
+    newestObservedAtUtc: isOptional(isString),
+  }),
   importReport: has({ dryRun: (value: unknown) => typeof value === 'boolean', map: Array.isArray }),
   digest: has({
     id: isString,
@@ -83,6 +89,7 @@ export const EventsDecoders = {
   history: decoder<readonly TrackingHistoryEntryModel[]>(isArrayOf(EventsShapes.historyEntry)),
   workflow: decoder<WorkflowModel>(EventsShapes.workflow),
   intake: decoder<IntakeStatusModel>(EventsShapes.intake),
+  intakeFreshness: decoder<IntakeFreshnessModel>(EventsShapes.intakeFreshness),
   importReport: decoder<EventImportReport>(EventsShapes.importReport),
   digest: decoder<DigestModel>(EventsShapes.digest),
   digests: decoder<readonly DigestModel[]>(isArrayOf(EventsShapes.digest)),

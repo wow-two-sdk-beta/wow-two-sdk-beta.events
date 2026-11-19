@@ -88,7 +88,7 @@ export {
   type EventImportRow,
   type EventImportTracking,
 } from './ImportModels';
-export type { IntakeSourceStatusModel, IntakeStatusModel } from './IntakeModels';
+export type { IntakeFreshnessModel, IntakeSourceStatusModel, IntakeStatusModel } from './IntakeModels';
 export {
   DigestChannelConstants,
   DigestDayValues,
