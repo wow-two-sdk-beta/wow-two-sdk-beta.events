@@ -48,9 +48,7 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 
 | Item | Type | Notes |
 |---|---|---|
-| E01 Pull all five default Ocharo SCFD subscriptions into Events | fix | spec in `tasks-events-path.md` |
 | E26 Ship a conformance-tested in-memory Events fake | engineering | spec in `tasks-events-path.md` |
-| E20 Discover intake subscriptions instead of per-index settings | feature | spec in `tasks-events-path.md` |
 | E23 Let catalog members read intake freshness | feature | spec in `tasks-events-path.md` |
 | E17 Attach cross-source duplicates to one event on intake | feature | spec in `tasks-events-path.md` |
 | E18 Move tracking to the survivor when SCFD merges posts | fix | spec in `tasks-events-path.md` |
@@ -61,7 +59,6 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 | V04 Custom field schemas per workflow | feature | spec in `tasks-platform.md` |
 | V05 Webhooks for published, changed, cancelled and deadline events | feature | spec in `tasks-platform.md` |
 | V06 Calendar export with VTIMEZONE blocks | fix | spec in `tasks-platform.md` |
-| A07 Events takes SCFD's AI classification | engineering | spec in `tasks-platform.md` · owner: ev-ai lane |
 | E32 Decide a per-source policy for event thumbnails | product | spec in `tasks-events-path.md` |
 
 ## Intake
@@ -69,7 +66,6 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 | Item | Type | Notes |
 |---|---|---|
 | Swap Events' SCFD wire reader for `Harvest.Client` once SCFD publishes its NuGet family | engineering | P2; events-integration #15 |
-| Switch a source's `Classifier` to `payload` | engineering | the classifier is built (`1d14977`); waits for SCFD's AI step to write `classification` (events-integration #53) |
 | Several SCFD subscriptions per catalog, managed through a sources API | feature | P2; sources are settings today (`Events:Intake:Sources:N:*`, two on dev) |
 | Webhook push from SCFD | feature | P2, waits for a consumer that needs it; events-integration #6 |
 | Widen the stored mapping version past 64 characters | engineering | with SCFD's AI step: a model stamp added to `{schema, norm, rules, parser}` would be cut (`ScfdEventMapper.MappingVersion`); services sweep #9 |
