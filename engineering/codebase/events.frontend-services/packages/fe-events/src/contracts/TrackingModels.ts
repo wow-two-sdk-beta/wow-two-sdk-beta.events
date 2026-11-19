@@ -1,5 +1,5 @@
 import type { JsonValue, LocalizedText } from './Common';
-import type { EventDeadline } from './EventFacts';
+import type { DeadlineKind, EventDeadline } from './EventFacts';
 import type { EventModel } from './EventModel';
 
 /** Mirrors `TrackingPriority`. */
@@ -39,15 +39,28 @@ export interface TrackingPage {
   readonly nextCursor?: string | null;
 }
 
-/** Mirrors `TrackingQuery`; dates are `YYYY-MM-DD`. */
+/**
+ * Mirrors `TrackingQuery`; dates are `YYYY-MM-DD`. An untracked event reads as the workflow's default stage for `stage`,
+ * `stages` and `excludeStages`; an event with no country matches a country filter only with `includeUnknownCountry`.
+ */
 export interface TrackingQuery {
   readonly trackedOnly?: boolean;
   readonly stage?: string;
+  /** Stages to list, with `stage`. */
+  readonly stages?: readonly string[];
+  /** Stages to leave out; never one `stages` names. */
+  readonly excludeStages?: readonly string[];
   readonly priority?: TrackingPriority;
   readonly from?: string;
   readonly to?: string;
   readonly kind?: string;
   readonly country?: string;
+  /** ISO-2 countries to list, with `country`. */
+  readonly countries?: readonly string[];
+  /** ISO-2 countries to leave out. */
+  readonly excludeCountries?: readonly string[];
+  /** Whether an event with no country matches a country filter; false by default. */
+  readonly includeUnknownCountry?: boolean;
   readonly text?: string;
   readonly deadlineBefore?: string;
   readonly includeUndated?: boolean;
@@ -80,11 +93,26 @@ export interface UpcomingDeadlineModel {
   readonly eventId: string;
   readonly title: LocalizedText;
   readonly deadline: EventDeadline;
+  /** The tracking's stage; the workflow's default stage for an untracked event. */
   readonly stage: string;
+  /** Whether the organization tracks the event; absent (tracked) from a service before untracked deadlines. */
+  readonly tracked?: boolean;
 }
 
-/** Mirrors `TrackingSummaryModel`: tracking counted per stage and the nearest open deadlines. */
+/**
+ * Mirrors `TrackingSummaryModel`: tracking counted per stage, the published events not tracked, and the nearest open
+ * deadlines of events that are not cancelled, untracked ones included.
+ */
 export interface TrackingSummaryModel {
   readonly byStage: Readonly<Record<string, number>>;
+  /** Published events the organization does not track; absent from a service before E21. */
+  readonly untracked?: number;
   readonly upcomingDeadlines: readonly UpcomingDeadlineModel[];
+}
+
+/** Mirrors `TrackingSummaryQuery`: the day deadlines count from (`YYYY-MM-DD`) and the deadline kinds to list. */
+export interface TrackingSummaryQuery {
+  readonly today: string;
+  /** Every kind when absent or empty. */
+  readonly deadlineKinds?: readonly DeadlineKind[];
 }

@@ -1,27 +1,55 @@
 <script setup lang="ts">
 import { TextInput } from '@wow-two-beta/fe/presentation/forms';
+import { computed } from 'vue';
 import { EventStatusValues, type CatalogKindModel, type EventStatus } from '../../contracts';
 import type { EventFactsDraft } from '../facts/EventFactsDraft';
+import { countryName } from '../facts/EventFactsText';
+import { regionOfCountry, type EventRegion } from '../facts/EventRegions';
 import { EventsLabels } from '../text/EventsLabels';
 import { pickText, type EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
 import WhenField from './WhenField.vue';
 
-/** Edits an event's main facts in a draft: title, kind, status, dates, place, organizer and website. */
+/**
+ * Edits an event's main facts in a draft: title, kind, status, dates, place (with the scope its country derives, when
+ * regions are given), organizer and website — and, when asked, the application deadline and where it was found.
+ */
 defineOptions({ name: 'EventFactsFields' });
 
 const draft = defineModel<EventFactsDraft>({ required: true });
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     locale?: EventsLocale;
     kinds?: readonly CatalogKindModel[];
     /** Whether the status is offered; a member's proposal leaves it at scheduled. */
     withStatus?: boolean;
+    /** Whether the application deadline (a day) is offered. */
+    withDeadline?: boolean;
+    /** Whether "Where it was found" is offered: a link that stands in for the website when it has none. */
+    withFoundAt?: boolean;
+    /** The consumer's regions: the form shows the scope the country derives. */
+    regions?: readonly EventRegion[];
     disabled?: boolean;
   }>(),
-  { locale: 'en', kinds: undefined, withStatus: false, disabled: false },
+  {
+    locale: 'en',
+    kinds: undefined,
+    withStatus: false,
+    withDeadline: false,
+    withFoundAt: false,
+    regions: undefined,
+    disabled: false,
+  },
 );
+
+const scope = computed(() => {
+  if (!props.regions?.length) return null;
+  const region = regionOfCountry(draft.value.country, props.regions);
+  if (!region) return eventsText('scopeUntilCountry', props.locale);
+  const label = pickText(region.label, props.locale) || region.key;
+  return `${label}: ${countryName(draft.value.country.trim().toUpperCase(), props.locale) ?? draft.value.country}`;
+});
 
 const inputClass = 'rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground';
 const asStatus = (value: string) => value as EventStatus;
@@ -132,8 +160,20 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
           :is-disabled="disabled"
           @update:model-value="set('country', $event)"
         />
+        <span v-if="scope" class="text-xs text-muted-foreground" data-test="facts-scope">{{ scope }}</span>
       </label>
     </div>
+    <label v-if="withDeadline" class="flex flex-col gap-1 text-sm sm:max-w-xs">
+      <span class="font-medium">{{ eventsText('applicationDeadline', locale) }}</span>
+      <input
+        name="applicationDeadline"
+        type="date"
+        :class="inputClass"
+        :value="draft.applicationDeadline"
+        :disabled="disabled"
+        @input="set('applicationDeadline', ($event.target as HTMLInputElement).value)"
+      />
+    </label>
     <div class="grid gap-4 sm:grid-cols-2">
       <label class="flex flex-col gap-1 text-sm">
         <span class="font-medium">{{ eventsText('organizer', locale) }}</span>
@@ -158,5 +198,17 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
         />
       </label>
     </div>
+    <label v-if="withFoundAt" class="flex flex-col gap-1 text-sm">
+      <span class="font-medium">{{ eventsText('foundAt', locale) }}</span>
+      <input
+        name="foundAt"
+        type="url"
+        autocomplete="off"
+        :class="inputClass"
+        :value="draft.foundAt"
+        :disabled="disabled"
+        @input="set('foundAt', ($event.target as HTMLInputElement).value)"
+      />
+    </label>
   </div>
 </template>

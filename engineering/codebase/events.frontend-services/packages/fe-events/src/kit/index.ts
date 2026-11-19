@@ -7,6 +7,7 @@ export {
 } from './client/CreateEventsClient';
 export { EventsFailureReason, toEventsFailure, type EventsFailure } from './client/EventsFailure';
 export {
+  browserTimeZone,
   compareEventWhen,
   daysLeftLabel,
   daysUntil,
@@ -25,17 +26,48 @@ export {
   nextDeadline,
   readEventWhen,
   sortEventsByDate,
+  startZoneName,
   undatedGroupKey,
+  zonedInstant,
+  zoneOffsetMinutes,
   type DeadlineTone,
   type EventMonthGroup,
   type EventWhenParts,
   type EventWhenRange,
+  type EventZoneOptions,
 } from './dates/EventDates';
 export { downloadEventsCalendar, type EventsCalendarRequest } from './calendar/DownloadEventsCalendar';
-export { countryName, eventTitle, formatEventPlace, formatOfferPrice, safeHttpUrl } from './facts/EventFactsText';
+export {
+  createEventCalendar,
+  downloadEventCalendar,
+  type EventCalendarFile,
+  type EventCalendarOptions,
+} from './calendar/EventCalendar';
+export {
+  countryName,
+  eventTitle,
+  eventTitleLanguage,
+  formatAmount,
+  formatEventPlace,
+  formatOfferPrice,
+  safeHttpUrl,
+  ticketOffer,
+} from './facts/EventFactsText';
+export { regionOfCountry, regionQuery, type EventRegion } from './facts/EventRegions';
+export { attributedSource, listingRemoved, sourceLabel } from './facts/EventSources';
+export { shownFieldValue, type TrackingShownField } from './facts/TrackingFields';
+export type { EventProposalOptions } from './facts/EventProposalOptions';
 export { eventFactsDraft, validateEventFactsDraft, type EventFactsDraft } from './facts/EventFactsDraft';
 export { useEventsRequest, type EventsRequest } from './hooks/UseEventsRequest';
-export { EventsLocaleValues, pickText, toEventsLocale, type EventsLocale } from './text/EventsLocale';
+export {
+  EventsLocaleValues,
+  pickText,
+  pickTextEntry,
+  textLanguageTag,
+  toEventsLocale,
+  type EventsLocale,
+  type PickedText,
+} from './text/EventsLocale';
 export { EventsMessages, eventsText, type EventsMessageKey } from './text/EventsMessages';
 export { EventsLabels, eventsFailureMessage, type EventsFailureContext } from './text/EventsLabels';
 export { default as EventCard } from './presentation/EventCard.vue';

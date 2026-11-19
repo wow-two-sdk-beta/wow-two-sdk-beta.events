@@ -15,6 +15,7 @@ import {
 import type { EventsClient } from '../client/CreateEventsClient';
 import { formatTimestamp } from '../dates/EventDates';
 import {
+  shownFieldValue,
   trackingFieldDefinitions,
   trackingFieldsPayload,
   trackingFieldValues,
@@ -28,7 +29,9 @@ import FailureNotice from './FailureNotice.vue';
 
 /**
  * Edits the caller's organization's private tracking of one event: the stage from its workflow, the priority, notes and
- * the workflow's custom fields; shows the stage history. Tracking never changes the event.
+ * the workflow's custom fields (a `readOnly` one shown, never edited; a hidden one left out, both kept as stored); shows
+ * the stage history. A save that meets a newer version keeps the draft and offers the latest. Tracking never changes the
+ * event.
  */
 defineOptions({ name: 'TrackingForm' });
 
@@ -40,11 +43,18 @@ const props = withDefaults(
     locale?: EventsLocale;
     /** Whether the person may write tracking (`events:track`); read-only otherwise. */
     canEdit?: boolean;
+    /** Custom field keys the form leaves out, kept as stored (Ocharo: the import's `sourceUrl`). */
+    hiddenFields?: readonly string[];
   }>(),
-  { locale: 'en', canEdit: true },
+  { locale: 'en', canEdit: true, hiddenFields: () => [] },
 );
 
-const emit = defineEmits<{ saved: [tracking: TrackingModel]; removed: [] }>();
+const emit = defineEmits<{
+  saved: [tracking: TrackingModel];
+  removed: [];
+  /** Fires when the draft starts or stops differing from what is stored, so a page can guard navigation. */
+  dirty: [dirty: boolean];
+}>();
 
 const workflow = useEventsRequest((signal) => props.client.getWorkflow(signal));
 const tracked = useEventsRequest((signal) => props.client.getTracking(props.catalog, props.eventId, signal));
@@ -64,13 +74,26 @@ const fieldValues = shallowRef<Record<string, TrackingFieldValue>>({});
 const savedNotice = shallowRef(false);
 const confirmingRemove = shallowRef(false);
 
+const stored = shallowRef('');
+
 const stages = computed(() => workflow.value.value?.stages ?? []);
-const definitions = computed(() =>
-  trackingFieldDefinitions(workflow.value.value?.fields, tracking.value?.fields, props.locale),
+const shown = (fields: Parameters<typeof trackingFieldDefinitions>[0], current: TrackingModel | null) =>
+  trackingFieldDefinitions(fields, current?.fields, props.locale).filter(
+    (definition) => !props.hiddenFields.includes(definition.key),
+  );
+const allDefinitions = computed(() => shown(workflow.value.value?.fields, tracking.value));
+const definitions = computed(() => allDefinitions.value.filter((definition) => !definition.readOnly));
+const readOnlyFields = computed(() =>
+  allDefinitions.value
+    .filter((definition) => definition.readOnly)
+    .map((definition) => ({ ...definition, value: shownFieldValue(tracking.value?.fields, definition.key) }))
+    .filter((definition) => definition.value !== null),
 );
 const loading = computed(() => (workflow.pending.value || tracked.pending.value) && !workflow.value.value);
 const loadFailure = computed(() => workflow.failure.value ?? tracked.failure.value);
-const actionFailure = computed(() => save.failure.value ?? remove.failure.value);
+const conflict = computed(() => save.failure.value?.reason === 'conflict');
+const snapshot = () => JSON.stringify([stage.value, priority.value, notes.value.trim(), fieldValues.value]);
+const dirty = computed(() => stored.value !== '' && snapshot() !== stored.value);
 
 function fill(current: TrackingModel | null, flow: WorkflowModel | null) {
   tracking.value = current;
@@ -78,9 +101,10 @@ function fill(current: TrackingModel | null, flow: WorkflowModel | null) {
   priority.value = current?.priority ?? 'normal';
   notes.value = current?.notes ?? '';
   fieldValues.value = trackingFieldValues(
-    trackingFieldDefinitions(flow?.fields, current?.fields, props.locale),
+    shown(flow?.fields, current).filter((definition) => !definition.readOnly),
     current?.fields,
   );
+  stored.value = snapshot();
 }
 
 async function load() {
@@ -133,6 +157,7 @@ async function stopTracking() {
 }
 
 const asPriority = (value: string) => value as TrackingPriority;
+watch(dirty, (value) => emit('dirty', value));
 const inputClass = 'rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground';
 
 onMounted(load);
@@ -181,6 +206,12 @@ watch([() => props.catalog, () => props.eventId, () => props.client], load);
           :is-disabled="!canEdit || save.pending.value"
         />
       </label>
+      <dl v-if="readOnlyFields.length" class="grid gap-2 text-sm" data-test="tracking-read-only">
+        <div v-for="field in readOnlyFields" :key="field.key">
+          <dt class="text-muted-foreground">{{ field.label }}</dt>
+          <dd class="break-words">{{ field.value }}</dd>
+        </div>
+      </dl>
       <fieldset v-if="definitions.length" class="grid gap-3" :disabled="!canEdit || save.pending.value">
         <legend class="mb-1 text-sm font-medium">{{ eventsText('fields', locale) }}</legend>
         <label
@@ -223,7 +254,23 @@ watch([() => props.catalog, () => props.eventId, () => props.client], load);
         </label>
       </fieldset>
 
-      <FailureNotice v-if="actionFailure" :failure="actionFailure" :locale="locale" retry @retry="load" />
+      <div
+        v-if="conflict"
+        class="flex flex-wrap items-center gap-3 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground"
+        role="alert"
+        data-test="tracking-conflict"
+      >
+        <span class="min-w-0 flex-1">{{ eventsText('recordChanged', locale) }}</span>
+        <Button size="sm" variant="ghost" type="button" @click="load">{{ eventsText('reloadLatest', locale) }}</Button>
+      </div>
+      <FailureNotice
+        v-else-if="save.failure.value"
+        :failure="save.failure.value"
+        :locale="locale"
+        retry
+        @retry="submit"
+      />
+      <FailureNotice v-if="remove.failure.value" :failure="remove.failure.value" :locale="locale" retry @retry="load" />
       <p v-if="savedNotice" class="text-sm text-success" role="status">{{ eventsText('saved', locale) }}</p>
 
       <div v-if="canEdit" class="flex flex-wrap gap-2">

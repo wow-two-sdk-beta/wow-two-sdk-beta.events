@@ -7,6 +7,8 @@ export interface TrackingFieldDefinition {
   readonly label: string;
   readonly type: 'text' | 'number' | 'boolean';
   readonly multiline: boolean;
+  /** Whether the schema marks the field `readOnly`: shown, never edited, and kept as stored. */
+  readonly readOnly?: boolean;
 }
 
 /** Holds a custom field's value as the form edits it. */
@@ -40,6 +42,7 @@ export function trackingFieldDefinitions(
       label: titleOf(property, key, locale),
       type: type === 'number' || type === 'integer' ? 'number' : type === 'boolean' ? 'boolean' : 'text',
       multiline: property['format'] === 'textarea' || property['maxLength'] === undefined,
+      readOnly: property['readOnly'] === true,
     };
   });
   if (isObject(stored)) {
@@ -80,4 +83,22 @@ export function trackingFieldsPayload(
     else payload[key] = typeof value === 'string' ? value.trim() : value;
   }
   return payload;
+}
+
+/**
+ * Names one tracking field a card or detail shows read-only (Ocharo: "Ocharo's cost"): the key in `tracking.fields`, its
+ * label, and the words for an empty value; with no `empty`, an empty field is not shown.
+ */
+export interface TrackingShownField {
+  readonly key: string;
+  readonly label: LocalizedText;
+  readonly empty?: LocalizedText;
+}
+
+/** Reads a shown field's value as text: the stored text, number or yes/no; null when the tracking holds none. */
+export function shownFieldValue(fields: JsonValue | undefined, key: string): string | null {
+  const value = isObject(fields) ? fields[key] : undefined;
+  if (typeof value === 'string') return value.trim() || null;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
 }

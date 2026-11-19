@@ -6,6 +6,7 @@ import type {
   EventAttendance,
   EventAudience,
   EventReviewState,
+  EventSourceState,
   EventStatus,
   ObservationState,
   OfferKind,
@@ -59,6 +60,12 @@ const priorityKeys: Record<TrackingPriority, EventsMessageKey> = {
   normal: 'priorityNormal',
   low: 'priorityLow',
 };
+const sourceStateKeys: Record<EventSourceState, EventsMessageKey> = {
+  live: 'sourceStateLive',
+  suspect: 'sourceStateSuspect',
+  gone: 'sourceStateGone',
+  unmatched: 'sourceStateUnmatched',
+};
 const precisionKeys: Record<DatePrecision, EventsMessageKey> = {
   unknown: 'precisionUnknown',
   year: 'precisionYear',
@@ -100,6 +107,7 @@ export const EventsLabels = {
   precision: (value: DatePrecision, locale: EventsLocale) => label(precisionKeys, value, locale),
   certainty: (value: DateCertainty, locale: EventsLocale) => label(certaintyKeys, value, locale),
   observation: (value: ObservationState, locale: EventsLocale) => label(observationKeys, value, locale),
+  sourceState: (value: EventSourceState, locale: EventsLocale) => label(sourceStateKeys, value, locale),
   /** Labels a catalog kind by the catalog's own label, or its key. */
   kind: (value: string | undefined, kinds: readonly CatalogKindModel[] | undefined, locale: EventsLocale) => {
     const kind = kinds?.find((item) => item.key === value);

@@ -1,7 +1,7 @@
 import type { DigestRunQuery } from './DigestModels';
 import type { EventQuery } from './EventModel';
 import type { ObservationQuery, ReviewQuery } from './ReviewModels';
-import type { TrackingQuery } from './TrackingModels';
+import type { TrackingQuery, TrackingSummaryQuery } from './TrackingModels';
 
 /** Mirrors `EventsRouteConstants` of the be contract: the HTTP mirror's segments, relative to the service root. */
 export const EventsRouteConstants = {
@@ -63,8 +63,8 @@ export const EventsRoutes = {
   intakePoll: () => `${EventsRouteConstants.intake}/poll`,
 } as const;
 
-/** Holds query parameters as the HTTP mirror names them; an absent value is left out. */
-export type EventsQueryParams = Readonly<Record<string, string | number | boolean | undefined>>;
+/** Holds query parameters as the HTTP mirror names them; an absent value is left out, a list repeats its key. */
+export type EventsQueryParams = Readonly<Record<string, string | number | boolean | readonly string[] | undefined>>;
 
 /** Maps an `EventQuery` to its query parameters (`from`, `to`, `kind`, … `cursor`, `limit`). */
 export function eventQueryParams(query: EventQuery = {}): EventsQueryParams {
@@ -94,17 +94,27 @@ export function trackingQueryParams(query: TrackingQuery = {}): EventsQueryParam
   return {
     trackedOnly: query.trackedOnly,
     stage: query.stage,
+    stages: query.stages?.length ? query.stages : undefined,
+    excludeStages: query.excludeStages?.length ? query.excludeStages : undefined,
     priority: query.priority,
     from: query.from,
     to: query.to,
     kind: query.kind,
     country: query.country,
+    countries: query.countries?.length ? query.countries : undefined,
+    excludeCountries: query.excludeCountries?.length ? query.excludeCountries : undefined,
+    includeUnknownCountry: query.includeUnknownCountry || undefined,
     text: query.text,
     deadlineBefore: query.deadlineBefore,
     includeUndated: query.includeUndated,
     cursor: query.cursor,
     limit: query.limit,
   };
+}
+
+/** Maps a `TrackingSummaryQuery` to its query parameters (`today`, repeated `deadlineKinds`). */
+export function trackingSummaryQueryParams(query: TrackingSummaryQuery): EventsQueryParams {
+  return { today: query.today, deadlineKinds: query.deadlineKinds?.length ? query.deadlineKinds : undefined };
 }
 
 /** Maps an `ObservationQuery` to its query parameters. */
@@ -121,7 +131,9 @@ export function reviewQueryParams(query: ReviewQuery = {}): EventsQueryParams {
 export function eventsQueryString(params: EventsQueryParams): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== '') search.append(key, String(value));
+    for (const item of Array.isArray(value) ? (value as readonly string[]) : [value]) {
+      if (item !== undefined && item !== '') search.append(key, String(item));
+    }
   }
   const text = search.toString();
   return text ? `?${text}` : '';

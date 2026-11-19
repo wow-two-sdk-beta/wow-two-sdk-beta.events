@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { Button } from '@wow-two-beta/fe/presentation/actions';
 import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
-import { computed, onMounted, watch } from 'vue';
-import type { CatalogKindModel } from '../../contracts';
-import type { EventsClient } from '../client/CreateEventsClient';
+import { computed, onMounted, shallowRef, watch } from 'vue';
+import { ResultExtensions } from '@wow-two-beta/fe/foundation/results';
+import type { CatalogKindModel, EventModel, EventSourceState, TrackingModel } from '../../contracts';
+import { createEventCalendar, downloadEventCalendar, type EventCalendarOptions } from '../calendar/EventCalendar';
+import type { EventsClient, EventsResult } from '../client/CreateEventsClient';
 import {
   daysLeftLabel,
   deadlineDaysLeft,
@@ -13,7 +16,16 @@ import {
   formatTimestamp,
   localIsoDate,
 } from '../dates/EventDates';
-import { eventTitle, formatEventPlace, formatOfferPrice, safeHttpUrl } from '../facts/EventFactsText';
+import {
+  eventTitle,
+  eventTitleLanguage,
+  formatEventPlace,
+  formatOfferPrice,
+  safeHttpUrl,
+} from '../facts/EventFactsText';
+import { regionOfCountry, type EventRegion } from '../facts/EventRegions';
+import { listingRemoved, sourceLabel } from '../facts/EventSources';
+import { shownFieldValue, type TrackingShownField } from '../facts/TrackingFields';
 import { useEventsRequest } from '../hooks/UseEventsRequest';
 import { EventsLabels } from '../text/EventsLabels';
 import { pickText, type EventsLocale } from '../text/EventsLocale';
@@ -22,8 +34,10 @@ import FailureNotice from './FailureNotice.vue';
 import TrackingForm from './TrackingForm.vue';
 
 /**
- * Shows one event with every reviewed fact: curated images, dates as precisely as known, place, deadlines, offers,
- * links and sources — and, when `trackable`, the organization's tracking form. Sourced media never reaches it.
+ * Shows one event with every reviewed fact: curated images, dates as precisely as known, place and scope, deadlines,
+ * offers, links and each source by name with its listing state — and, when `trackable`, the organization's chosen
+ * tracking fields and its tracking form. Offers the event's own calendar file when its dates are exact. Sourced media
+ * never reaches it.
  */
 defineOptions({ name: 'EventDetail' });
 
@@ -40,11 +54,50 @@ const props = withDefaults(
     trackable?: boolean;
     /** Whether the tracking form may write (`events:track`). */
     canTrack?: boolean;
+    /** The consumer's regions, to show the event's scope from its country. */
+    regions?: readonly EventRegion[];
+    /** Tracking fields shown read-only beside the facts, when `trackable`. */
+    shownFields?: readonly TrackingShownField[];
+    /** Tracking field keys the tracking form leaves out (Ocharo: the import's `sourceUrl`). */
+    hiddenFields?: readonly string[];
+    /** Whether to offer the event's own calendar file. */
+    calendar?: boolean;
+    /** Shapes the calendar file: its name, `PRODID` and `UID` suffix. */
+    calendarOptions?: EventCalendarOptions;
+    /** The viewer's IANA zone, to name the start time's zone only when it differs; the browser's by default. */
+    viewerZone?: string;
   }>(),
-  { locale: 'en', today: undefined, kinds: undefined, trackable: false, canTrack: true },
+  {
+    locale: 'en',
+    today: undefined,
+    kinds: undefined,
+    trackable: false,
+    canTrack: true,
+    regions: undefined,
+    shownFields: () => [],
+    hiddenFields: () => [],
+    calendar: true,
+    calendarOptions: undefined,
+    viewerZone: undefined,
+  },
 );
 
-const request = useEventsRequest((signal) => props.client.getEvent(props.catalog, props.eventId, signal));
+const emit = defineEmits<{
+  /** Fires when the tracking form's draft starts or stops differing from what is stored. */
+  dirty: [dirty: boolean];
+  /** Fires with the tracking the form saved. */
+  trackingSaved: [tracking: TrackingModel];
+}>();
+
+const tracking = shallowRef<TrackingModel | null>(null);
+const calendarFailed = shallowRef(false);
+const request = useEventsRequest(async (signal): EventsResult<EventModel> => {
+  if (!props.trackable) return props.client.getEvent(props.catalog, props.eventId, signal);
+  const result = await props.client.getTracking(props.catalog, props.eventId, signal);
+  if (!result.ok) return result;
+  tracking.value = result.value.tracking ?? null;
+  return ResultExtensions.ok(result.value.event);
+});
 const event = computed(() => request.value.value);
 const facts = computed(() => event.value?.facts);
 const day = computed(() => props.today ?? localIsoDate());
@@ -63,9 +116,63 @@ const links = computed(() =>
 const summary = computed(() => pickText(facts.value?.summary, props.locale));
 const place = computed(() => (facts.value ? formatEventPlace(facts.value, props.locale) : ''));
 const address = computed(() => facts.value?.place?.address ?? '');
+const dates = computed(() =>
+  event.value
+    ? formatEventDates(event.value, props.locale, props.viewerZone ? { viewerZone: props.viewerZone } : {})
+    : '',
+);
+const titleLanguage = computed(() => (facts.value ? eventTitleLanguage(facts.value, props.locale) : null));
+const scope = computed(() => {
+  if (!props.regions?.length || !facts.value) return null;
+  const region = regionOfCountry(facts.value.place?.country, props.regions);
+  return region ? pickText(region.label, props.locale) || region.key : eventsText('scopeUnknown', props.locale);
+});
+const removed = computed(() => (event.value ? listingRemoved(event.value) : false));
+const sources = computed(() =>
+  (event.value?.sources ?? []).map((source) => ({
+    source,
+    label: sourceLabel(source) ?? eventsText('unnamedSource', props.locale),
+    url: safeHttpUrl(source.url),
+  })),
+);
+const sourceUpdated = computed(() =>
+  event.value && tracking.value && event.value.updatedAtUtc > tracking.value.updatedAtUtc
+    ? event.value.updatedAtUtc
+    : null,
+);
+const fields = computed(() =>
+  props.trackable
+    ? props.shownFields
+        .map((field) => ({
+          key: field.key,
+          label: pickText(field.label, props.locale) || field.key,
+          value: shownFieldValue(tracking.value?.fields, field.key),
+          empty: field.empty ? pickText(field.empty, props.locale) : '',
+        }))
+        .filter((field) => field.value !== null || field.empty)
+    : [],
+);
+const calendarFile = computed(() =>
+  props.calendar && event.value ? createEventCalendar(event.value, props.locale, props.calendarOptions) : null,
+);
+const stateVariant = (state: EventSourceState | null | undefined) =>
+  state === 'gone'
+    ? BadgeVariant.Danger
+    : state === 'suspect' || state === 'unmatched'
+      ? BadgeVariant.Warning
+      : BadgeVariant.Neutral;
+
+function downloadCalendar() {
+  calendarFailed.value = calendarFile.value ? !downloadEventCalendar(calendarFile.value) : true;
+}
+
+function saved(next: TrackingModel) {
+  tracking.value = next;
+  emit('trackingSaved', next);
+}
 
 onMounted(() => request.run());
-watch([() => props.catalog, () => props.eventId, () => props.client], () => request.run());
+watch([() => props.catalog, () => props.eventId, () => props.client, () => props.trackable], () => request.run());
 </script>
 
 <template>
@@ -98,8 +205,24 @@ watch([() => props.catalog, () => props.eventId, () => props.client], () => requ
           >
             {{ EventsLabels.status(facts.status, locale) }}
           </Badge>
+          <Badge v-if="scope" size="sm" :variant="BadgeVariant.Neutral" data-test="event-scope">{{ scope }}</Badge>
+          <Badge v-if="removed" size="sm" :variant="BadgeVariant.Warning" data-test="event-removed">
+            {{ eventsText('listingRemoved', locale) }}
+          </Badge>
         </div>
-        <h2 id="event-detail-title" class="break-words text-2xl font-semibold">{{ eventTitle(facts, locale) }}</h2>
+        <h2 id="event-detail-title" class="break-words text-2xl font-semibold">
+          <span :class="{ 'line-through': facts.status === 'cancelled' }">{{ eventTitle(facts, locale) }}</span>
+          <span
+            v-if="titleLanguage"
+            class="ml-2 rounded border border-border px-1 align-middle text-xs font-medium text-muted-foreground"
+            :title="eventsText('titleLanguage', locale, { language: titleLanguage })"
+            data-test="title-language"
+            v-text="titleLanguage"
+          ></span>
+        </h2>
+        <p v-if="sourceUpdated" class="text-sm text-info" data-test="event-source-updated">
+          {{ eventsText('updatedBySource', locale, { date: formatTimestamp(sourceUpdated, locale) }) }}
+        </p>
         <p v-if="facts.organizer?.name" class="text-sm text-muted-foreground">
           <a
             v-if="safeHttpUrl(facts.organizer.website)"
@@ -133,8 +256,15 @@ watch([() => props.catalog, () => props.eventId, () => props.client], () => requ
       <dl class="grid gap-4 sm:grid-cols-2">
         <div>
           <dt class="text-xs font-medium uppercase text-muted-foreground">{{ eventsText('when', locale) }}</dt>
-          <dd class="font-medium" data-test="event-dates">{{ formatEventDates(event, locale) }}</dd>
-          <dd v-if="facts.timeZone" class="text-xs text-muted-foreground">{{ facts.timeZone }}</dd>
+          <dd class="font-medium" data-test="event-dates">{{ dates }}</dd>
+          <dd v-if="calendarFile">
+            <Button size="sm" variant="ghost" data-test="event-calendar" @click="downloadCalendar">
+              {{ eventsText('downloadCalendar', locale) }}
+            </Button>
+            <span v-if="calendarFailed" class="text-sm text-destructive" role="alert">
+              {{ eventsText('downloadFailed', locale) }}
+            </span>
+          </dd>
         </div>
         <div v-if="place || address || facts.attendance">
           <dt class="text-xs font-medium uppercase text-muted-foreground">{{ eventsText('where', locale) }}</dt>
@@ -148,6 +278,12 @@ watch([() => props.catalog, () => props.eventId, () => props.client], () => requ
         <div v-if="facts.languages?.length">
           <dt class="text-xs font-medium uppercase text-muted-foreground">{{ eventsText('languages', locale) }}</dt>
           <dd>{{ facts.languages.join(', ') }}</dd>
+        </div>
+        <div v-for="field in fields" :key="field.key" :data-test="`event-field-${field.key}`">
+          <dt class="text-xs font-medium uppercase text-muted-foreground">{{ field.label }}</dt>
+          <dd class="whitespace-pre-line" :class="{ 'text-muted-foreground': field.value === null }">
+            {{ field.value ?? field.empty }}
+          </dd>
         </div>
         <div v-if="facts.tags?.length">
           <dt class="text-xs font-medium uppercase text-muted-foreground">{{ eventsText('tags', locale) }}</dt>
@@ -221,21 +357,24 @@ watch([() => props.catalog, () => props.eventId, () => props.client], () => requ
 
       <section v-if="event.sources?.length" class="space-y-2" aria-labelledby="event-sources-title">
         <h3 id="event-sources-title" class="font-semibold">{{ eventsText('sources', locale) }}</h3>
-        <ul class="space-y-1 text-xs text-muted-foreground">
-          <li v-for="source in event.sources" :key="`${source.kind}-${source.id}`">
-            {{ source.kind }} ·
-            <a
-              v-if="safeHttpUrl(source.url)"
-              :href="safeHttpUrl(source.url) ?? undefined"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="underline"
-            >
-              {{ source.url }}
+        <ul class="space-y-1 text-sm">
+          <li
+            v-for="item in sources"
+            :key="`${item.source.kind}-${item.source.id}`"
+            class="flex flex-wrap items-center gap-x-2 gap-y-1"
+            data-test="event-source"
+          >
+            <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer" class="font-medium underline">
+              {{ item.label }}
             </a>
-            <template v-else>{{ source.id }}</template>
-            · {{ eventsText('firstSeen', locale) }} {{ formatTimestamp(source.firstSeenAtUtc, locale) }} ·
-            {{ eventsText('lastSeen', locale) }} {{ formatTimestamp(source.lastSeenAtUtc, locale) }}
+            <span v-else class="font-medium">{{ item.label }}</span>
+            <Badge v-if="item.source.state" size="sm" :variant="stateVariant(item.source.state)">
+              {{ EventsLabels.sourceState(item.source.state, locale) }}
+            </Badge>
+            <span class="text-xs text-muted-foreground">
+              {{ eventsText('firstSeen', locale) }} {{ formatTimestamp(item.source.firstSeenAtUtc, locale) }} ·
+              {{ eventsText('lastSeen', locale) }} {{ formatTimestamp(item.source.lastSeenAtUtc, locale) }}
+            </span>
           </li>
         </ul>
       </section>
@@ -248,6 +387,9 @@ watch([() => props.catalog, () => props.eventId, () => props.client], () => requ
       :event-id="eventId"
       :locale="locale"
       :can-edit="canTrack"
+      :hidden-fields="hiddenFields"
+      @saved="saved"
+      @dirty="(value) => emit('dirty', value)"
     />
   </div>
 </template>

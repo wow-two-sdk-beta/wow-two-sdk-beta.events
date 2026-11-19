@@ -68,6 +68,7 @@ export {
   type TrackingReference,
   type TrackingSpec,
   type TrackingSummaryModel,
+  type TrackingSummaryQuery,
   type UpcomingDeadlineModel,
 } from './TrackingModels';
 export {
@@ -122,5 +123,6 @@ export {
   observationQueryParams,
   reviewQueryParams,
   trackingQueryParams,
+  trackingSummaryQueryParams,
   type EventsQueryParams,
 } from './EventsRoutes';

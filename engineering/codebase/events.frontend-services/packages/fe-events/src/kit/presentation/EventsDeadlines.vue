@@ -2,7 +2,7 @@
 import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
 import { computed, onMounted, watch } from 'vue';
-import type { UpcomingDeadlineModel, WorkflowStageModel } from '../../contracts';
+import type { DeadlineKind, UpcomingDeadlineModel, WorkflowStageModel } from '../../contracts';
 import type { EventsClient } from '../client/CreateEventsClient';
 import { daysLeftLabel, deadlineDaysLeft, deadlineTone, formatEventWhen, localIsoDate } from '../dates/EventDates';
 import { useEventsRequest } from '../hooks/UseEventsRequest';
@@ -11,7 +11,11 @@ import { pickText, type EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
 import FailureNotice from './FailureNotice.vue';
 
-/** Lists the organization's nearest open deadlines, soonest first, from its tracking summary. */
+/**
+ * Lists the nearest open deadlines of the catalog's events that are not cancelled, soonest first, from the organization's
+ * tracking summary: an untracked event's under the workflow's default stage, a lost stage's never (mark a stage `lost`
+ * in the workflow to keep its events out). Application deadlines read "Apply by {date}".
+ */
 defineOptions({ name: 'EventsDeadlines' });
 
 const props = withDefaults(
@@ -23,19 +27,42 @@ const props = withDefaults(
     today?: string;
     /** The organization's workflow stages, to label each deadline's stage. */
     stages?: readonly WorkflowStageModel[];
+    /** The deadline kinds to list (Ocharo: `application`); every kind when absent. */
+    deadlineKinds?: readonly DeadlineKind[];
+    /** Builds an event's page link; each title emits `open` on a plain click either way. */
+    eventHref?: (id: string) => string;
   }>(),
-  { locale: 'en', today: undefined, stages: undefined },
+  { locale: 'en', today: undefined, stages: undefined, deadlineKinds: undefined, eventHref: undefined },
 );
 
 const emit = defineEmits<{ open: [eventId: string] }>();
 
 const day = computed(() => props.today ?? localIsoDate());
-const summary = useEventsRequest((signal) => props.client.getTrackingSummary(props.catalog, day.value, signal));
+const summary = useEventsRequest((signal) =>
+  props.client.getTrackingSummary(
+    props.catalog,
+    props.deadlineKinds?.length ? { today: day.value, deadlineKinds: props.deadlineKinds } : day.value,
+    signal,
+  ),
+);
 const deadlines = computed(() => summary.value.value?.upcomingDeadlines ?? []);
 const daysLeft = (item: UpcomingDeadlineModel) => deadlineDaysLeft(item.deadline, day.value);
+const when = (item: UpcomingDeadlineModel) =>
+  item.deadline.kind === 'application'
+    ? eventsText('applyBy', props.locale, { date: formatEventWhen(item.deadline.at, props.locale) })
+    : `${EventsLabels.deadline(item.deadline.kind, props.locale)}: ${formatEventWhen(item.deadline.at, props.locale)}`;
+
+function follow(event: MouseEvent, id: string) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  emit('open', id);
+}
 
 onMounted(() => summary.run());
-watch([() => props.catalog, day, () => props.client], () => summary.run());
+watch([() => props.catalog, day, () => props.client, () => JSON.stringify(props.deadlineKinds ?? [])], () =>
+  summary.run(),
+);
+defineExpose({ reload: () => summary.run() });
 </script>
 
 <template>
@@ -60,16 +87,22 @@ watch([() => props.catalog, day, () => props.client], () => summary.run());
           class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
           data-test="deadline"
         >
+          <a
+            v-if="eventHref"
+            :href="eventHref(item.eventId)"
+            class="font-medium underline-offset-4 hover:underline"
+            @click="follow($event, item.eventId)"
+            v-text="pickText(item.title, locale)"
+          ></a>
           <button
+            v-else
             type="button"
             class="font-medium underline-offset-4 hover:underline"
             @click="emit('open', item.eventId)"
           >
             {{ pickText(item.title, locale) }}
           </button>
-          <span class="text-muted-foreground">
-            {{ EventsLabels.deadline(item.deadline.kind, locale) }}: {{ formatEventWhen(item.deadline.at, locale) }}
-          </span>
+          <span class="text-muted-foreground" data-test="deadline-when">{{ when(item) }}</span>
           <span
             v-if="daysLeft(item) !== null"
             :data-tone="deadlineTone(daysLeft(item) ?? 0)"

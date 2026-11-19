@@ -93,7 +93,8 @@ const daysInMonth = (year: number, month: number) => new Date(Date.UTC(year, mon
 
 /**
  * Reads what a date says, at the lower of its stated precision and its value's shape — a value never claims more than
- * its precision. Null when the date is unknown or unreadable.
+ * its precision. An estimated date reads at most to its month: an estimate never claims a day or a time. Null when the
+ * date is unknown or unreadable.
  */
 export function readEventWhen(when: EventWhen | null | undefined): EventWhenParts | null {
   if (!when || when.precision === 'unknown' || !when.value) return null;
@@ -101,7 +102,7 @@ export function readEventWhen(when: EventWhen | null | undefined): EventWhenPart
   if (!match) return null;
   const [, yearText, monthText, dayText, hourText, minuteText] = match;
   const shape = minuteText !== undefined ? 4 : dayText !== undefined ? 3 : monthText !== undefined ? 2 : 1;
-  const known = Math.min(shape, rank[when.precision] ?? 0);
+  const known = Math.min(shape, rank[when.precision] ?? 0, when.certainty === 'estimated' ? rank.month : rank.minute);
   if (known < 1) return null;
 
   const year = Number(yearText);
@@ -188,17 +189,102 @@ function formatSpanParts(start: EventWhenParts, end: EventWhenParts, locale: Eve
   }
 }
 
+/** Holds the zones a start time is written for: the event's own (`facts.timeZone`) and the viewer's. */
+export interface EventZoneOptions {
+  /** The event's IANA zone; a start time in another offset than the viewer's adds the zone's short name. */
+  readonly timeZone?: string | null;
+  /** The viewer's IANA zone; the browser's by default. */
+  readonly viewerZone?: string | null;
+}
+
+/** Returns the browser's own IANA time zone; undefined where it names none. */
+export function browserTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Counts the minutes a zone runs ahead of UTC at an instant; null for a zone the browser does not know. */
+export function zoneOffsetMinutes(zone: string, instant: number): number | null {
+  try {
+    const fields = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(new Date(instant));
+    const field = (type: Intl.DateTimeFormatPartTypes) => Number(fields.find((item) => item.type === type)?.value);
+    const wall = Date.UTC(
+      field('year'),
+      field('month') - 1,
+      field('day'),
+      field('hour'),
+      field('minute'),
+      field('second'),
+    );
+    const offset = Math.round((wall - Math.floor(instant / 1000) * 1000) / 60_000);
+    return Number.isFinite(offset) ? offset : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Returns the UTC instant of a local date and time in a zone; null for a zone the browser does not know. */
+export function zonedInstant(parts: EventWhenParts, zone: string): number | null {
+  const wall = Date.UTC(parts.year, parts.month ?? 0, parts.day ?? 1, parts.hour ?? 0, parts.minute ?? 0);
+  const first = zoneOffsetMinutes(zone, wall);
+  if (first === null) return null;
+  const second = zoneOffsetMinutes(zone, wall - first * 60_000);
+  return second === null ? null : wall - second * 60_000;
+}
+
+/**
+ * Names a start time's zone (`GMT+5`) when the event's zone runs at another offset than the viewer's at that instant;
+ * null for a start without a time, an event without a zone, or the viewer's own offset.
+ */
+export function startZoneName(
+  starts: EventWhen | null | undefined,
+  locale: EventsLocale,
+  options: EventZoneOptions = {},
+): string | null {
+  const parts = readEventWhen(starts);
+  const zone = options.timeZone?.trim();
+  if (!parts || parts.precision !== 'minute' || !zone) return null;
+  const instant = zonedInstant(parts, zone);
+  if (instant === null) return null;
+  const viewer = options.viewerZone === undefined ? browserTimeZone() : options.viewerZone;
+  if (viewer && zoneOffsetMinutes(viewer, instant) === zoneOffsetMinutes(zone, instant)) return null;
+  try {
+    return (
+      new Intl.DateTimeFormat(locale, { timeZone: zone, timeZoneName: 'short' })
+        .formatToParts(new Date(instant))
+        .find((part) => part.type === 'timeZoneName')?.value ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
 const whenKey = (parts: EventWhenParts) =>
   `${parts.year}-${pad((parts.month ?? -1) + 1)}-${pad(parts.day ?? 0)}T${pad(parts.hour ?? 0)}:${pad(parts.minute ?? 0)}`;
 
 /**
  * Writes an event's span — `12–14 Oct 2026`, `28 Oct – 2 Nov 2026`, `Dec 2026 – Jan 2027` — each end as precisely as
- * it is known; `Dates not announced` when the start is unknown, `≈ … (expected)` when either end is estimated.
+ * it is known; `Dates not announced` when the start is unknown, `≈ … (expected)` when either end is estimated. A start
+ * time in the event's zone adds that zone's short name (`5 Dec 2026, 19:00 GMT+5`) only when it differs from the
+ * viewer's offset.
  */
 export function formatEventSpan(
   starts: EventWhen | null | undefined,
   ends: EventWhen | null | undefined,
   locale: EventsLocale,
+  zones: EventZoneOptions = {},
 ): string {
   const start = readEventWhen(starts);
   if (!start) return eventsText('datesNotAnnounced', locale);
@@ -211,14 +297,23 @@ export function formatEventSpan(
     endRange !== null &&
     endRange.last >= startRange.first &&
     !(end.precision === start.precision && whenKey(end) === whenKey(start));
-  const text = usable && end ? formatSpanParts(start, end, locale) : formatParts(start, locale);
+  const spanned = usable && end ? formatSpanParts(start, end, locale) : formatParts(start, locale);
+  const zone = startZoneName(starts, locale, zones);
+  const text = zone ? `${spanned} ${zone}` : spanned;
   const estimated = starts?.certainty === 'estimated' || (usable && ends?.certainty === 'estimated');
   return estimated ? expected(text, locale) : text;
 }
 
-/** Writes an event's dates from its facts. */
-export function formatEventDates(event: Pick<EventModel, 'facts'>, locale: EventsLocale): string {
-  return formatEventSpan(event.facts.starts, event.facts.ends, locale);
+/** Writes an event's dates from its facts, the start time's zone named only when it is not the viewer's offset. */
+export function formatEventDates(
+  event: Pick<EventModel, 'facts'>,
+  locale: EventsLocale,
+  options: Pick<EventZoneOptions, 'viewerZone'> = {},
+): string {
+  return formatEventSpan(event.facts.starts, event.facts.ends, locale, {
+    timeZone: event.facts.timeZone ?? null,
+    ...options,
+  });
 }
 
 /** Orders two dates by the first day each covers, then the last; an unknown date sorts last. */

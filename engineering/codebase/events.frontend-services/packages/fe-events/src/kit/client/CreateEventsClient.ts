@@ -7,6 +7,7 @@ import {
   observationQueryParams,
   reviewQueryParams,
   trackingQueryParams,
+  trackingSummaryQueryParams,
   type CatalogModel,
   type CatalogSpec,
   type DigestModel,
@@ -37,6 +38,7 @@ import {
   type TrackingQuery,
   type TrackingSpec,
   type TrackingSummaryModel,
+  type TrackingSummaryQuery,
   type WorkflowModel,
   type WorkflowSpec,
 } from '../../contracts';
@@ -102,8 +104,15 @@ export interface EventsClient {
   getObservation(catalog: string, id: string, signal?: AbortSignal): EventsResult<ObservationModel>;
 
   listTracking(catalog: string, query?: TrackingQuery, signal?: AbortSignal): EventsResult<TrackingPage>;
-  /** Reads the caller's organization's tracking summary; `today` is `YYYY-MM-DD`. */
-  getTrackingSummary(catalog: string, today: string, signal?: AbortSignal): EventsResult<TrackingSummaryModel>;
+  /**
+   * Reads the caller's organization's tracking summary: `today` as `YYYY-MM-DD`, or a query that also names the deadline
+   * kinds to list.
+   */
+  getTrackingSummary(
+    catalog: string,
+    today: string | TrackingSummaryQuery,
+    signal?: AbortSignal,
+  ): EventsResult<TrackingSummaryModel>;
   getTracking(catalog: string, eventId: string, signal?: AbortSignal): EventsResult<TrackedEventModel>;
   putTracking(catalog: string, eventId: string, spec: TrackingSpec, signal?: AbortSignal): EventsResult<TrackingModel>;
   deleteTracking(
@@ -252,7 +261,12 @@ export function createEventsClient(options: EventsClientOptions = {}): EventsCli
     listTracking: (catalog, query, signal) =>
       get(EventsRoutes.tracking(catalog), EventsDecoders.trackingPage, signal, trackingQueryParams(query)),
     getTrackingSummary: (catalog, today, signal) =>
-      get(EventsRoutes.trackingSummary(catalog), EventsDecoders.trackingSummary, signal, { today }),
+      get(
+        EventsRoutes.trackingSummary(catalog),
+        EventsDecoders.trackingSummary,
+        signal,
+        trackingSummaryQueryParams(typeof today === 'string' ? { today } : today),
+      ),
     getTracking: (catalog, eventId, signal) =>
       get(EventsRoutes.trackedEvent(catalog, eventId), EventsDecoders.trackedEvent, signal),
     putTracking: (catalog, eventId, spec, signal) =>
