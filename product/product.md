@@ -91,6 +91,17 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   quarantined and never blocks the page.
 - lifecycle records (`link.state`, `post.merged`, `post.unmerged`, `post.purged`, `post.relisted`) change evidence,
   never a reviewed fact: a missing source page does not cancel an event; run and health records feed the status.
+- a merged post (`post.merged`, `mergedInto`) sends the event no person decided back to review as a duplicate, held by
+  `source:{instance}`, and moves no fact; an organization's tracking of it moves (E18): while the survivor post's event is
+  published, each organization's tracking of the duplicate's event is carried to the survivor's first, so the organization
+  lists one event, not two. An organization with no tracking there gets a copy (stage, priority, assignee, notes, fields,
+  references); one tracking both keeps the survivor's row at the later stage by its own workflow's order and gets the
+  duplicate's notes after its own (cut at the notes limit). A tracking history entry names the merge (actor
+  `source:{instance} merged post {duplicate} into {survivor}`, no issuer), and the duplicate keeps its own tracking. A
+  tracked duplicate with no event to carry to (its survivor never delivered, or that event is not published) stays
+  published, as a tracked event always did. `post.unmerged` releases the hold and returns the duplicate to its classifier,
+  and the tracking already carried stays on the survivor: SCFD's merge is a heuristic that can be undone, and an
+  organization's tracking is never taken away, so both events list again, each tracked.
 - `post.unmatched` (SCFD sends it once when a post it delivered no longer passes the subscription's filter) sends an
   event no person decided and no organization tracks back to review, held by `source:{instance}`, so an off-topic event
   leaves the published feed; its content never applies, and only a revision that passes the filter again

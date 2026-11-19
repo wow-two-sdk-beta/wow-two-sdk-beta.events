@@ -56,6 +56,19 @@ internal static class TrackingRows
         At = at,
     };
 
+    /// <summary>Creates a history entry for a change the module made itself, named by what made it (an intake merge
+    /// carrying tracking to the survivor's event): no issuer, the subject says why.</summary>
+    public static TrackingHistoryEntity HistoryBy(Guid trackingId, string? fromStage, string toStage, string actorSubject, DateTimeOffset at) => new()
+    {
+        Id = Guid.CreateVersion7(at),
+        TrackingId = trackingId,
+        FromStage = fromStage,
+        ToStage = toStage,
+        ActorIssuer = null,
+        ActorSubject = actorSubject,
+        At = at,
+    };
+
     /// <summary>Maps a row to the contract.</summary>
     public static TrackingModel ToModel(TrackingEntity row) => new()
     {

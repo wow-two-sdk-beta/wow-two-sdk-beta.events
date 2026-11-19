@@ -28,10 +28,20 @@ internal static class WorkflowStore
         db.Workflows.FirstOrDefaultAsync(row => row.Issuer == caller.Issuer && row.OrganizationId == caller.OrganizationId, cancellationToken);
 
     /// <summary>Reads the caller organization's workflow; the default when it never wrote one.</summary>
-    public static async Task<WorkflowModel> LoadAsync(EventsDbContext db, EventsCaller caller, CancellationToken cancellationToken)
+    public static Task<WorkflowModel> LoadAsync(EventsDbContext db, EventsCaller caller, CancellationToken cancellationToken) =>
+        LoadAsync(db, caller.Issuer, caller.OrganizationId!, cancellationToken);
+
+    /// <summary>Reads one organization's workflow by its identity, for work the module does on an organization's behalf
+    /// with no caller (intake carrying tracking to a merge's survivor); the default when it never wrote one.</summary>
+    /// <param name="db">The module's store.</param>
+    /// <param name="issuer">The organization's issuer.</param>
+    /// <param name="organizationId">The organization.</param>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>The organization's workflow.</returns>
+    public static async Task<WorkflowModel> LoadAsync(EventsDbContext db, string issuer, string organizationId, CancellationToken cancellationToken)
     {
         var row = await db.Workflows.AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Issuer == caller.Issuer && item.OrganizationId == caller.OrganizationId, cancellationToken);
+            .FirstOrDefaultAsync(item => item.Issuer == issuer && item.OrganizationId == organizationId, cancellationToken);
         return row is null ? Default : ToModel(row);
     }
 

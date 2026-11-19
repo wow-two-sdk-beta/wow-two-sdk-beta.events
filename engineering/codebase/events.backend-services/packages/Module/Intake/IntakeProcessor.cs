@@ -20,6 +20,8 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 ///   - a post is one identity per SCFD instance, whichever subscription delivers it; its highest revision wins
 ///   - a new post whose title, dates and city match an event another source reported joins that event (E17,
 ///     <see cref="CrossSourceMatcher"/>): its facts never change the event, its revisions are evidence only
+///   - a post SCFD merged into another holds its event as a duplicate; organizations' tracking of it moves to the
+///     survivor's event first (E18, <see cref="MergedTracking"/>)
 ///   - a malformed record is stored as quarantined and never fails the page; nothing publishes unreviewed
 /// </remarks>
 /// <param name="db">The module's store, in the page's own scope.</param>
@@ -455,13 +457,18 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     ///   - gone, or merged into another post (<c>mergedInto</c>): an event no person decided, that no organization tracks
     ///     and (for a gone listing) whose dates have not passed, goes back to review, held by <c>source:{instance}</c>
     ///     with the reason; a listing gone after its event is how sources end, and changes nothing
+    ///   - a merged post's event that organizations track is held too, once their tracking has moved (E18): when the
+    ///     survivor post's event is published, each organization's tracking is carried to it
+    ///     (<see cref="MergedTracking"/>) before the hold; without that event (the survivor never delivered, or its event
+    ///     is not published) nothing moves and a tracked event stays published as before; a tracked gone listing never holds
     ///   - unmatched (<c>post.unmatched</c>, E04): an event no person decided and no organization tracks goes back to
     ///     review held by the source, whatever its dates, so an off-topic event leaves the published feed; it replaces a
     ///     gone or merged hold, because only a revision that passes the filter again (<c>post.new</c>, <c>post.changed</c>,
     ///     <c>post.extracted</c>) ends it, never a relist or an unmerge; a tracked event stays published
     ///   - live again, no longer merged, or matching again: an event the source held for that reason returns to its
-    ///     classifier, which the backlog pass runs after the poll; nothing is merged or moved, so SCFD's unmerge undoes
-    ///     it whole, and a post matching again while its listing is gone stays held as gone
+    ///     classifier, which the backlog pass runs after the poll; the merge moved no fact, so SCFD's unmerge undoes it
+    ///     whole, and a post matching again while its listing is gone stays held as gone; tracking carried to the survivor
+    ///     stays there (the duplicate keeps its own)
     ///   - matching again at the stored revision counts too: a selector change re-matches a post at the revision Events
     ///     already holds (<c>post.changed</c>, reason <c>resync</c>), which <see cref="ApplyPostAsync"/> marks superseded,
     ///     yet it is a revision that passes the selector, so it releases the hold like a newer one
@@ -522,8 +529,14 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         var merged = survivor is { } into && into != postId;
         if (merged || state == "gone")
         {
-            if (heldBySource || !Automatic(item) || (!merged && Ended(item)) || await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken)
+            if (heldBySource || !Automatic(item) || (!merged && Ended(item))
                 || await ListedElsewhereAsync(item, $"{instance}/{postId:D}", cancellationToken))
+                return;
+
+            // Organizations tracking a merged post's event keep seeing it through the survivor's: their tracking moves first.
+            // A tracked event whose tracking cannot move, or a tracked gone listing, stays published.
+            if (await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken)
+                && !(merged && await CarryTrackingAsync(page, item.Id, postId, survivor!.Value, cancellationToken)))
                 return;
 
             Hold(item, actor, merged ? MergedReason : GoneReason, page.Now);
@@ -532,6 +545,26 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         {
             Release(item, page.Now);
         }
+    }
+
+    /// <summary>Carries the tracking of a merged post's event to the event of the post it merged into (E18).</summary>
+    /// <returns>True when it moved, which lets the duplicate leave the published feed; false when the survivor post has no
+    /// event, or its event is the duplicate's own or is not published, and nothing moved.</returns>
+    private async Task<bool> CarryTrackingAsync(IntakePageState page, Guid duplicateEventId, Guid duplicatePost, Guid survivorPost, CancellationToken cancellationToken)
+    {
+        var instance = page.Source.Instance;
+        var survivorEvent = await db.SourcePosts.AsNoTracking()
+            .Where(row => row.SourceInstance == instance && row.CatalogId == page.Catalog.Id && row.PostId == survivorPost)
+            .Select(row => row.EventId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (survivorEvent is not { } target || target == duplicateEventId)
+            return false;
+
+        if (!await db.Events.AsNoTracking().AnyAsync(row => row.Id == target && row.CatalogId == page.Catalog.Id && row.Review == Published, cancellationToken))
+            return false;
+
+        await MergedTracking.CarryAsync(db, duplicateEventId, target, MergedTracking.Actor(instance, duplicatePost, survivorPost), page.Now, cancellationToken);
+        return true;
     }
 
     /// <summary>Tells whether another source of the event still lists it: a source (E17) not gone or unmatched. SCFD reports
