@@ -188,6 +188,35 @@ public sealed partial class ScfdContractPagesTests
             "a stated date replaces the estimate and keeps its day precision");
     }
 
+    /// <summary>The English-title page (harvest OE06, v0.2.30): a Russian post first delivered untitled in English, then with
+    /// the tagging pass's machine English title, then with a changed Russian title and the English one kept. The machine
+    /// title maps to <c>en</c> beside the source's <c>ru-Cyrl</c>, and the observation's title link records it as machine-made.</summary>
+    [Fact]
+    public async Task EnglishTitlePage_ShouldMapTitlesRuCyrlAndEn_AndRecordTheMachineOrigin()
+    {
+        var records = (await ReadAsync("12-english-title.json")).Records;
+
+        records.Select(record => record.Type).Should().Equal("post.new", "post.changed", "post.changed");
+        var titles = records.Select(record =>
+        {
+            ScfdEventMapper.TryMap(record.Data!.Value, Kinds, out var facts, out var reason).Should().BeTrue(reason);
+            return facts.Title;
+        }).ToList();
+
+        titles[0].Should().Equal(new Dictionary<string, string> { ["ru-Cyrl"] = "Выставка текстиля и швейного оборудования" });
+        titles[1].Should().Equal(new Dictionary<string, string>
+        {
+            ["ru-Cyrl"] = "Выставка текстиля и швейного оборудования", ["en"] = "Textile and Sewing Equipment Exhibition",
+        });
+        titles[2].Should().Equal(new Dictionary<string, string>
+        {
+            ["ru-Cyrl"] = "Международная выставка текстиля и швейного оборудования", ["en"] = "Textile and Sewing Equipment Exhibition",
+        });
+        ScfdEventMapper.Links(records[0].Data).Single().SourceFields.Should().BeNull("the first revision carries no machine title");
+        ScfdEventMapper.Links(records[1].Data).Single().SourceFields!.Value.GetProperty("machineTitles")
+            .EnumerateArray().Select(item => item.GetString()).Should().Equal("en");
+    }
+
     /// <summary>The unmatched page (harvest E03): a post delivered as new, then once as <c>post.unmatched</c> at its next
     /// revision with that revision's payload, which still maps; intake holds its event (E04).</summary>
     [Fact]

@@ -44,17 +44,38 @@ internal static class DigestText
         return text.ToString();
     }
 
-    /// <summary>Picks an event's title in a language: the language, its base, the unknown locale, then any.</summary>
+    /// <summary>Picks an event's title in a language, matching by language prefix (<c>ru</c> finds <c>ru-Cyrl</c>, <c>uz-Latn</c>
+    /// finds <c>uz</c>): the language, then English, Russian and Uzbek after the unknown locale, then any. Within one
+    /// language the exact key wins, then the bare language, then its Latin script, then the first key.</summary>
     public static string Title(IReadOnlyDictionary<string, string> title, string language)
     {
-        var root = language.Split('-')[0];
-        foreach (var locale in new[] { language, root, EventsConstants.UnknownLocale, DigestLanguageConstants.English, DigestLanguageConstants.Russian, "uz" })
+        if (InLanguage(title, language) is { } exact)
+            return exact;
+        if (title.TryGetValue(EventsConstants.UnknownLocale, out var unknown) && !string.IsNullOrWhiteSpace(unknown))
+            return unknown.Trim();
+        foreach (var fallback in new[] { DigestLanguageConstants.English, DigestLanguageConstants.Russian, "uz" })
         {
-            if (title.TryGetValue(locale, out var text) && !string.IsNullOrWhiteSpace(text))
-                return text.Trim();
+            if (InLanguage(title, fallback) is { } text)
+                return text;
         }
 
         return title.Values.FirstOrDefault(text => !string.IsNullOrWhiteSpace(text))?.Trim() ?? string.Empty;
+    }
+
+    /// <summary>Finds the title in one language: the exact key, the bare language, its <c>-Latn</c> form, then the first key
+    /// of that language; none when no key names it.</summary>
+    private static string? InLanguage(IReadOnlyDictionary<string, string> title, string language)
+    {
+        var root = language.Split('-')[0];
+        var keys = title.Where(pair => !string.IsNullOrWhiteSpace(pair.Value)
+                && string.Equals(pair.Key.Split('-')[0], root, StringComparison.OrdinalIgnoreCase))
+            .Select(pair => pair.Key)
+            .ToList();
+        var key = keys.FirstOrDefault(key => string.Equals(key, language, StringComparison.OrdinalIgnoreCase))
+            ?? keys.FirstOrDefault(key => string.Equals(key, root, StringComparison.OrdinalIgnoreCase))
+            ?? keys.FirstOrDefault(key => key.EndsWith("-Latn", StringComparison.OrdinalIgnoreCase))
+            ?? keys.FirstOrDefault();
+        return key is null ? null : title[key].Trim();
     }
 
     /// <summary>Escapes text for Telegram's HTML subset.</summary>

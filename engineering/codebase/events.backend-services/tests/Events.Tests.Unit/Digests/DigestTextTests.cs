@@ -52,6 +52,22 @@ public sealed class DigestTextTests
         DigestText.Title(new Dictionary<string, string> { ["fr"] = "Mode" }, "ru").Should().Be("Mode");
     }
 
+    /// <summary>OE06: a sourced title is keyed <c>ru-Cyrl</c> and SCFD's English one <c>en</c>, so a Russian digest finds the
+    /// source's words by prefix, an English one the English title, and an Uzbek one English before Russian.</summary>
+    [Fact]
+    public void Title_ShouldMatchByLanguagePrefix_PreferringTheExactKey_ThenTheBareLanguage_ThenLatin()
+    {
+        var sourced = new Dictionary<string, string> { ["ru-Cyrl"] = "Выставка текстиля", ["en"] = "Textile Exhibition" };
+
+        DigestText.Title(sourced, "ru").Should().Be("Выставка текстиля");
+        DigestText.Title(sourced, "en").Should().Be("Textile Exhibition");
+        DigestText.Title(sourced, "uz-Latn").Should().Be("Textile Exhibition", "no Uzbek title, and English comes before Russian");
+        DigestText.Title(new Dictionary<string, string> { ["ru-Cyrl"] = "Выставка" }, "uz").Should().Be("Выставка", "Russian by prefix before any");
+        DigestText.Title(new Dictionary<string, string> { ["uz-Cyrl"] = "Мода", ["uz-Latn"] = "Moda" }, "uz").Should().Be("Moda", "Latin before another script");
+        DigestText.Title(new Dictionary<string, string> { ["uz-Latn"] = "Moda", ["uz"] = "Moda (uz)" }, "uz").Should().Be("Moda (uz)", "the bare language first");
+        DigestText.Title(new Dictionary<string, string> { ["uz-Cyrl"] = "Мода", ["uz-Latn"] = "Moda" }, "uz-Cyrl").Should().Be("Мода", "the exact key first");
+    }
+
     [Fact]
     public void Render_ShouldStayWithinTelegramsLimit_AndCountWhatItLeftOut()
     {

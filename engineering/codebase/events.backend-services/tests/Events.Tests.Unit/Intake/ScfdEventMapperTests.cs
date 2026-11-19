@@ -221,6 +221,43 @@ public sealed class ScfdEventMapperTests
         known.Languages.Should().Equal("uz-Latn");
     }
 
+    /// <summary>OE06: SCFD's machine English title sits beside the source's own title, never over a title the source states
+    /// in that language; a title not marked machine, or with no text or language, is left out.</summary>
+    [Fact]
+    public void TryMap_ShouldPutTheMachineEnglishTitle_BesideTheSourceTitle()
+    {
+        var russian = Map("""
+            {"schema":"wow2.event.v1","title":"Выставка","language":{"code":"ru","script":"Cyrl"},
+             "titles":[{"text":" Exhibition ","language":"en","machine":true},{"text":"Ausstellung","language":"de"},{"text":"","language":"fr","machine":true}]}
+            """);
+        var english = Map("""
+            {"schema":"wow2.event.v1","title":"Fashion Week","language":{"code":"en"},"titles":[{"text":"Fashion week (machine)","language":"en","machine":true}]}
+            """);
+        var unknown = Map("""{"schema":"wow2.event.v1","title":"Show","titles":[{"text":"Show","language":"EN","machine":true}]}""");
+
+        russian.Title.Should().Equal(new Dictionary<string, string> { ["ru-Cyrl"] = "Выставка", ["en"] = "Exhibition" });
+        russian.Languages.Should().Equal(["ru-Cyrl"], "the languages are the source's own, never the machine's");
+        english.Title.Should().Equal(new Dictionary<string, string> { ["en"] = "Fashion Week" }, "the source's own English words win");
+        unknown.Title.Should().Equal(new Dictionary<string, string> { ["und"] = "Show", ["en"] = "Show" });
+    }
+
+    /// <summary>OE06: the observation records which titles a machine wrote, on the link the title came from
+    /// (<c>fieldSources.title</c>), keeping that link's own fields.</summary>
+    [Fact]
+    public void Links_ShouldRecordTheMachineTitles_OnTheTitlesSourceLink()
+    {
+        var links = ScfdEventMapper.Links(Json("""
+            {"titles":[{"text":"Exhibition","language":"en","machine":true}],"fieldSources":{"title":"l-2"},
+             "links":[{"id":"l-1","url":"https://a.example/1"},{"id":"l-2","url":"https://a.example/2","sourceFields":{"price":"10"}}]}
+            """));
+        var none = ScfdEventMapper.Links(Json("""{"links":[{"id":"l-1","url":"https://a.example/1"}]}"""));
+
+        links[0].SourceFields.Should().BeNull();
+        links[1].SourceFields!.Value.GetProperty("price").GetString().Should().Be("10");
+        links[1].SourceFields!.Value.GetProperty("machineTitles").EnumerateArray().Select(item => item.GetString()).Should().Equal("en");
+        none.Single().SourceFields.Should().BeNull("a payload without machine titles adds nothing");
+    }
+
     [Fact]
     public void TryMap_ShouldReadPlaceOrganizerOffersAndLinks()
     {

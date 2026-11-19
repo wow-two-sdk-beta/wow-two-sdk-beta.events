@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Review;
@@ -83,19 +84,27 @@ internal static partial class ScfdEventMapper
         if (data is not { ValueKind: JsonValueKind.Object } value)
             return links;
 
+        var machine = MachineTitles(value).Select(title => title.Language).ToList();
+        var titleLink = value.TryGetProperty("fieldSources", out var sources) ? String(sources, "title") : null;
         if (value.TryGetProperty("links", out var array) && array.ValueKind == JsonValueKind.Array)
         {
-            foreach (var link in array.EnumerateArray().Where(link => link.ValueKind == JsonValueKind.Object))
+            var objects = array.EnumerateArray().Where(link => link.ValueKind == JsonValueKind.Object).ToList();
+            // The machine titles belong to the link the title came from (fieldSources.title), else to the first link.
+            var origin = objects.FindIndex(link => titleLink is not null && String(link, "id") == titleLink);
+            origin = origin < 0 ? 0 : origin;
+            for (var index = 0; index < objects.Count; index++)
             {
+                var link = objects[index];
+                var fields = link.TryGetProperty("sourceFields", out var own) && own.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+                    ? own.Clone()
+                    : (JsonElement?)null;
                 links.Add(new ObservationLinkModel
                 {
                     Url = String(link, "url"),
                     SourceId = String(link, "sourceId"),
                     CaptureId = String(link, "captureId"),
                     CapturedAtUtc = Time(link, "capturedAtUtc"),
-                    SourceFields = link.TryGetProperty("sourceFields", out var fields) && fields.ValueKind is JsonValueKind.Object or JsonValueKind.Array
-                        ? fields.Clone()
-                        : null,
+                    SourceFields = index == origin && machine.Count > 0 ? WithMachineTitles(fields, machine) : fields,
                 });
             }
         }
@@ -131,6 +140,15 @@ internal static partial class ScfdEventMapper
 
         var locale = Locale(data);
         var kind = String(data, "kind")?.Trim().ToLowerInvariant();
+        var titles = new Dictionary<string, string>(StringComparer.Ordinal) { [locale ?? EventsConstants.UnknownLocale] = Fit(title, EventsConstants.MaxTitleLength)! };
+        // SCFD's machine titles (harvest OE06: the English title its tagging pass wrote) sit beside the source's own title,
+        // never over it: a source that already states that language keeps its own words.
+        foreach (var (language, text) in MachineTitles(data))
+        {
+            if (!titles.Keys.Any(key => SameLanguage(key, language)))
+                titles[language] = text;
+        }
+
         var schemaOrg = data.TryGetProperty("schemaOrg", out var original) && original.ValueKind == JsonValueKind.Object ? original : (JsonElement?)null;
         var contentLinks = data.TryGetProperty("contentLinks", out var content) && content.ValueKind == JsonValueKind.Array
             ? content.EnumerateArray().Where(link => link.ValueKind == JsonValueKind.Object).ToList()
@@ -138,7 +156,7 @@ internal static partial class ScfdEventMapper
 
         facts = new EventFacts
         {
-            Title = new Dictionary<string, string>(StringComparer.Ordinal) { [locale ?? EventsConstants.UnknownLocale] = Fit(title, EventsConstants.MaxTitleLength)! },
+            Title = titles,
             Kind = kind is not null && kinds.Contains(kind) ? kind : "other",
             Organizer = Organizer(data),
             Place = Place(data, schemaOrg),
@@ -153,6 +171,52 @@ internal static partial class ScfdEventMapper
             Languages = locale is null ? [] : [locale],
         };
         return true;
+    }
+
+    /// <summary>Reads SCFD's machine titles (<c>titles[]</c>, each <c>{ text, language, machine: true }</c>): the language as
+    /// a lowercase tag and the text fitted to the title limit, the first per language. A title not marked
+    /// <c>machine</c>, or with an unreadable language or no text, is left out: only the source's own <c>title</c> stands
+    /// for the source.</summary>
+    public static List<(string Language, string Text)> MachineTitles(JsonElement data)
+    {
+        var titles = new List<(string Language, string Text)>();
+        if (data.ValueKind != JsonValueKind.Object || !data.TryGetProperty("titles", out var array) || array.ValueKind != JsonValueKind.Array)
+            return titles;
+
+        foreach (var title in array.EnumerateArray().Where(title => title.ValueKind == JsonValueKind.Object))
+        {
+            var language = String(title, "language")?.Trim();
+            var text = Fit(String(title, "text"), EventsConstants.MaxTitleLength);
+            if (!title.TryGetProperty("machine", out var machine) || machine.ValueKind != JsonValueKind.True
+                || text is null || language is null || !TitleLanguagePattern().IsMatch(language))
+                continue;
+
+            var root = language.Split('-')[0];
+            var tag = root.ToLowerInvariant() + language[root.Length..];
+            if (tag == EventsConstants.UnknownLocale || titles.Any(known => known.Language == tag))
+                continue;
+
+            titles.Add((tag, text));
+        }
+
+        return titles;
+    }
+
+    /// <summary>Tells whether two locale keys name one language (<c>ru</c> and <c>ru-Cyrl</c> do).</summary>
+    private static bool SameLanguage(string key, string language) =>
+        string.Equals(key.Split('-')[0], language.Split('-')[0], StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Adds <c>machineTitles</c> (the machine-made titles' languages) to a link's source fields, so the observation
+    /// says which of its titles a machine wrote; a link's own array of fields is kept under <c>fields</c>.</summary>
+    private static JsonElement WithMachineTitles(JsonElement? fields, IReadOnlyList<string> languages)
+    {
+        var node = fields is { ValueKind: JsonValueKind.Object } own
+            ? JsonNode.Parse(own.GetRawText())!.AsObject()
+            : new JsonObject();
+        if (fields is { ValueKind: JsonValueKind.Array } list)
+            node["fields"] = JsonNode.Parse(list.GetRawText());
+        node["machineTitles"] = new JsonArray([.. languages.Select(language => (JsonNode?)language)]);
+        return JsonSerializer.SerializeToElement(node);
     }
 
     /// <summary>Reads the event's own website: the first <c>site</c> content link on a host of its own. SCFD marks every
@@ -517,4 +581,7 @@ internal static partial class ScfdEventMapper
 
     [GeneratedRegex("^[A-Z][a-z]{3}$")]
     private static partial Regex ScriptPattern();
+
+    [GeneratedRegex("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")]
+    private static partial Regex TitleLanguagePattern();
 }

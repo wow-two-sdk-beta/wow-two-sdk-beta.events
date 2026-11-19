@@ -122,6 +122,10 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - a sourced event's dates carry SCFD's `certainty`: `estimated` (an AI-estimated date of an undated post) reads as an
   estimated date, shown as approximate and never as announced; `stated`, or none on an older wire, reads as announced.
   A later revision that states the day replaces the estimate.
+- a sourced event's title is the source's own, keyed by the record's language (`ru-Cyrl`), plus each machine title SCFD
+  sends (`titles[]` with `machine: true`: the tagging pass's English title, harvest v0.2.30) under its language, unless
+  the source already states that language. The observation's title link records the machine languages in its source
+  fields (`machineTitles: ["en"]`). Readers pick a title by language prefix (`ru` finds `ru-Cyrl`).
 - a sourced event's kind, in order: the classifier's, when the catalog's taxonomy holds it; the kind the record itself
   names; the source's `DefaultKind` (an exhibitions feed reads `exhibition`), when the record maps to `other` and the
   taxonomy holds it; else `other`. A reviewer's kind stands over all of them.
