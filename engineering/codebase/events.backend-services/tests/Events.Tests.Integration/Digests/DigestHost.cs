@@ -9,6 +9,8 @@ using WoW.Two.Sdk.Beta.Be.Events.Module.Digests;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
 using WoW.Two.Sdk.Beta.Be.Events.Testing.Principals;
+using WoW.Two.Sdk.Beta.Be.Events.Workflows;
+using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 using WoW.Two.Sdk.Beta.Be.Identity.Notices;
 
 namespace Events.Tests.Integration.Digests;
@@ -107,8 +109,8 @@ public sealed class DigestHost(ServiceProvider services, TestPrincipal principal
         return row;
     }
 
-    /// <summary>Inserts the organization's tracking of an event.</summary>
-    internal Task TrackAsync(string organizationId, Guid eventId) => StoreAsync(async db =>
+    /// <summary>Inserts the organization's tracking of an event, in <paramref name="stage"/>.</summary>
+    internal Task TrackAsync(string organizationId, Guid eventId, string stage = "interested") => StoreAsync(async db =>
     {
         var now = Clock.GetUtcNow();
         db.Tracking.Add(new TrackingEntity
@@ -117,13 +119,26 @@ public sealed class DigestHost(ServiceProvider services, TestPrincipal principal
             Issuer = TestPrincipal.DefaultIssuer,
             OrganizationId = organizationId,
             EventId = eventId,
-            Stage = "interested",
+            Stage = stage,
             Revision = 1,
             CreatedAt = now,
             UpdatedAt = now,
         });
         return await db.SaveChangesAsync();
     });
+
+    /// <summary>Moves the organization's tracking of an event to <paramref name="stage"/>.</summary>
+    internal Task RestageAsync(string organizationId, Guid eventId, string stage) =>
+        StoreAsync(db => db.Tracking
+            .Where(row => row.Issuer == TestPrincipal.DefaultIssuer && row.OrganizationId == organizationId && row.EventId == eventId)
+            .ExecuteUpdateAsync(set => set.SetProperty(row => row.Stage, stage)));
+
+    /// <summary>Writes the calling organization's workflow.</summary>
+    public async Task<WorkflowModel> WorkflowAsync(WorkflowSpec spec)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return (await scope.ServiceProvider.GetRequiredService<IEventWorkflowsBroker>().PutAsync(spec)).ValueOrThrow();
+    }
 
     /// <summary>Reads a digest's runs, oldest first.</summary>
     internal Task<List<DigestRunEntity>> RunsAsync(Guid digestId) =>

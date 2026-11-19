@@ -37,5 +37,7 @@ to the consumer's Tailwind sources:
 - A product embeds a catalog's digests with `<DigestsPanel :client :catalog :locale :defaults :link-template />`:
   `defaults` is a new digest's fields (its schedule, selection, recipients, language), `linkTemplate` fixes each event's
   link to the product's own page, `channels` the channels offered (`['telegram']` by default). It needs `events:admin`.
+  The stage pickers (`selection.stages` and `excludeStages`) offer the `workflow` prop's stages, else the workflow the
+  client reads (`GET …/workflow`); a client that cannot reach that route keeps the digest's stages without a notice.
 - A browser session through Identity's BFF passes `csrfToken: () => session.csrfToken`; the client echoes it as
   `X-Csrf-Token` on every unsafe request.

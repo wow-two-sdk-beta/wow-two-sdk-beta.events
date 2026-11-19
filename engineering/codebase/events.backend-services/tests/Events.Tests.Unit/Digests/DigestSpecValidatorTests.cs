@@ -17,7 +17,13 @@ public sealed class DigestSpecValidatorTests
         {
             Name = "  Weekly  ",
             Schedule = new DigestSchedule { Days = [DayOfWeek.Sunday, DayOfWeek.Monday], Times = ["18:00", "09:00"], TimeZone = " Asia/Tashkent " },
-            Selection = new DigestSelection { Cities = ["Tashkent", "TASHKENT", " Samarkand "], Statuses = [EventStatus.Scheduled, EventStatus.Scheduled] },
+            Selection = new DigestSelection
+            {
+                Cities = ["Tashkent", "TASHKENT", " Samarkand "],
+                Statuses = [EventStatus.Scheduled, EventStatus.Scheduled],
+                Stages = [" shortlisted ", "applying", "shortlisted"],
+                ExcludeStages = ["skipped", "skipped"],
+            },
             LinkTemplate = " https://app.example.test/events/{id} ",
         };
 
@@ -29,6 +35,8 @@ public sealed class DigestSpecValidatorTests
         normalized.Schedule.TimeZone.Should().Be("Asia/Tashkent");
         normalized.Selection.Cities.Should().Equal("tashkent", "samarkand");
         normalized.Selection.Statuses.Should().Equal(EventStatus.Scheduled);
+        normalized.Selection.Stages.Should().Equal("shortlisted", "applying");
+        normalized.Selection.ExcludeStages.Should().Equal("skipped");
         normalized.LinkTemplate.Should().Be("https://app.example.test/events/{id}");
     }
 
@@ -39,6 +47,8 @@ public sealed class DigestSpecValidatorTests
     [InlineData("schedule.timeZone")]
     [InlineData("selection.startingWithinDays")]
     [InlineData("selection.kinds")]
+    [InlineData("selection.stages")]
+    [InlineData("selection.excludeStages")]
     [InlineData("recipients")]
     [InlineData("recipients[0]")]
     [InlineData("recipients[0].language")]
@@ -55,6 +65,8 @@ public sealed class DigestSpecValidatorTests
             "schedule.timeZone" => Spec() with { Schedule = Spec().Schedule with { TimeZone = "Mars/Olympus" } },
             "selection.startingWithinDays" => Spec() with { Selection = new DigestSelection { StartingWithinDays = -1 } },
             "selection.kinds" => Spec() with { Selection = new DigestSelection { Kinds = ["Trade Fair"] } },
+            "selection.stages" => Spec() with { Selection = new DigestSelection { Stages = ["Short listed"] } },
+            "selection.excludeStages" => Spec() with { Selection = new DigestSelection { Stages = ["skipped"], ExcludeStages = ["skipped"] } },
             "recipients" => Spec() with { Recipients = [] },
             "recipients[0]" => Spec() with { Recipients = [new DigestRecipient { Subject = "a", Role = "member" }] },
             "recipients[0].language" => Spec() with { Recipients = [new DigestRecipient { Subject = "a", Language = "de" }] },

@@ -25,9 +25,27 @@ describe('digest draft', () => {
           kinds: [],
           cities: [],
           trackedOnly: false,
+          stages: [],
+          excludeStages: [],
         },
         linkTemplate: null,
         expectedRevision: null,
+      },
+    });
+  });
+
+  it('reads and writes the stages a digest includes and leaves out', () => {
+    const draft = digestDraft({
+      ...defaultDigestSpec,
+      selection: { deadlineWithinDays: 7, stages: ['shortlisted', 'applying'], excludeStages: ['skipped'] },
+    });
+
+    expect(draft.stages).toEqual(['shortlisted', 'applying']);
+    expect(draft.excludeStages).toEqual(['skipped']);
+    expect(digestSpec(draft, 2)).toMatchObject({
+      spec: {
+        selection: { deadlineWithinDays: 7, stages: ['shortlisted', 'applying'], excludeStages: ['skipped'] },
+        expectedRevision: 2,
       },
     });
   });

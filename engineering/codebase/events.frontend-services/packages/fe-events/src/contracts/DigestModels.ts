@@ -42,6 +42,13 @@ export interface DigestSelection {
   readonly kinds?: readonly string[];
   readonly cities?: readonly string[];
   readonly trackedOnly?: boolean;
+  /**
+   * The organization's tracking stages (workflow stage keys) an event must be in; empty takes every stage. An event the
+   * organization does not track reads as its workflow's default stage.
+   */
+  readonly stages?: readonly string[];
+  /** The stages that keep an event out, such as `skipped`; untracked events stay out only when it names the default stage. */
+  readonly excludeStages?: readonly string[];
 }
 
 /** Mirrors `DigestRecipient`: a person by Identity `sub`, or an organization role; an optional language. */

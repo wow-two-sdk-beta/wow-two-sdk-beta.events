@@ -4,13 +4,15 @@ using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Digests;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Workflows;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 using WoW.Two.Sdk.Beta.Be.Identity.CurrentPrincipal;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Module.Digests;
 
 /// <summary>Renders a digest as of an instant: selects its catalog's published events by its rules and filters on the
-/// instant's local day, resolves its recipients and renders one message per recipient language. Writes nothing.</summary>
+/// instant's local day and its organization's tracking stages, resolves its recipients and renders one message per
+/// recipient language. Writes nothing.</summary>
 /// <param name="db">The module's store.</param>
 /// <param name="resolver">Reads a role's members.</param>
 /// <param name="options">The digests' settings: the host's link templates.</param>
@@ -45,7 +47,12 @@ internal sealed class DigestDrafter(EventsDbContext db, IDigestRecipientResolver
         if (!readable)
             notes.Add("The digest's organization can no longer read the catalog; nothing matches.");
 
-        var query = Select(digest, catalog, selection, day, since, sentBefore, readable);
+        // Stages read against the organization's workflow: an untracked event stands in its default stage.
+        var defaultStage = selection.Stages.Count > 0 || selection.ExcludeStages.Count > 0
+            ? (await WorkflowStore.LoadAsync(db, new EventsCaller(PrincipalKind.Person, digest.Issuer, digest.OrganizationId, null), cancellationToken)).DefaultStage
+            : string.Empty;
+
+        var query = Select(digest, catalog, selection, defaultStage, day, since, sentBefore, readable);
         var matched = await query.CountAsync(cancellationToken);
         var rows = await query
             .OrderBy(row => row.StartsMin == null)
@@ -74,7 +81,7 @@ internal sealed class DigestDrafter(EventsDbContext db, IDigestRecipientResolver
     }
 
     private IQueryable<CatalogEventEntity> Select(
-        DigestEntity digest, CatalogEntity catalog, DigestSelection selection, DateOnly day, DateTimeOffset since, List<Guid> sentBefore, bool readable)
+        DigestEntity digest, CatalogEntity catalog, DigestSelection selection, string defaultStage, DateOnly day, DateTimeOffset since, List<Guid> sentBefore, bool readable)
     {
         var query = db.Events.AsNoTracking()
             .Where(row => readable && row.CatalogId == catalog.Id && row.Review == Published)
@@ -103,6 +110,28 @@ internal sealed class DigestDrafter(EventsDbContext db, IDigestRecipientResolver
             var issuer = digest.Issuer;
             var organization = digest.OrganizationId;
             query = query.Where(row => db.Tracking.Any(tracking => tracking.Issuer == issuer && tracking.OrganizationId == organization && tracking.EventId == row.Id));
+        }
+
+        if (selection.Stages.Count > 0)
+        {
+            var issuer = digest.Issuer;
+            var organization = digest.OrganizationId;
+            var stages = selection.Stages.ToList();
+            var untracked = stages.Contains(defaultStage);
+            query = query.Where(row =>
+                db.Tracking.Any(tracking => tracking.Issuer == issuer && tracking.OrganizationId == organization && tracking.EventId == row.Id && stages.Contains(tracking.Stage))
+                || (untracked && !db.Tracking.Any(tracking => tracking.Issuer == issuer && tracking.OrganizationId == organization && tracking.EventId == row.Id)));
+        }
+
+        if (selection.ExcludeStages.Count > 0)
+        {
+            var issuer = digest.Issuer;
+            var organization = digest.OrganizationId;
+            var excluded = selection.ExcludeStages.ToList();
+            var untracked = excluded.Contains(defaultStage);
+            query = query.Where(row =>
+                !db.Tracking.Any(tracking => tracking.Issuer == issuer && tracking.OrganizationId == organization && tracking.EventId == row.Id && excluded.Contains(tracking.Stage))
+                && (!untracked || db.Tracking.Any(tracking => tracking.Issuer == issuer && tracking.OrganizationId == organization && tracking.EventId == row.Id)));
         }
 
         var isNew = selection.NewSinceLastRun;

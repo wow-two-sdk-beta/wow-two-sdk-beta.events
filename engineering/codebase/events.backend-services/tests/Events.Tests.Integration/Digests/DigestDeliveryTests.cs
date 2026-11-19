@@ -6,6 +6,7 @@ using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Digests;
 using WoW.Two.Sdk.Beta.Be.Events.Module;
 using WoW.Two.Sdk.Beta.Be.Events.Testing.Principals;
+using WoW.Two.Sdk.Beta.Be.Events.Workflows;
 using WoW.Two.Sdk.Beta.Be.Foundation.Errors;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 using WoW.Two.Sdk.Beta.Be.Identity.Members;
@@ -15,7 +16,8 @@ namespace Events.Tests.Integration.Digests;
 
 /// <summary>Covers what a digest sends and to whom: new events since the last run, each recipient's Telegram result, the
 /// preview's text against the sent one, a message per recipient language, the selection's rules and filters, and role
-/// recipients through the host's resolver, Identity's organization members among them.</summary>
+/// recipients through the host's resolver, Identity's organization members among them, and the organization's tracking
+/// stages included or excluded.</summary>
 /// <param name="fixture">The module's database.</param>
 public sealed class DigestDeliveryTests(DigestFixture fixture) : IClassFixture<DigestFixture>
 {
@@ -188,6 +190,72 @@ public sealed class DigestDeliveryTests(DigestFixture fixture) : IClassFixture<D
     }
 
     [Fact]
+    public async Task ExcludeStages_ShouldLeaveOutSkippedEvents_AndUntrackedOnesOnlyWhenItNamesTheDefaultStage()
+    {
+        var (host, person, organization) = await StartAsync();
+        await using var _ = host;
+        await host.WorkflowAsync(OcharoWorkflow());
+        var catalog = await host.CatalogAsync(organization);
+        var skipped = await host.EventAsync(catalog, Facts("Skipped fair", "2026-11-28"));
+        var shortlisted = await host.EventAsync(catalog, Facts("Shortlisted fair", "2026-11-29"));
+        var untracked = await host.EventAsync(catalog, Facts("Untracked fair", "2026-11-30"));
+        await host.TrackAsync(organization, skipped.Id, "skipped");
+        await host.TrackAsync(organization, shortlisted.Id, "shortlisted");
+        var upcoming = new DigestSelection { StartingWithinDays = 30 };
+
+        var all = await PreviewIdsAsync(host, catalog.Slug, Spec(person) with { Selection = upcoming });
+        var withoutSkipped = await PreviewIdsAsync(host, catalog.Slug, Spec(person) with { Selection = upcoming with { ExcludeStages = ["skipped", "rejected"] } });
+        var triagedOnly = await PreviewIdsAsync(host, catalog.Slug, Spec(person) with { Selection = upcoming with { ExcludeStages = ["skipped", "candidate"] } });
+        var digest = (await host.DigestsAsync(broker => broker.CreateAsync(catalog.Slug, Spec(person) with
+        {
+            Selection = upcoming with { ExcludeStages = ["skipped", "rejected"] },
+        }))).Value();
+        var run = (await host.DigestsAsync(broker => broker.SendNowAsync(catalog.Slug, digest.Id))).Value();
+
+        all.Should().Equal(skipped.Id, shortlisted.Id, untracked.Id);
+        withoutSkipped.Should().Equal(shortlisted.Id, untracked.Id);
+        triagedOnly.Should().Equal(shortlisted.Id);
+        digest.Selection.ExcludeStages.Should().Equal("skipped", "rejected");
+        run.EventIds.Should().Equal(shortlisted.Id, untracked.Id);
+        host.Notices.Sent.Should().ContainSingle().Which.Text.Should().NotContain("Skipped fair");
+    }
+
+    [Fact]
+    public async Task Stages_ShouldListOnlyShortlistedOrApplyingEventsWithADeadline_AndRunEmptyWhenNoneMatch()
+    {
+        var (host, person, organization) = await StartAsync();
+        await using var _ = host;
+        await host.WorkflowAsync(OcharoWorkflow());
+        var catalog = await host.CatalogAsync(organization);
+        var shortlisted = await host.EventAsync(catalog, WithDeadline(Facts("Shortlisted fair", "2027-02-01"), "2026-11-22"));
+        var applying = await host.EventAsync(catalog, WithDeadline(Facts("Applying fair", "2027-02-10"), "2026-11-25"));
+        var later = await host.EventAsync(catalog, WithDeadline(Facts("Later deadline fair", "2027-02-05"), "2026-12-10"));
+        var skipped = await host.EventAsync(catalog, WithDeadline(Facts("Skipped fair", "2027-02-03"), "2026-11-22"));
+        await host.EventAsync(catalog, WithDeadline(Facts("Untracked fair", "2027-02-04"), "2026-11-22"));
+        await host.TrackAsync(organization, shortlisted.Id, "shortlisted");
+        await host.TrackAsync(organization, applying.Id, "applying");
+        await host.TrackAsync(organization, later.Id, "shortlisted");
+        await host.TrackAsync(organization, skipped.Id, "skipped");
+        var digest = (await host.DigestsAsync(broker => broker.CreateAsync(catalog.Slug, Spec(person) with
+        {
+            Name = "Deadline reminders",
+            Selection = new DigestSelection { DeadlineWithinDays = 7, Stages = ["shortlisted", "applying"] },
+        }))).Value();
+
+        var first = (await host.DigestsAsync(broker => broker.SendNowAsync(catalog.Slug, digest.Id))).Value();
+        host.Clock.Advance(TimeSpan.FromDays(1));
+        await host.RestageAsync(organization, shortlisted.Id, "applied");
+        await host.RestageAsync(organization, applying.Id, "applied");
+        var second = (await host.DigestsAsync(broker => broker.SendNowAsync(catalog.Slug, digest.Id))).Value();
+
+        first.Status.Should().Be(DigestRunStatus.Completed);
+        first.EventIds.Should().Equal(shortlisted.Id, applying.Id);
+        second.Status.Should().Be(DigestRunStatus.Empty);
+        second.Selected.Should().Be(0);
+        host.Notices.Sent.Should().ContainSingle().Which.Text.Should().Contain("Shortlisted fair").And.Contain("Applying fair").And.NotContain("Skipped fair");
+    }
+
+    [Fact]
     public async Task Recipients_ShouldResolveARole_ThroughTheHostsResolver_AndNoteItWithoutOne()
     {
         var notices = new FakeAppNoticeBroker();
@@ -325,6 +393,20 @@ public sealed class DigestDeliveryTests(DigestFixture fixture) : IClassFixture<D
     };
 
     private static EventFacts Facts(string title, string starts) => DigestSchedulerTests.Facts(title, starts);
+
+    private static EventFacts WithDeadline(EventFacts facts, string day) => facts with
+    {
+        Deadlines = [new EventDeadline { Kind = DeadlineKind.Application, At = new EventWhen { Value = day, Precision = DatePrecision.Day } }],
+    };
+
+    /// <summary>Ocharo's stages: an untracked event reads as <c>candidate</c>.</summary>
+    private static WorkflowSpec OcharoWorkflow() => new()
+    {
+        Stages = new[] { "candidate", "shortlisted", "applying", "applied", "accepted", "participating", "skipped", "rejected" }
+            .Select(key => new WorkflowStageModel { Key = key, Class = key is "skipped" or "rejected" ? StageClass.Lost : StageClass.Open })
+            .ToList(),
+        DefaultStage = "candidate",
+    };
 
     private sealed class StaticRoleResolver(IReadOnlyList<string> members) : IDigestRecipientResolver
     {

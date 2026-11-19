@@ -3,7 +3,7 @@ import { Button, RefreshButton } from '@wow-two-beta/fe/presentation/actions';
 import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
 import { onMounted, shallowRef, useTemplateRef, watch } from 'vue';
-import { DigestChannelConstants, type DigestModel, type DigestSpec } from '../../contracts';
+import { DigestChannelConstants, type DigestModel, type DigestSpec, type WorkflowModel } from '../../contracts';
 import type { EventsClient } from '../../kit/client/CreateEventsClient';
 import { useEventsRequest } from '../../kit/hooks/UseEventsRequest';
 import FailureNotice from '../../kit/presentation/FailureNotice.vue';
@@ -31,8 +31,16 @@ const props = withDefaults(
     channels?: readonly string[];
     /** Fixes each event's link to the product's own page. */
     linkTemplate?: string | null;
+    /** The organization's stages for the editor's stage pickers; none reads its workflow through the client. */
+    workflow?: Pick<WorkflowModel, 'stages' | 'defaultStage'> | null;
   }>(),
-  { locale: 'en', defaults: () => ({}), channels: () => [DigestChannelConstants.telegram], linkTemplate: null },
+  {
+    locale: 'en',
+    defaults: () => ({}),
+    channels: () => [DigestChannelConstants.telegram],
+    linkTemplate: null,
+    workflow: null,
+  },
 );
 
 const list = useEventsRequest((signal) => props.client.listDigests(props.catalog, signal));
@@ -142,6 +150,7 @@ watch([() => props.catalog, () => props.client], () => {
       :defaults="defaults"
       :channels="channels"
       :link-template="linkTemplate"
+      :workflow="workflow"
       @saved="onSaved"
       @deleted="onDeleted"
       @sent="onSent"

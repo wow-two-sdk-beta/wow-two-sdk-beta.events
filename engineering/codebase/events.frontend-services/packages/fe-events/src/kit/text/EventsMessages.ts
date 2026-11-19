@@ -404,6 +404,13 @@ export const EventsMessages = {
   ),
   digestCities: entry('Cities (comma-separated)', 'Города (через запятую)', 'Shaharlar (vergul bilan)'),
   digestTrackedOnly: entry('Only events we track', 'Только отслеживаемые', 'Faqat kuzatilayotganlar'),
+  digestStages: entry('Only these stages', 'Только на этапах', 'Faqat shu bosqichlar'),
+  digestExcludeStages: entry('Leave out these stages', 'Кроме этапов', 'Bu bosqichlardan tashqari'),
+  digestStagesHint: entry(
+    'Stages are your team’s tracking; an event nobody tracks counts as “{stage}”.',
+    'Этапы — это отслеживание вашей команды; неотслеживаемое мероприятие считается «{stage}».',
+    'Bosqichlar — jamoangiz kuzatuvi; hech kim kuzatmayotgan tadbir “{stage}” hisoblanadi.',
+  ),
   digestRecipients: entry('Recipients', 'Получатели', 'Qabul qiluvchilar'),
   digestRecipientsHint: entry(
     'One per line: a person’s id (sub), or role:member; add uz-Latn, ru or en after a space for their language.',

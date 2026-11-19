@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DigestsPanel, TelegramText } from '../src/admin';
-import type { DigestModel, DigestRunModel } from '../src/contracts';
+import type { DigestModel, DigestRunModel, WorkflowModel } from '../src/contracts';
 import { envelope, fakeService } from './Fixtures';
 
 const wrappers: ReturnType<typeof mount>[] = [];
@@ -45,14 +45,30 @@ const run: DigestRunModel = {
   finishedAtUtc: '2026-11-17T09:00:01Z',
 };
 
+/** Ocharo's workflow: an untracked event reads as `candidate`. */
+const workflow: WorkflowModel = {
+  stages: [
+    { key: 'candidate', label: { en: 'New', uz: 'Yangi' }, class: 'open' },
+    { key: 'shortlisted', label: { en: 'Shortlisted', uz: 'Saralangan' }, class: 'active' },
+    { key: 'applying', label: { en: 'Applying', uz: 'Ariza topshirilmoqda' }, class: 'active' },
+    { key: 'skipped', label: { en: 'Skipped', uz: 'O‘tkazib yuborilgan' }, class: 'lost' },
+  ],
+  defaultStage: 'candidate',
+  revision: 1,
+};
+
 /** Answers the panel's routes by path; records every request. */
-function serve(digests: DigestModel[] = [digest]) {
+function serve(digests: DigestModel[] = [digest], options: { workflow?: boolean } = {}) {
   return fakeService(async (request) => {
     const path = new URL(request.url).pathname;
+    if (request.method === 'GET' && path.endsWith('/workflow'))
+      return options.workflow === false ? Response.json({ title: 'Not found' }, { status: 404 }) : envelope(workflow);
     if (request.method === 'GET' && path.endsWith('/digests')) return envelope(digests);
     if (request.method === 'POST' && path.endsWith('/digests'))
       return envelope({ ...digest, ...(await request.clone().json()) }, { status: 201 });
-    if (request.method === 'GET' && path.endsWith('/digests/d1')) return envelope(digest);
+    if (request.method === 'PUT' && path.endsWith('/digests/d1'))
+      return envelope({ ...digest, ...(await request.clone().json()), revision: 2 });
+    if (request.method === 'GET' && path.endsWith('/digests/d1')) return envelope(digests[0] ?? digest);
     if (request.method === 'GET' && path.endsWith('/runs')) return envelope({ items: [run], nextCursor: null });
     if (path.endsWith('/preview'))
       return envelope({
@@ -133,6 +149,50 @@ describe('digests panel', () => {
       expectedRevision: null,
     });
     expect(create.headers.get('X-Csrf-Token')).toBe('csrf-1');
+  });
+
+  it('picks stages from the organization’s workflow, never one stage in both lists', async () => {
+    const { wrapper, requests } = await render();
+    const stages = wrapper.get('[data-test="digest-stages"]');
+
+    expect(stages.text()).toContain('Shortlisted');
+    expect(wrapper.get('[data-test="digest-stages-hint"]').text()).toContain('“New”');
+    await wrapper.get('input[name="exclude-stage-skipped"]').setValue(true);
+    await wrapper.get('input[name="stage-shortlisted"]').setValue(true);
+    await wrapper.get('input[name="stage-applying"]').setValue(true);
+    await wrapper.get('input[name="exclude-stage-applying"]').setValue(true);
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect((wrapper.get('input[name="stage-applying"]').element as HTMLInputElement).checked).toBe(false);
+    const update = requests.find((request) => request.method === 'PUT')!;
+    expect(new URL(update.url).pathname).toBe('/api/events/v1/catalogs/ocharo-fashion/digests/d1');
+    expect((await update.json()).selection).toMatchObject({
+      stages: ['shortlisted'],
+      excludeStages: ['skipped', 'applying'],
+    });
+  });
+
+  it('keeps the digest’s stages, without a notice, when the workflow cannot be read', async () => {
+    const staged: DigestModel = { ...digest, selection: { ...digest.selection, excludeStages: ['skipped'] } };
+    const { wrapper, requests } = await render(serve([staged], { workflow: false }));
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="digest-stages-hint"]').exists()).toBe(false);
+    expect((wrapper.get('input[name="exclude-stage-skipped"]').element as HTMLInputElement).checked).toBe(true);
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    const update = requests.find((request) => request.method === 'PUT')!;
+    expect((await update.json()).selection).toMatchObject({ stages: [], excludeStages: ['skipped'] });
+  });
+
+  it('takes the product’s workflow without reading one', async () => {
+    const { wrapper, requests } = await render(serve(), { workflow, locale: 'uz' });
+
+    expect(requests.some((request) => new URL(request.url).pathname.endsWith('/workflow'))).toBe(false);
+    expect(wrapper.get('[data-test="digest-exclude-stages"]').text()).toContain('O‘tkazib yuborilgan');
+    expect(wrapper.get('[data-test="digest-stages-hint"]').text()).toContain('“Yangi”');
   });
 
   it('refuses a malformed time before calling the service', async () => {

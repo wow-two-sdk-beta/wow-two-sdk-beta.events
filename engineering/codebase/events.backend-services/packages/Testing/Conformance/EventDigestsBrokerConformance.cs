@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
 using WoW.Two.Sdk.Beta.Be.Events.Digests;
+using WoW.Two.Sdk.Beta.Be.Events.Tracking;
 using WoW.Two.Sdk.Beta.Be.Foundation.Errors;
 using Xunit;
 
@@ -120,6 +121,32 @@ public abstract class EventDigestsBrokerConformance : EventsConformance
         var runs = Value(await As(owner).Digests.ListRunsAsync(catalog.Slug, digest.Id, new DigestRunQuery()));
         runs.Items.Select(run => run.Id).Should().Equal(second.Id, first.Id);
         Value(await As(owner).Digests.GetAsync(catalog.Slug, digest.Id)).LastRunAtUtc.Should().Be(second.StartedAtUtc);
+    }
+
+    /// <summary>A selection's stages read back as written; an event the organization tracks in an excluded stage stays
+    /// out, and an included stage takes only its events.</summary>
+    [Fact]
+    public async Task PreviewAsync_ShouldSelectByTheOrganizationsTrackingStage()
+    {
+        var owner = NewMember();
+        var catalog = await CreateCatalogAsync(owner);
+        var withoutSkipped = Value(await As(owner).Digests.CreateAsync(catalog.Slug, Spec() with
+        {
+            Selection = new DigestSelection { NewSinceLastRun = true, ExcludeStages = ["skipped"] },
+        }));
+        var skippedOnly = Value(await As(owner).Digests.CreateAsync(catalog.Slug, Spec() with
+        {
+            Name = "Skipped digest",
+            Selection = new DigestSelection { NewSinceLastRun = true, Stages = ["skipped"] },
+        }));
+        var skipped = await CreateEventAsync(owner, catalog.Slug, Facts("Skipped conformance fair", "2099-03-14"));
+        var kept = await CreateEventAsync(owner, catalog.Slug, Facts("Kept conformance fair", "2099-03-15"));
+        Value(await As(owner).Tracking.PutAsync(catalog.Slug, skipped.Id, new TrackingSpec { Stage = "skipped" }));
+
+        withoutSkipped.Selection.ExcludeStages.Should().Equal("skipped");
+        skippedOnly.Selection.Stages.Should().Equal("skipped");
+        Value(await As(owner).Digests.PreviewAsync(catalog.Slug, withoutSkipped.Id)).Items.Select(item => item.EventId).Should().Equal(kept.Id);
+        Value(await As(owner).Digests.PreviewAsync(catalog.Slug, skippedOnly.Id)).Items.Select(item => item.EventId).Should().Equal(skipped.Id);
     }
 
     /// <summary>A delete at the revision read removes the digest.</summary>

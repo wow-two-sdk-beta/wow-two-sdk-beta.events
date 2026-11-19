@@ -25,6 +25,8 @@ export interface DigestDraft {
   kinds: string;
   cities: string;
   trackedOnly: boolean;
+  stages: string[];
+  excludeStages: string[];
   recipients: string;
   language: DigestLanguage;
   itemCap: string;
@@ -69,6 +71,8 @@ export function digestDraft(source: DigestModel | DigestSpec): DigestDraft {
     kinds: (selection.kinds ?? []).join(', '),
     cities: (selection.cities ?? []).join(', '),
     trackedOnly: selection.trackedOnly ?? false,
+    stages: [...(selection.stages ?? [])],
+    excludeStages: [...(selection.excludeStages ?? [])],
     recipients: formatRecipients(source.recipients),
     language: source.language ?? 'uz-Latn',
     itemCap: (source.itemCap ?? 20).toString(),
@@ -102,6 +106,8 @@ export function digestSpec(
         kinds: list(draft.kinds),
         cities: list(draft.cities),
         trackedOnly: draft.trackedOnly,
+        stages: [...draft.stages],
+        excludeStages: [...draft.excludeStages],
       },
       recipients: recipients.list,
       language: draft.language,

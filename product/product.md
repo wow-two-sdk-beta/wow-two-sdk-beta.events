@@ -173,7 +173,9 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   IANA zone, such as Monday 09:00 `Asia/Tashkent`), a selection, recipients, a language (`uz-Latn`, `ru`, `en`), an item
   cap and a channel. Any product embeds the editor (`fe-events/admin` `DigestsPanel`) for its catalog.
 - Selection, as of the occurrence's local day: an event goes in when it matches a rule — new since the previous run,
-  starting within N days, an open deadline within N days — and every filter (statuses, kinds, cities, tracked only).
+  starting within N days, an open deadline within N days — and every filter (statuses, kinds, cities, tracked only,
+  the organization's tracking stages to include or leave out). An untracked event counts as the workflow's default stage,
+  so a digest leaving out `skipped` still lists it and one leaving out the default stage does not.
   Published events only; an event that ended never goes out; month and year dates count by their whole span.
 - Each occurrence runs once (a run row unique on digest and occurrence) and renders one message per recipient language:
   the title, the dates at their precision, the city, the nearest open deadline and a link from the digest's URL template

@@ -108,10 +108,15 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 
 - `DigestSpec`: `name`, `enabled`, `channel` (`telegram`, `log`), `schedule` (`days` as `monday`…, `times` as `HH:mm`,
   `timeZone` IANA), `selection` (`newSinceLastRun`, `startingWithinDays`, `deadlineWithinDays`, `statuses`, `kinds`,
-  `cities`, `trackedOnly`), `recipients` (`{ subject }` or `{ role }`, each with an optional `language`; role `member` is every
+  `cities`, `trackedOnly`, `stages`, `excludeStages`), `recipients` (`{ subject }` or `{ role }`, each with an optional `language`; role `member` is every
   member of the organization, another its Identity role's holders), `language`
   (`uz-Latn`, `ru`, `en`), `itemCap` (1–50), `linkTemplate` (`{id}`, `{key}`, `{catalog}`), `expectedRevision`.
   `DigestModel` adds `id`, `catalog`, `nextRunAtUtc`, `lastRunAtUtc`, `revision` and the times.
+- `stages` and `excludeStages` (OE04) are the digest organization's tracking stage keys, matched by the same (issuer,
+  organization) as `trackedOnly`: `stages` keeps only events in one of them, `excludeStages` drops events in any. An
+  event the organization does not track reads as its workflow's default stage, so `excludeStages` drops untracked events
+  only when it names that stage. No key may sit in both; a key no stage has matches nothing. Both are additive: a caller
+  on an older package sends neither and selects as before, but replaces a digest without them.
 - A run (`DigestRunModel`): `occurrenceAtUtc` (unique per digest), `trigger` (`schedule`, `manual`), `status` (`running`,
   `completed`, `partial`, `failed`, `empty`, `missed`), `matched`, `selected`, `eventIds`, `texts` (one per language),
   `recipients` (`subject`, `language`, `status`, `error`, `attempts`), `notes`. Recipient statuses are Identity's app

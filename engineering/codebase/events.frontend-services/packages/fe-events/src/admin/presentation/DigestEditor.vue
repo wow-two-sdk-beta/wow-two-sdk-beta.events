@@ -24,6 +24,8 @@ import {
   type DigestRunModel,
   type DigestSpec,
   type EventStatus,
+  type WorkflowModel,
+  type WorkflowStageModel,
 } from '../../contracts';
 import type { EventsClient } from '../../kit/client/CreateEventsClient';
 import FailureNotice from '../../kit/presentation/FailureNotice.vue';
@@ -47,7 +49,9 @@ import DigestRecipients from './DigestRecipients.vue';
  * Edits one digest of a catalog for the caller's organization (`events:admin`): its schedule in an IANA zone, which
  * events go out, to whom, in which language and through which channel; a saved digest shows its next run in its own
  * zone, previews the messages a send now would send, and sends now. A product embeds it for its catalog, passing its
- * own defaults (a new digest's fields) and fixing the channel or the link template it owns.
+ * own defaults (a new digest's fields) and fixing the channel or the link template it owns. The stage pickers offer the
+ * organization's workflow: the `workflow` prop, else the one the client reads; when neither is at hand they keep the
+ * stages the digest already names, without a failure notice (a product's mirror may not forward the workflow route).
  */
 defineOptions({ name: 'DigestEditor' });
 
@@ -64,6 +68,8 @@ const props = withDefaults(
     channels?: readonly string[];
     /** Fixes each event's link to the product's own page; the field is hidden when set. */
     linkTemplate?: string | null;
+    /** The organization's stages for the stage pickers; none reads its workflow through the client. */
+    workflow?: Pick<WorkflowModel, 'stages' | 'defaultStage'> | null;
   }>(),
   {
     digestId: null,
@@ -71,6 +77,7 @@ const props = withDefaults(
     defaults: () => ({}),
     channels: () => [DigestChannelConstants.telegram],
     linkTemplate: null,
+    workflow: null,
   },
 );
 
@@ -91,6 +98,8 @@ const remove = useEventsRequest((signal, id: string, revision: number) =>
 );
 const preview = useEventsRequest((signal, id: string) => props.client.previewDigest(props.catalog, id, signal));
 const send = useEventsRequest((signal, id: string) => props.client.sendDigest(props.catalog, id, signal));
+/** Reads the organization's workflow for the stage pickers; its failure stays silent. */
+const workflowRead = useEventsRequest((signal) => props.client.getWorkflow(signal));
 
 const digest = shallowRef<DigestModel | null>(null);
 const draft = shallowRef<DigestDraft>(newDraft());
@@ -124,6 +133,20 @@ const problemText = computed(() =>
     : null,
 );
 const showChannels = computed(() => props.channels.length > 1);
+const workflow = computed(() => props.workflow ?? workflowRead.value.value);
+/** Offers the workflow's stages, then any key the digest names that the workflow no longer has. */
+const stageOptions = computed<readonly WorkflowStageModel[]>(() => {
+  const known = workflow.value?.stages ?? [];
+  const named = [...new Set([...draft.value.stages, ...draft.value.excludeStages])]
+    .filter((key) => !known.some((stage) => stage.key === key))
+    .map((key) => ({ key }));
+  return [...known, ...named];
+});
+const defaultStageLabel = computed(() =>
+  workflow.value?.defaultStage
+    ? EventsLabels.stage(workflow.value.defaultStage, workflow.value.stages, props.locale)
+    : null,
+);
 
 function newDraft(): DigestDraft {
   const spec: DigestSpec = {
@@ -160,6 +183,21 @@ function set<K extends keyof DigestDraft>(key: K, value: DigestDraft[K]) {
 
 function toggle<T>(list: readonly T[], item: T, on: boolean): T[] {
   return on ? [...list.filter((value) => value !== item), item] : list.filter((value) => value !== item);
+}
+
+/** Includes or leaves out a stage; a stage is never in both lists, as the service refuses that. */
+function setStage(list: 'stages' | 'excludeStages', key: string, on: boolean) {
+  const other = list === 'stages' ? 'excludeStages' : 'stages';
+  draft.value = {
+    ...draft.value,
+    [list]: toggle(draft.value[list], key, on),
+    [other]: on ? draft.value[other].filter((value) => value !== key) : draft.value[other],
+  };
+  savedNotice.value = false;
+}
+
+function loadWorkflow() {
+  if (!props.workflow) void workflowRead.run();
 }
 
 async function submit() {
@@ -220,8 +258,12 @@ const inputClass = 'rounded-md border border-border bg-background px-3 py-2 text
 const checked = (event: Event) => (event.target as HTMLInputElement).checked;
 const valueOf = (event: Event) => (event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
 
-onMounted(reload);
+onMounted(() => {
+  void reload();
+  loadWorkflow();
+});
 watch([() => props.catalog, () => props.digestId, () => props.client], reload);
+watch([() => props.client, () => props.workflow], loadWorkflow);
 </script>
 
 <template>
@@ -370,6 +412,45 @@ watch([() => props.catalog, () => props.digestId, () => props.client], reload);
           />
           <span>{{ eventsText('digestTrackedOnly', locale) }}</span>
         </label>
+        <template v-if="stageOptions.length > 0">
+          <div
+            class="flex flex-wrap gap-3 text-sm"
+            role="group"
+            :aria-label="eventsText('digestStages', locale)"
+            data-test="digest-stages"
+          >
+            <span class="text-muted-foreground">{{ eventsText('digestStages', locale) }}:</span>
+            <label v-for="stage in stageOptions" :key="stage.key" class="flex items-center gap-1">
+              <input
+                type="checkbox"
+                :name="`stage-${stage.key}`"
+                :checked="draft.stages.includes(stage.key)"
+                @change="setStage('stages', stage.key, checked($event))"
+              />
+              <span>{{ EventsLabels.stage(stage.key, stageOptions, locale) }}</span>
+            </label>
+          </div>
+          <div
+            class="flex flex-wrap gap-3 text-sm"
+            role="group"
+            :aria-label="eventsText('digestExcludeStages', locale)"
+            data-test="digest-exclude-stages"
+          >
+            <span class="text-muted-foreground">{{ eventsText('digestExcludeStages', locale) }}:</span>
+            <label v-for="stage in stageOptions" :key="stage.key" class="flex items-center gap-1">
+              <input
+                type="checkbox"
+                :name="`exclude-stage-${stage.key}`"
+                :checked="draft.excludeStages.includes(stage.key)"
+                @change="setStage('excludeStages', stage.key, checked($event))"
+              />
+              <span>{{ EventsLabels.stage(stage.key, stageOptions, locale) }}</span>
+            </label>
+          </div>
+          <p v-if="defaultStageLabel" class="text-xs text-muted-foreground" data-test="digest-stages-hint">
+            {{ eventsText('digestStagesHint', locale, { stage: defaultStageLabel }) }}
+          </p>
+        </template>
       </fieldset>
 
       <fieldset class="grid gap-3 sm:grid-cols-2" :disabled="busy">

@@ -122,13 +122,30 @@ internal static partial class DigestSpecValidator
         if (cities.Count > MaxListLength || cities.Any(city => city.Length is 0 or > EventsConstants.MaxNameLength))
             return EventsErrors.Invalid("selection.cities", $"at most {MaxListLength} names of 1 to {EventsConstants.MaxNameLength} characters");
 
+        if (ValidateStages(selection.Stages, "selection.stages", out var stages) is { } stagesError)
+            return stagesError;
+        if (ValidateStages(selection.ExcludeStages, "selection.excludeStages", out var excluded) is { } excludedError)
+            return excludedError;
+        if (excluded.FirstOrDefault(stages.Contains) is { } both)
+            return EventsErrors.Invalid("selection.excludeStages", $"'{both}' is also an included stage");
+
         normalized = selection with
         {
             Statuses = statuses.Distinct().Order().ToList(),
             Kinds = kinds,
             Cities = cities,
+            Stages = stages,
+            ExcludeStages = excluded,
         };
         return null;
+    }
+
+    private static AppError? ValidateStages(IReadOnlyList<string>? given, string field, out List<string> normalized)
+    {
+        normalized = (given ?? []).Select(stage => stage?.Trim() ?? string.Empty).Distinct(StringComparer.Ordinal).ToList();
+        return normalized.Count > MaxListLength || normalized.Any(stage => !EventFactsValidator.KeyPattern().IsMatch(stage))
+            ? EventsErrors.Invalid(field, $"at most {MaxListLength} stage keys matching {EventsConstants.KeyPattern}")
+            : null;
     }
 
     private static AppError? ValidateRecipients(IReadOnlyList<DigestRecipient>? recipients, out List<DigestRecipient> normalized)
