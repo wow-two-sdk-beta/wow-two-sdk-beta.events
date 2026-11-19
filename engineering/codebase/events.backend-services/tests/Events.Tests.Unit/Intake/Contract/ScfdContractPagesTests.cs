@@ -165,6 +165,29 @@ public sealed partial class ScfdContractPagesTests
         facts.TimeZone.Should().BeNull("a start with no time states no offset");
     }
 
+    /// <summary>The estimated page (harvest S17): one undated show through the AI passes. Its estimated month reads as an
+    /// estimate, never as an announced date, and the later capture that states the day reads as announced at day precision;
+    /// the stated dates of every other page keep the precision they state.</summary>
+    [Fact]
+    public async Task EstimatedPage_ShouldMapTheEstimatedMonthAsApproximate_AndTheStatedDayAsAnnounced()
+    {
+        var records = (await ReadAsync("11-estimated.json")).Records;
+
+        records.Select(record => record.Type).Should().Equal("post.new", "post.changed", "post.changed", "post.changed");
+        var starts = records.Select(record =>
+        {
+            ScfdEventMapper.TryMap(record.Data!.Value, Kinds, out var facts, out var reason).Should().BeTrue(reason);
+            return facts.Starts;
+        }).ToList();
+
+        starts[0].Should().Be(new EventWhen(), "the undated post states no date, so none is invented");
+        starts[1].Should().Be(new EventWhen());
+        starts[2].Should().Be(new EventWhen { Value = "2026-12", Precision = DatePrecision.Month, Certainty = DateCertainty.Estimated },
+            "the extraction pass estimated the month; it is approximate, never announced");
+        starts[3].Should().Be(new EventWhen { Value = "2026-12-12", Precision = DatePrecision.Day, Certainty = DateCertainty.Announced },
+            "a stated date replaces the estimate and keeps its day precision");
+    }
+
     /// <summary>The unmatched page (harvest E03): a post delivered as new, then once as <c>post.unmatched</c> at its next
     /// revision with that revision's payload, which still maps; intake holds its event (E04).</summary>
     [Fact]

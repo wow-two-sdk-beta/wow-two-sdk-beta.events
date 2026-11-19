@@ -180,6 +180,27 @@ public sealed class IntakeTests(IntakeFixture fixture) : IClassFixture<IntakeFix
         observation.Payload!.Value.GetProperty("title").GetString().Should().Be("  Humo Fashion Night ");
     }
 
+    /// <summary>SCFD's estimated date (S17) reaches the stored candidate as an estimate at its precision, never as an announced
+    /// date; the later revision that states the day replaces it and reads as announced.</summary>
+    [Fact]
+    public async Task Intake_ShouldStoreAnEstimatedStartAsApproximate_UntilASourceStatesTheDay()
+    {
+        var (slug, source) = await SourceAsync();
+        var post = Guid.NewGuid();
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Fashion Week", edit: data => data["starts"] = new { value = "2026-12", precision = "month", certainty = "estimated" }));
+        await fixture.PollAsync(source);
+
+        (await CandidatesAsync(slug)).Single().Facts.Starts.Should().Be(
+            new EventWhen { Value = "2026-12", Precision = DatePrecision.Month, Certainty = DateCertainty.Estimated });
+
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 2, "Fashion Week", "post.changed",
+            data => data["starts"] = new { value = "2026-12-12", precision = "day", certainty = "stated" }));
+        await fixture.PollAsync(source);
+
+        (await CandidatesAsync(slug)).Single().Facts.Starts.Should().Be(
+            new EventWhen { Value = "2026-12-12", Precision = DatePrecision.Day, Certainty = DateCertainty.Announced });
+    }
+
     [Fact]
     public async Task Intake_ShouldProposeAChange_WhenAPublishedEventsPostChanges()
     {

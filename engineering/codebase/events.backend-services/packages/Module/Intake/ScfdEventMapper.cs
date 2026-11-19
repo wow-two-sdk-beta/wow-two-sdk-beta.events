@@ -260,7 +260,9 @@ internal static partial class ScfdEventMapper
         return TryReadWhen(date, name, out when, out reason);
     }
 
-    /// <summary>Reads one SCFD date, <c>{ value, precision }</c>, at the precision it states.</summary>
+    /// <summary>Reads one SCFD date, <c>{ value, precision, certainty }</c>, at the precision it states. A <c>certainty</c> of
+    /// <c>estimated</c> (an AI-estimated date of an undated post) reads as <see cref="DateCertainty.Estimated"/>, so it shows as
+    /// approximate; <c>stated</c>, absent or any other value reads as <see cref="DateCertainty.Announced"/>.</summary>
     private static bool TryReadWhen(JsonElement date, string name, out EventWhen? when, out string reason)
     {
         when = null;
@@ -294,7 +296,10 @@ internal static partial class ScfdEventMapper
             return false;
         }
 
-        when = new EventWhen { Value = read, Precision = kind, Certainty = DateCertainty.Announced };
+        var certainty = String(date, "certainty")?.Trim().Equals("estimated", StringComparison.OrdinalIgnoreCase) == true
+            ? DateCertainty.Estimated
+            : DateCertainty.Announced;
+        when = new EventWhen { Value = read, Precision = kind, Certainty = certainty };
         return true;
     }
 

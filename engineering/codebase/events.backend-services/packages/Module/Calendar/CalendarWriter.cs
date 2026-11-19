@@ -89,6 +89,9 @@ internal static class CalendarWriter
         var facts = item.Facts;
         string start;
         string? end;
+        if (facts.Starts?.Certainty == DateCertainty.Estimated)
+            return; // an estimate is no appointment: a calendar entry at a guessed day would read as announced
+
         switch (facts.Starts?.Precision)
         {
             case DatePrecision.Day when Day(facts.Starts.Value) is { } day:

@@ -7,6 +7,7 @@ using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 
 namespace Events.Tests.Integration.Intake;
@@ -14,7 +15,7 @@ namespace Events.Tests.Integration.Intake;
 /// <summary>The contract replay with SCFD (the services sweep): harvest's golden pages pulled in order through the real
 /// feed and the real intake over PostgreSQL, each pull sending the cursor the page before it served. One automatic
 /// source with the <c>payload</c> classifier takes every page: new, changed, empty, lifecycle, classification, the
-/// Afisha place, the purge, the application deadline and the unmatched post.</summary>
+/// Afisha place, the purge, the application deadline, the unmatched post and the estimated date.</summary>
 public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixture<IntakeFixture>
 {
     [Fact]
@@ -54,15 +55,17 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
         var db = read.ServiceProvider.GetRequiredService<EventsDbContext>();
         var cursor = await db.IntakeCursors.AsNoTracking().SingleAsync(row => row.SourceName == source.Name);
         cursor.Cursor.Should().Be(served[^1].Next);
-        cursor.Received.Should().Be(19);
+        cursor.Received.Should().Be(23);
         cursor.Quarantined.Should().Be(0);
 
         var events = read.ServiceProvider.GetRequiredService<ICatalogEventsBroker>();
         var published = (await events.ListAsync(slug, new EventQuery())).ValueOrThrow().Items;
         var candidates = (await events.ListAsync(slug, new EventQuery { Review = EventReviewState.Candidate })).ValueOrThrow().Items;
 
-        // 06: only the relevant, confident classification publishes, with the classifier's kind and name.
-        var runway = published.Should().ContainSingle().Subject;
+        // 06: only the relevant, confident classification publishes, with the classifier's kind and name; 11's estimated post
+        // publishes too (below).
+        published.Should().HaveCount(2);
+        var runway = published.Single(item => item.Facts.Title.Values.Single() != "Tashkent Fashion Week");
         runway.Facts.Kind.Should().Be("runway");
         runway.ReviewedBy.Should().Be("classifier:model:contract@1");
         candidates.Should().HaveCount(9,
@@ -90,6 +93,19 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
         var unmatched = candidates.Single(item => item.Facts.Title.Values.Single() == "Маркет ремесленников и дизайнеров");
         unmatched.ReviewedBy.Should().Be($"{IntakeProcessor.SourceActor}{source.Instance}");
         unmatched.ReviewReason.Should().Be(IntakeProcessor.UnmatchedReason);
+
+        // 11: the AI-estimated month reaches the stored observation as an estimate, never as an announced date; the later
+        // capture that states the day replaces it, and the event ends on the stated day (S17).
+        var estimatedPost = served[^1].Records[0].PostId;
+        var proposed = (await db.Observations.AsNoTracking().Where(row => row.PostId == estimatedPost).OrderBy(row => row.Revision).ToListAsync())
+            .Select(row => EventsJson.Read<EventFacts>(row.Proposed!).Starts).ToList();
+        proposed.Should().Equal(
+            new EventWhen(),
+            new EventWhen(),
+            new EventWhen { Value = "2026-12", Precision = DatePrecision.Month, Certainty = DateCertainty.Estimated },
+            new EventWhen { Value = "2026-12-12", Precision = DatePrecision.Day, Certainty = DateCertainty.Announced });
+        published.Single(item => item.Facts.Title.Values.Single() == "Tashkent Fashion Week").Facts.Starts.Should().Be(
+            new EventWhen { Value = "2026-12-12", Precision = DatePrecision.Day, Certainty = DateCertainty.Announced }, "the stated day replaced the estimate");
 
         // 08: the purge clears every delivered payload of the post, and keeps its rows.
         var purged = served[0].Records.Single().PostId;

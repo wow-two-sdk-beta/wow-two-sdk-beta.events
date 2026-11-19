@@ -152,6 +152,35 @@ public sealed class ScfdEventMapperTests
         facts.Starts.Precision.Should().Be(precision);
     }
 
+    /// <summary>SCFD's <c>certainty</c> (S17): <c>estimated</c> is an AI-estimated date and reads as an estimate at the
+    /// precision it states; <c>stated</c>, none, or a value Events does not know reads as announced, as before.</summary>
+    [Theory]
+    [InlineData("""{"value":"2026-12","precision":"month","certainty":"estimated"}""", "2026-12", DatePrecision.Month, DateCertainty.Estimated)]
+    [InlineData("""{"value":"2026-12-12","precision":"day","certainty":"estimated"}""", "2026-12-12", DatePrecision.Day, DateCertainty.Estimated)]
+    [InlineData("""{"value":"2026","precision":"year","certainty":" Estimated "}""", "2026", DatePrecision.Year, DateCertainty.Estimated)]
+    [InlineData("""{"value":"2026-12-12","precision":"day","certainty":"stated"}""", "2026-12-12", DatePrecision.Day, DateCertainty.Announced)]
+    [InlineData("""{"value":"2026-12-12T19:00:00+05:00","precision":"second","certainty":"stated"}""", "2026-12-12T19:00", DatePrecision.Minute, DateCertainty.Announced)]
+    [InlineData("""{"value":"2026-12-12","precision":"day"}""", "2026-12-12", DatePrecision.Day, DateCertainty.Announced)]
+    [InlineData("""{"value":"2026-12-12","precision":"day","certainty":"confirmed"}""", "2026-12-12", DatePrecision.Day, DateCertainty.Announced)]
+    [InlineData("""{"value":"2026-12-12","precision":"day","certainty":null}""", "2026-12-12", DatePrecision.Day, DateCertainty.Announced)]
+    public void TryMap_ShouldReadTheDatesCertainty_AndNeverCallAnEstimateAnnounced(string starts, string value, DatePrecision precision, DateCertainty certainty)
+    {
+        var facts = Map($$"""{"schema":"wow2.event.v1","title":"Show","starts":{{starts}},"ends":{{starts}}}""");
+
+        var expected = new EventWhen { Value = value, Precision = precision, Certainty = certainty };
+        facts.Starts.Should().Be(expected);
+        facts.Ends.Should().Be(expected);
+    }
+
+    [Fact]
+    public void TryMap_ShouldKeepAnUndatedPostUnknown_WhateverItsCertainty()
+    {
+        var facts = Map("""{"schema":"wow2.event.v1","title":"Show","starts":null,"ends":null}""");
+
+        facts.Starts.Should().Be(new EventWhen { Value = null, Precision = DatePrecision.Unknown, Certainty = DateCertainty.Announced });
+        facts.Ends.Should().BeNull();
+    }
+
     [Theory]
     [InlineData("""{"schema":"wow2.event.v1"}""", "no title")]
     [InlineData("""{"schema":"wow2.event.v1","title":"   "}""", "no title")]

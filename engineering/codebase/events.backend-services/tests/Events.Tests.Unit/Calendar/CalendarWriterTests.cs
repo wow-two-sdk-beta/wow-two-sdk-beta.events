@@ -80,6 +80,17 @@ public sealed class CalendarWriterTests
     }
 
     [Fact]
+    public void Write_ShouldOmitTheEvent_WhenItsExactStartIsAnEstimate()
+    {
+        var day = Event(Facts(new EventWhen { Value = "2026-10-12", Precision = DatePrecision.Day, Certainty = DateCertainty.Estimated }));
+        var minute = Event(Facts(new EventWhen { Value = "2026-10-12T19:00", Precision = DatePrecision.Minute, Certainty = DateCertainty.Estimated }));
+        var stated = Event(Facts(new EventWhen { Value = "2026-10-12", Precision = DatePrecision.Day, Certainty = DateCertainty.Announced }));
+
+        CalendarWriter.Write("Catalog", [day, minute]).Should().NotContain("BEGIN:VEVENT");
+        Lines(CalendarWriter.Write("Catalog", [stated])).Should().Contain("DTSTART;VALUE=DATE:20261012");
+    }
+
+    [Fact]
     public void Write_ShouldWriteEachExactDeadlineAsItsOwnAllDayEntry()
     {
         var facts = Facts(new EventWhen { Value = "2026-10", Precision = DatePrecision.Month }) with

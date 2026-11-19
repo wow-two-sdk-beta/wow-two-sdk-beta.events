@@ -9,7 +9,9 @@ SCFD's golden pages of the pull wire Events reads, copied unchanged from harvest
 - `source.json` records the harvest tag and commit the folder was copied from.
 - `ScfdContractPagesTests` (unit) checks every file against the manifest, reads each page through the real
   `ScfdObservationFeed`, and pins what Events reads from it: facts, place, time zone, lifecycle state, classification,
-  purge, the application deadline (`09-deadline.json`) and the unmatched post (`10-unmatched.json`).
+  purge, the application deadline (`09-deadline.json`), the unmatched post (`10-unmatched.json`) and the estimated date
+  (`11-estimated.json`: an undated post, an `estimated` month read as approximate, then the stated day read as announced;
+  every other page's stated dates keep their precision as announced).
 - `ScfdContractReplayTests` (integration) pulls the pages in order through the real intake over PostgreSQL, sending each
   page's `next` as the following cursor.
 - Events' own expectations live in the tests; the numeric enum wire harvest no longer serves keeps a hand-made fixture
