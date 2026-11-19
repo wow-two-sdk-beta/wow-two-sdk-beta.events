@@ -14,6 +14,10 @@ public sealed record UpcomingDeadlineModel
     /// <summary>Gets the deadline.</summary>
     public required EventDeadline Deadline { get; init; }
 
-    /// <summary>Gets the tracking's stage.</summary>
+    /// <summary>Gets the tracking's stage; the workflow's default stage for an event the organization does not track.</summary>
     public required string Stage { get; init; }
+
+    /// <summary>Gets whether the organization tracks the event; false when <see cref="Stage"/> is the default stage it stands
+    /// in untracked. True when absent, as a service from before untracked deadlines answers.</summary>
+    public bool Tracked { get; init; } = true;
 }

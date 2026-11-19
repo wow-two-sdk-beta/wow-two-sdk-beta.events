@@ -21,6 +21,8 @@ internal sealed class ApiEventTrackingBroker(EventsApiTransport transport) : IEv
         var route = new EventsApiQuery()
             .Add("trackedOnly", query.TrackedOnly ? true : null)
             .Add("stage", query.Stage)
+            .Add("stages", query.Stages)
+            .Add("excludeStages", query.ExcludeStages)
             .AddEnum("priority", query.Priority)
             .Add("from", query.From)
             .Add("to", query.To)
@@ -59,8 +61,18 @@ internal sealed class ApiEventTrackingBroker(EventsApiTransport transport) : IEv
 
     /// <inheritdoc />
     public Task<Result<TrackingSummaryModel>> GetSummaryAsync(string catalog, DateOnly today, CancellationToken cancellationToken = default) =>
-        transport.SendAsync<TrackingSummaryModel>(
+        GetSummaryAsync(catalog, new TrackingSummaryQuery { Today = today }, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<Result<TrackingSummaryModel>> GetSummaryAsync(string catalog, TrackingSummaryQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return transport.SendAsync<TrackingSummaryModel>(
             HttpMethod.Get,
-            new EventsApiQuery().Add("today", today).ToRoute(EventsApiRoutes.Catalog(catalog, $"{EventsRouteConstants.Tracking}/{Summary}")),
+            new EventsApiQuery()
+                .Add("today", query.Today)
+                .Add("deadlineKinds", query.DeadlineKinds.Distinct().Select(kind => EventsApiQuery.WireName(kind)))
+                .ToRoute(EventsApiRoutes.Catalog(catalog, $"{EventsRouteConstants.Tracking}/{Summary}")),
             cancellationToken);
+    }
 }

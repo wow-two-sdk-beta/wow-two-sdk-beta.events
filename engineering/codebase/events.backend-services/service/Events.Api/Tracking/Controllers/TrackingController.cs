@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Events.Api.Shared;
 using Events.Api.Tracking.Models;
 using WoW.Two.Sdk.Beta.Be.Events;
+using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Tracking;
 using WoW.Two.Sdk.Beta.Be.Web.Contracts;
 
@@ -29,17 +30,28 @@ public sealed class TrackingController(IEventTrackingBroker tracking, TimeProvid
     /// <summary>Summarizes the organization's tracking: counts per stage, the nearest open deadlines.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="today">The first day a deadline may fall on, <c>yyyy-MM-dd</c>; the UTC day when absent.</param>
+    /// <param name="deadlineKinds">The deadline kinds to list, as repeated <c>deadlineKinds</c> keys; every kind when absent.</param>
     /// <param name="ct">The token that cancels the request.</param>
     /// <returns>The summary.</returns>
     [HttpGet("summary")]
     [Authorize(Policy = EventsScopeConstants.Read)]
     [ProducesResponseType<ApiResponse<TrackingSummaryModel>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> Summary(string catalog, [FromQuery] string? today, CancellationToken ct)
+    public async Task<IActionResult> Summary(string catalog, [FromQuery] string? today, [FromQuery] string[]? deadlineKinds, CancellationToken ct)
     {
         if (WireQueryMapper.TryDay("today", today, out var day) is { } error)
             return Invalid(error);
 
-        return Answer(await tracking.GetSummaryAsync(catalog, day ?? DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime), ct));
+        var kinds = new List<DeadlineKind>();
+        foreach (var name in deadlineKinds ?? [])
+        {
+            if (WireQueryMapper.TryEnum<DeadlineKind>("deadlineKinds", name, out var kind) is { } invalid)
+                return Invalid(invalid);
+            if (kind is { } parsed)
+                kinds.Add(parsed);
+        }
+
+        var query = new TrackingSummaryQuery { Today = day ?? DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime), DeadlineKinds = kinds };
+        return Answer(await tracking.GetSummaryAsync(catalog, query, ct));
     }
 
     /// <summary>Gets an event with the organization's tracking.</summary>

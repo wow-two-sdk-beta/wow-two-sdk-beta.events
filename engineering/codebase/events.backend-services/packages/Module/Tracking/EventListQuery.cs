@@ -64,6 +64,11 @@ internal static class EventListQuery
         return events;
     }
 
+    /// <summary>Reads a search as a country code: two ASCII letters, uppercased; none for any other text.</summary>
+    /// <param name="text">The normalized search.</param>
+    public static string? CountryCode(string text) =>
+        text.Length == 2 && text.All(char.IsAsciiLetter) ? text.ToUpperInvariant() : null;
+
     /// <summary>Checks a list of ISO-2 country codes: two letters each, at most <see cref="EventsConstants.MaxCountryFilter"/>.</summary>
     /// <param name="field">The field the codes came in.</param>
     /// <param name="codes">The codes.</param>

@@ -45,10 +45,21 @@ public interface IEventTrackingBroker
     /// <returns>The history.</returns>
     Task<Result<IReadOnlyList<TrackingHistoryEntryModel>>> GetHistoryAsync(string catalog, Guid eventId, CancellationToken cancellationToken = default);
 
-    /// <summary>Counts the organization's tracking per stage and lists its nearest open deadlines.</summary>
+    /// <summary>Counts the organization's tracking per stage and the events it does not track, and lists the nearest open
+    /// deadlines of the catalog's published events that are not cancelled; an untracked event's deadline stands in the
+    /// workflow's default stage, and an event in a <c>lost</c> stage is left out.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="today">The first day a deadline may fall on, in the caller's own calendar.</param>
     /// <param name="cancellationToken">The token that cancels the call.</param>
     /// <returns>The summary, with at most five deadlines.</returns>
     Task<Result<TrackingSummaryModel>> GetSummaryAsync(string catalog, DateOnly today, CancellationToken cancellationToken = default);
+
+    /// <summary>Summarizes as <see cref="GetSummaryAsync(string, DateOnly, CancellationToken)"/>, listing only the deadline
+    /// kinds the query names. An implementation that predates the query ignores the kinds.</summary>
+    /// <param name="catalog">The catalog's slug.</param>
+    /// <param name="query">The day and the deadline kinds.</param>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>The summary, with at most five deadlines.</returns>
+    Task<Result<TrackingSummaryModel>> GetSummaryAsync(string catalog, TrackingSummaryQuery query, CancellationToken cancellationToken = default) =>
+        GetSummaryAsync(catalog, query.Today, cancellationToken);
 }

@@ -15,6 +15,12 @@ public sealed class TrackingQueryParameters
     /// <summary>Gets or sets the stage's key.</summary>
     public string? Stage { get; set; }
 
+    /// <summary>Gets or sets the stages to list, as repeated <c>stages</c> keys.</summary>
+    public string[]? Stages { get; set; }
+
+    /// <summary>Gets or sets the stages to leave out, as repeated <c>excludeStages</c> keys.</summary>
+    public string[]? ExcludeStages { get; set; }
+
     /// <summary>Gets or sets the priority's wire name, such as <c>high</c>.</summary>
     public string? Priority { get; set; }
 
@@ -74,6 +80,8 @@ public sealed class TrackingQueryParameters
         {
             TrackedOnly = TrackedOnly ?? false,
             Stage = Stage,
+            Stages = Stages ?? [],
+            ExcludeStages = ExcludeStages ?? [],
             Priority = priority,
             From = from,
             To = to,

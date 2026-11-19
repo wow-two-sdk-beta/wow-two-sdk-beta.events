@@ -228,6 +228,57 @@ public abstract class EventTrackingBrokerConformance : EventsConformance
         summary.Untracked.Should().Be(2, "another organization's tracking leaves the owner's count alone");
     }
 
+    /// <summary>Stage lists (PG02): an untracked event reads as the workflow's default stage for <c>Stages</c> and
+    /// <c>ExcludeStages</c>, so leaving out a lost stage keeps the untracked events.</summary>
+    [Fact]
+    public async Task ListAsync_ShouldReadAnUntrackedEventAsTheDefaultStage()
+    {
+        var owner = NewMember();
+        var catalog = (await CreateCatalogAsync(owner)).Slug;
+        var planning = await CreateEventAsync(owner, catalog, Facts(starts: "2026-12-01"));
+        var skipped = await CreateEventAsync(owner, catalog, Facts(starts: "2026-12-02"));
+        var untracked = await CreateEventAsync(owner, catalog, Facts(starts: "2026-12-03"));
+        Value(await As(owner).Tracking.PutAsync(catalog, planning.Id, new TrackingSpec { Stage = "planning" }));
+        Value(await As(owner).Tracking.PutAsync(catalog, skipped.Id, new TrackingSpec { Stage = "skipped" }));
+
+        async Task<IEnumerable<Guid>> List(TrackingQuery query) =>
+            Value(await As(owner).Tracking.ListAsync(catalog, query)).Items.Select(item => item.Event.Id);
+
+        (await List(new TrackingQuery { ExcludeStages = ["skipped"] })).Should().BeEquivalentTo([planning.Id, untracked.Id]);
+        (await List(new TrackingQuery { Stages = [DefaultStage] })).Should().BeEquivalentTo([untracked.Id]);
+        (await List(new TrackingQuery { Stage = "planning", Stages = ["skipped"] })).Should().BeEquivalentTo([planning.Id, skipped.Id]);
+        (await List(new TrackingQuery { ExcludeStages = ["skipped", DefaultStage] })).Should().BeEquivalentTo([planning.Id]);
+    }
+
+    /// <summary>The summary lists an untracked event's deadline in the default stage, leaves out a lost stage's, and keeps
+    /// only the kinds asked for (PG14).</summary>
+    [Fact]
+    public async Task GetSummaryAsync_ShouldListUntrackedDeadlines_AndOnlyTheKindsAsked()
+    {
+        var owner = NewMember();
+        var catalog = (await CreateCatalogAsync(owner)).Slug;
+        var untracked = await CreateEventAsync(owner, catalog, WithDeadline("2026-12-01", DeadlineKind.Application));
+        var registration = await CreateEventAsync(owner, catalog, WithDeadline("2026-11-20", DeadlineKind.Registration));
+        var skipped = await CreateEventAsync(owner, catalog, WithDeadline("2026-11-15", DeadlineKind.Application));
+        Value(await As(owner).Tracking.PutAsync(catalog, registration.Id, new TrackingSpec { Stage = "planning" }));
+        Value(await As(owner).Tracking.PutAsync(catalog, skipped.Id, new TrackingSpec { Stage = "skipped" }));
+
+        var all = Value(await As(owner).Tracking.GetSummaryAsync(catalog, new DateOnly(2026, 11, 10)));
+        var applications = Value(await As(owner).Tracking.GetSummaryAsync(catalog, new TrackingSummaryQuery
+        {
+            Today = new DateOnly(2026, 11, 10),
+            DeadlineKinds = [DeadlineKind.Application],
+        }));
+
+        all.UpcomingDeadlines.Select(item => (item.EventId, item.Stage, item.Tracked)).Should().Equal(
+            (registration.Id, "planning", true), (untracked.Id, DefaultStage, false));
+        applications.UpcomingDeadlines.Select(item => item.EventId).Should().Equal(untracked.Id);
+        all.Untracked.Should().Be(1);
+    }
+
+    private static EventFacts WithDeadline(string day, DeadlineKind kind) =>
+        Facts(starts: "2027-01-10") with { Deadlines = [new EventDeadline { Kind = kind, At = new EventWhen { Value = day, Precision = DatePrecision.Day } }] };
+
     /// <summary>Builds facts placed in a country, or in none.</summary>
     private static EventFacts InCountry(string? country) =>
         Facts(starts: "2026-12-01") with { Place = country is null ? new EventPlace { City = "Somewhere" } : new EventPlace { City = "Capital", Country = country } };

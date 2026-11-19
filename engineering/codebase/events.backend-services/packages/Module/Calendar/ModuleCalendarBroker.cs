@@ -31,7 +31,9 @@ internal sealed class ModuleCalendarBroker(EventsDbContext db, IEventsCallerServ
             query.DeadlineBefore, query.IncludeUndated);
         var events = EventListQuery.Filter(EventListQuery.PublishedEvents(db, catalogRow.Id), db, filter, EventListQuery.Today(time));
         if (EventListQuery.Normalize(query.Text) is { } text)
-            events = events.Where(row => row.Search.Contains(text));
+            events = EventListQuery.CountryCode(text) is { } code
+                ? events.Where(row => row.Search.Contains(text) || row.Country == code)
+                : events.Where(row => row.Search.Contains(text));
 
         var rows = await EventListQuery.Ordered(events).ToListAsync(cancellationToken);
         var models = rows.Select(row => EventRows.ToModel(row, catalogRow.Slug, [], 0));

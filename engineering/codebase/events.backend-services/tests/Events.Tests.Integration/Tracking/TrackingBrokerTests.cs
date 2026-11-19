@@ -236,8 +236,11 @@ public sealed class TrackingBrokerTests(ModuleFixture fixture) : IClassFixture<M
         (await broker.DeleteAsync(catalog.Slug, item.Id, tracking.Revision)).Error().Type.Should().Be(AppErrorType.NotFound);
     }
 
+    /// <summary>The counts stay the organization's tracking per stage; the deadlines list every published event that is not
+    /// cancelled (PG14): an untracked event's deadline stands in the default stage, a lost stage's and a cancelled event's
+    /// are left out, and a kind filter keeps only the kinds asked for.</summary>
     [Fact]
-    public async Task GetSummaryAsync_ShouldCountEveryStageAndListOpenDeadlines_WhenTheOrganizationTracksEvents()
+    public async Task GetSummaryAsync_ShouldCountEveryStage_AndListOpenDeadlinesOfTrackedAndUntrackedEvents()
     {
         var organization = ModuleFixture.NewOrganization();
         var catalog = await CatalogSeed.CatalogAsync(fixture, organization);
@@ -245,7 +248,11 @@ public sealed class TrackingBrokerTests(ModuleFixture fixture) : IClassFixture<M
             "Planned show", "2027-01-10", deadlines: [CatalogSeed.Deadline("2026-12-01"), CatalogSeed.Deadline("2026-11-15", DeadlineKind.Registration)]));
         var skipped = await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Skipped show", "2027-01-11", deadlines: [CatalogSeed.Deadline("2026-11-12")]));
         var past = await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Past deadline", "2027-01-12", deadlines: [CatalogSeed.Deadline("2026-11-01")]));
-        await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Untracked", "2027-01-13", deadlines: [CatalogSeed.Deadline("2026-11-11")]));
+        var untracked = await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Untracked", "2027-01-13", deadlines: [CatalogSeed.Deadline("2026-11-11")]));
+        await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Cancelled show", "2027-01-14", deadlines: [CatalogSeed.Deadline("2026-11-10")]) with
+        {
+            Status = EventStatus.Cancelled,
+        });
         fixture.Principal.ActAsMember(organization);
         await using var scope = fixture.Scope();
         var broker = Broker(scope);
@@ -254,13 +261,69 @@ public sealed class TrackingBrokerTests(ModuleFixture fixture) : IClassFixture<M
         (await broker.PutAsync(catalog.Slug, past.Id, new TrackingSpec { Stage = "going" })).Value();
 
         var summary = (await broker.GetSummaryAsync(catalog.Slug, new DateOnly(2026, 11, 10))).Value();
+        var applications = (await broker.GetSummaryAsync(catalog.Slug, new TrackingSummaryQuery
+        {
+            Today = new DateOnly(2026, 11, 10),
+            DeadlineKinds = [DeadlineKind.Application],
+        })).Value();
 
         summary.ByStage.Keys.Should().Equal("interested", "planning", "going", "attended", "skipped");
         summary.ByStage.Values.Should().Equal(0, 1, 1, 0, 1);
-        summary.UpcomingDeadlines.Select(deadline => (deadline.EventId, deadline.Deadline.At.Value, deadline.Stage)).Should().Equal(
-            (planned.Id, "2026-11-15", "planning"), (planned.Id, "2026-12-01", "planning"));
-        summary.UpcomingDeadlines[0].Deadline.Kind.Should().Be(DeadlineKind.Registration);
-        summary.UpcomingDeadlines[0].Title["en"].Should().Be("Planned show");
+        summary.Untracked.Should().Be(2, "the untracked and the cancelled show");
+        summary.UpcomingDeadlines.Select(deadline => (deadline.EventId, deadline.Deadline.At.Value, deadline.Stage, deadline.Tracked)).Should().Equal(
+            (untracked.Id, "2026-11-11", "interested", false), (planned.Id, "2026-11-15", "planning", true), (planned.Id, "2026-12-01", "planning", true));
+        summary.UpcomingDeadlines[1].Deadline.Kind.Should().Be(DeadlineKind.Registration);
+        summary.UpcomingDeadlines[1].Title["en"].Should().Be("Planned show");
+        applications.UpcomingDeadlines.Select(deadline => deadline.Deadline.At.Value).Should().Equal("2026-11-11", "2026-12-01");
+    }
+
+    /// <summary>Stage lists (PG02): an untracked event reads as the workflow's default stage, so it lists under that stage,
+    /// is left out only when the default stage is, and a priority still lists tracked events only.</summary>
+    [Fact]
+    public async Task ListAsync_ShouldReadAnUntrackedEventAsTheDefaultStage()
+    {
+        var organization = ModuleFixture.NewOrganization();
+        var catalog = await CatalogSeed.CatalogAsync(fixture, organization);
+        var planned = await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Planned show", "2027-01-10"));
+        var skipped = await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Skipped show", "2027-01-11"));
+        var interested = await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Interested show", "2027-01-12"));
+        var untracked = await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Untracked show", "2027-01-13"));
+        fixture.Principal.ActAsMember(organization);
+        await using var scope = fixture.Scope();
+        var broker = Broker(scope);
+        (await broker.PutAsync(catalog.Slug, planned.Id, new TrackingSpec { Stage = "planning", Priority = TrackingPriority.High })).Value();
+        (await broker.PutAsync(catalog.Slug, skipped.Id, new TrackingSpec { Stage = "skipped" })).Value();
+        (await broker.PutAsync(catalog.Slug, interested.Id, new TrackingSpec())).Value();
+
+        Ids(await broker.ListAsync(catalog.Slug, new TrackingQuery { Stage = "interested" })).Should().Equal(interested.Id, untracked.Id);
+        Ids(await broker.ListAsync(catalog.Slug, new TrackingQuery { Stages = ["planning", "skipped"] })).Should().Equal(planned.Id, skipped.Id);
+        Ids(await broker.ListAsync(catalog.Slug, new TrackingQuery { ExcludeStages = ["skipped"] })).Should().Equal(planned.Id, interested.Id, untracked.Id);
+        Ids(await broker.ListAsync(catalog.Slug, new TrackingQuery { ExcludeStages = ["skipped", "interested"] })).Should().Equal(planned.Id);
+        Ids(await broker.ListAsync(catalog.Slug, new TrackingQuery { Priority = TrackingPriority.Normal })).Should().Equal(skipped.Id, interested.Id);
+        (await broker.ListAsync(catalog.Slug, new TrackingQuery { Stages = ["skipped"], ExcludeStages = ["skipped"] })).Error().Type
+            .Should().Be(AppErrorType.Validation);
+    }
+
+    /// <summary>A two-letter search also finds the events in that country (PG18), on the tracking and the events list.</summary>
+    [Fact]
+    public async Task Search_ShouldFindTheEventsInTheCountryItNames()
+    {
+        var organization = ModuleFixture.NewOrganization();
+        var catalog = await CatalogSeed.CatalogAsync(fixture, organization);
+        var almaty = await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Fashion week", "2027-01-10") with
+        {
+            Place = new EventPlace { City = "Almaty", Country = "KZ" },
+        });
+        await CatalogSeed.EventAsync(fixture, catalog, CatalogSeed.Facts("Craft fair", "2027-01-11") with
+        {
+            Place = new EventPlace { City = "Tashkent", Country = "UZ" },
+        });
+        fixture.Principal.ActAsMember(organization);
+        await using var scope = fixture.Scope();
+
+        Ids(await Broker(scope).ListAsync(catalog.Slug, new TrackingQuery { Text = "kz" })).Should().Equal(almaty.Id);
+        (await scope.ServiceProvider.GetRequiredService<ICatalogEventsBroker>().ListAsync(catalog.Slug, new EventQuery { Text = "KZ" })).Value()
+            .Items.Select(item => item.Id).Should().Equal(almaty.Id);
     }
 
     private static IReadOnlyList<Guid> Ids(WoW.Two.Sdk.Beta.Be.Foundation.Results.Result<TrackingPage> result) =>

@@ -78,6 +78,22 @@ public sealed class EventsClientWireTests : IDisposable
             "https://events.example.test/api/events/v1/catalogs/fashion/tracking?countries=UZ&countries=KZ&excludeCountries=RU&includeUnknownCountry=true&limit=50");
     }
 
+    /// <summary>PG02 and PG14: stage lists and the summary's deadline kinds go as repeated keys, kinds by wire name.</summary>
+    [Fact]
+    public async Task Tracking_ShouldSendStageListsAndDeadlineKinds_AsRepeatedKeys()
+    {
+        await service.Broker<IEventTrackingBroker>().ListAsync("fashion", new TrackingQuery { Stages = ["planning"], ExcludeStages = ["skipped", "rejected"], Limit = 10 });
+        await service.Broker<IEventTrackingBroker>().GetSummaryAsync("fashion", new TrackingSummaryQuery
+        {
+            Today = new DateOnly(2026, 11, 10),
+            DeadlineKinds = [DeadlineKind.Application, DeadlineKind.EarlyBird],
+        });
+
+        service.Requests.Select(request => request.Url).Should().Equal(
+            "https://events.example.test/api/events/v1/catalogs/fashion/tracking?stages=planning&excludeStages=skipped&excludeStages=rejected&limit=10",
+            "https://events.example.test/api/events/v1/catalogs/fashion/tracking/summary?today=2026-11-10&deadlineKinds=application&deadlineKinds=earlyBird");
+    }
+
     [Fact]
     public async Task Propose_ShouldPostToTheCandidates()
     {

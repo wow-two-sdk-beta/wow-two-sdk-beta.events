@@ -6,6 +6,7 @@ using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Tracking;
 using WoW.Two.Sdk.Beta.Be.Foundation.Results;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Module.CatalogEvents;
@@ -213,7 +214,9 @@ internal sealed class ModuleCatalogEventsBroker(EventsDbContext db, IEventsCalle
         if (Text(query.City)?.ToLowerInvariant() is { } city)
             rows = rows.Where(row => row.City == city);
         if (Text(query.Text)?.ToLowerInvariant() is { } text)
-            rows = rows.Where(row => row.Search.Contains(text));
+            rows = EventListQuery.CountryCode(text) is { } code
+                ? rows.Where(row => row.Search.Contains(text) || row.Country == code)
+                : rows.Where(row => row.Search.Contains(text));
         if (query.Status is { } status)
         {
             var label = EventsLabels.Of(status);

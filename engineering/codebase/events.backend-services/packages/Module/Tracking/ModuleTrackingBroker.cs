@@ -42,6 +42,12 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
 
         if ((EventListQuery.CheckCountries("countries", query.Countries) ?? EventListQuery.CheckCountries("excludeCountries", query.ExcludeCountries)) is { } invalid)
             return Result<TrackingPage>.Fail(invalid);
+        var stages = StageKeys(query.Stages, query.Stage);
+        var excluded = StageKeys(query.ExcludeStages, null);
+        if ((CheckStages("stages", stages) ?? CheckStages("excludeStages", excluded)) is { } badStages)
+            return Result<TrackingPage>.Fail(badStages);
+        if (stages.Intersect(excluded, StringComparer.Ordinal).Any())
+            return Result<TrackingPage>.Fail(EventsErrors.Invalid("excludeStages", "a stage may not be both listed and left out"));
 
         var limit = PageCursor.Limit(query.Limit);
         var filter = new EventListFilter(
@@ -57,10 +63,22 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
             from tracking in tracked.DefaultIfEmpty()
             select new { Event = row, Tracking = tracking };
 
-        if (query.TrackedOnly || query.Stage is not null || query.Priority is not null)
+        if (query.TrackedOnly || query.Priority is not null)
             joined = joined.Where(item => item.Tracking != null);
-        if (query.Stage is { } stage)
-            joined = joined.Where(item => item.Tracking!.Stage == stage);
+
+        // Stages read against the organization's workflow: an untracked event stands in its default stage (PG02), as a
+        // digest's stage selection reads it.
+        var defaultStage = stages.Length > 0 || excluded.Length > 0
+            ? (await WorkflowStore.LoadAsync(db, caller, cancellationToken)).DefaultStage
+            : string.Empty;
+        if (stages.Length > 0)
+            joined = stages.Contains(defaultStage, StringComparer.Ordinal)
+                ? joined.Where(item => item.Tracking == null || stages.Contains(item.Tracking.Stage))
+                : joined.Where(item => item.Tracking != null && stages.Contains(item.Tracking.Stage));
+        if (excluded.Length > 0)
+            joined = excluded.Contains(defaultStage, StringComparer.Ordinal)
+                ? joined.Where(item => item.Tracking != null && !excluded.Contains(item.Tracking.Stage))
+                : joined.Where(item => item.Tracking == null || !excluded.Contains(item.Tracking.Stage));
         if (query.Priority is { } priority)
         {
             var label = EventsLabels.Of(priority);
@@ -68,7 +86,13 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
         }
 
         if (EventListQuery.Normalize(query.Text) is { } text)
-            joined = joined.Where(item => item.Event.Search.Contains(text) || (item.Tracking != null && item.Tracking.Notes.ToLower().Contains(text)));
+        {
+            // A two-letter search also finds the events in that country (PG18): "UZ" or "kz".
+            joined = EventListQuery.CountryCode(text) is { } code
+                ? joined.Where(item => item.Event.Search.Contains(text) || item.Event.Country == code
+                    || (item.Tracking != null && item.Tracking.Notes.ToLower().Contains(text)))
+                : joined.Where(item => item.Event.Search.Contains(text) || (item.Tracking != null && item.Tracking.Notes.ToLower().Contains(text)));
+        }
 
         var page = await joined
             .OrderBy(item => item.Event.StartsMin == null).ThenBy(item => item.Event.StartsMin)
@@ -200,8 +224,13 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
     }
 
     /// <inheritdoc />
-    public async Task<Result<TrackingSummaryModel>> GetSummaryAsync(string catalog, DateOnly today, CancellationToken cancellationToken = default)
+    public Task<Result<TrackingSummaryModel>> GetSummaryAsync(string catalog, DateOnly today, CancellationToken cancellationToken = default) =>
+        GetSummaryAsync(catalog, new TrackingSummaryQuery { Today = today }, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<Result<TrackingSummaryModel>> GetSummaryAsync(string catalog, TrackingSummaryQuery query, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(query);
         var caller = callers.Current;
         if (!caller.HasOrganization)
             return Result<TrackingSummaryModel>.Fail(EventsErrors.OrganizationRequired());
@@ -209,14 +238,15 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
         if (found is not Result<CatalogEntity>.Success { Value: var catalogRow })
             return Result<TrackingSummaryModel>.Fail(((Result<CatalogEntity>.Failure)found).Error);
 
+        var today = query.Today;
         var workflow = await WorkflowStore.LoadAsync(db, caller, cancellationToken);
         var issuer = caller.Issuer;
         var organization = caller.OrganizationId!;
+        var tracking = db.Tracking.AsNoTracking().Where(item => item.Issuer == issuer && item.OrganizationId == organization);
         var tracked =
-            from tracking in db.Tracking.AsNoTracking()
-            join row in EventListQuery.PublishedEvents(db, catalogRow.Id) on tracking.EventId equals row.Id
-            where tracking.Issuer == issuer && tracking.OrganizationId == organization
-            select new { Tracking = tracking, Event = row };
+            from item in tracking
+            join row in EventListQuery.PublishedEvents(db, catalogRow.Id) on item.EventId equals row.Id
+            select new { Tracking = item, Event = row };
 
         var counts = await tracked
             .GroupBy(item => item.Tracking.Stage)
@@ -229,13 +259,30 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
         foreach (var (stage, count) in counts.Where(pair => !byStage.ContainsKey(pair.Key)).OrderBy(pair => pair.Key, StringComparer.Ordinal))
             byStage[stage] = count;
 
+        // Every published event that is not cancelled lists its deadlines (PG14): an untracked one stands in the default
+        // stage, and an event in a lost stage (or untracked while the default stage is lost) is left out.
         var lost = workflow.Stages.Where(stage => stage.Class == StageClass.Lost).Select(stage => stage.Key).ToArray();
+        var defaultStage = workflow.DefaultStage;
+        var untrackedLost = lost.Contains(defaultStage, StringComparer.Ordinal);
+        var cancelled = EventsLabels.Of(EventStatus.Cancelled);
+        var kinds = query.DeadlineKinds.Distinct().Select(kind => EventsLabels.Of(kind)).ToArray();
+        var events =
+            from row in EventListQuery.PublishedEvents(db, catalogRow.Id)
+            where row.Status != cancelled
+            join item in tracking on row.Id equals item.EventId into rows
+            from item in rows.DefaultIfEmpty()
+            select new { Event = row, Stage = item == null ? null : item.Stage };
+        events = untrackedLost
+            ? events.Where(item => item.Stage != null && !lost.Contains(item.Stage))
+            : events.Where(item => item.Stage == null || !lost.Contains(item.Stage));
+        var deadlines = db.Deadlines.AsNoTracking().Where(deadline => deadline.AtMin != null && deadline.AtMin >= today);
+        if (kinds.Length > 0)
+            deadlines = deadlines.Where(deadline => kinds.Contains(deadline.Kind));
         var nearest = await (
-                from item in tracked
-                join deadline in db.Deadlines.AsNoTracking() on item.Event.Id equals deadline.EventId
-                where deadline.AtMin != null && deadline.AtMin >= today && !lost.Contains(item.Tracking.Stage)
+                from item in events
+                join deadline in deadlines on item.Event.Id equals deadline.EventId
                 orderby deadline.AtMin, item.Event.TitleSort, item.Event.Id, deadline.Ordinal
-                select new { item.Event.Id, deadline.Ordinal, item.Tracking.Stage, item.Event.Facts })
+                select new { item.Event.Id, deadline.Ordinal, item.Stage, item.Event.Facts })
             .Take(5)
             .ToListAsync(cancellationToken);
 
@@ -245,7 +292,11 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
             var facts = EventsJson.Read<EventFacts>(item.Facts);
             if (item.Ordinal < 0 || item.Ordinal >= facts.Deadlines.Count)
                 continue;
-            upcoming.Add(new UpcomingDeadlineModel { EventId = item.Id, Title = facts.Title, Deadline = facts.Deadlines[item.Ordinal], Stage = item.Stage });
+            upcoming.Add(new UpcomingDeadlineModel
+            {
+                EventId = item.Id, Title = facts.Title, Deadline = facts.Deadlines[item.Ordinal], Stage = item.Stage ?? defaultStage,
+                Tracked = item.Stage is not null,
+            });
         }
 
         var untracked = await EventListQuery.PublishedEvents(db, catalogRow.Id)
@@ -253,6 +304,16 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
 
         return Result<TrackingSummaryModel>.Ok(new TrackingSummaryModel { ByStage = byStage, Untracked = untracked, UpcomingDeadlines = upcoming });
     }
+
+    /// <summary>Gathers stage keys: the list and the single key, trimmed and distinct.</summary>
+    private static string[] StageKeys(IReadOnlyList<string>? keys, string? single) =>
+        (keys ?? []).Append(single).Where(key => !string.IsNullOrWhiteSpace(key)).Select(key => key!.Trim()).Distinct(StringComparer.Ordinal).ToArray();
+
+    /// <summary>Checks stage keys: at most <see cref="EventsConstants.MaxListLength"/>, each of the key pattern.</summary>
+    private static AppError? CheckStages(string field, string[] keys) =>
+        keys.Length > EventsConstants.MaxListLength ? EventsErrors.Invalid(field, $"at most {EventsConstants.MaxListLength} stages")
+        : keys.Any(key => key.Length > 64 || !EventFactsValidator.KeyPattern().IsMatch(key)) ? EventsErrors.Invalid(field, "stage keys")
+        : null;
 
     /// <summary>Finds an event one tracking call may act on: a published event of a readable catalog, or a candidate the
     /// caller's organization owns.</summary>

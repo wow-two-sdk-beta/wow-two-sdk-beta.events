@@ -7,8 +7,19 @@ public sealed record TrackingQuery
     /// <summary>Gets whether only tracked events are listed.</summary>
     public bool TrackedOnly { get; init; }
 
-    /// <summary>Gets the stage to list; implies tracked events only.</summary>
+    /// <summary>Gets the stage to list; with <see cref="Stages"/>, an event in either matches. An untracked event reads as
+    /// the organization's workflow's default stage.</summary>
     public string? Stage { get; init; }
+
+    /// <summary>Gets the stages to list (an event in any matches, with <see cref="Stage"/>); an untracked event reads as the
+    /// workflow's default stage, so it lists only when the default stage is named. At most
+    /// <see cref="EventsConstants.MaxListLength"/>.</summary>
+    public IReadOnlyList<string> Stages { get; init; } = [];
+
+    /// <summary>Gets the stages to leave out; an untracked event reads as the workflow's default stage, so it is left out
+    /// only when the default stage is named. At most <see cref="EventsConstants.MaxListLength"/>; a key may not be in both
+    /// lists.</summary>
+    public IReadOnlyList<string> ExcludeStages { get; init; } = [];
 
     /// <summary>Gets the priority to list; implies tracked events only.</summary>
     public TrackingPriority? Priority { get; init; }
