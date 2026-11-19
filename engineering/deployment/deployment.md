@@ -88,7 +88,18 @@ The packages ship separately, from `publish-packages.yml` (`engineering/scripts/
     `catalog-ensure-result ok=… slug=… created=… changed=… revision=…`, or `ok=false reason=…` (another organization
     owns the slug, usage, no issuer, no database).
   - `dotnet Events.Api.dll workflow put --owner-org <org id> [--owner-issuer <issuer>] --default <key> --stages
-    key:class,…` writes the organization's workflow: `workflow-put-result ok=… stages=… changed=… revision=…`.
+    key:class,…` writes the organization's workflow (stage keys and classes only; stored labels and fields stay):
+    `workflow-put-result ok=… stages=… changed=… revision=…`.
+  - `dotnet Events.Api.dll workflow put --owner-org <org id> [--owner-issuer <issuer>] --spec <path|->` writes the
+    whole workflow from a `WorkflowSpec` JSON file (stages with their `key`, `class` and `label` per language,
+    `defaultStage`, and the custom fields' JSON Schema with titles and `readOnly`), `-` reading standard input, as
+    Wheelhouse Run passes a stdin file; it excludes `--stages` and `--default`. It writes at the stored revision only
+    when the stored workflow differs (objects compare by content, never key order; the spec's `expectedRevision` is
+    ignored), so a rerun prints `changed=false`. A spec that is not JSON, names a member the model lacks or fails the
+    module's own validation (a stage still in use, a default that is not a stage, …) writes nothing: a
+    `workflow-put-error {"message":…}` line, then `workflow-put-result ok=false reason=…` (`spec-not-json`,
+    `spec-empty`, `spec-unreadable`, or the validation's words), exit 1. A tenant keeps its workflow file in its own
+    repository and runs the verb after a deploy that changes it, so no page visit writes it.
   - Ocharo on dev: `catalog ensure ocharo-fashion --owner-org <Ocharo's org_id> --name "Ocharo fashion" --kinds
     runway,trade-fair,market,exhibition,competition,festival,conference,other`, then `workflow put --owner-org <id>
     --default candidate --stages candidate:open,shortlisted:open,applying:active,applied:active,confirmed:active,

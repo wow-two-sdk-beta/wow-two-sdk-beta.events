@@ -61,6 +61,179 @@ public sealed class ProvisionCommandTests : IAsyncLifetime
         workflow.Stages.Single(stage => stage.Key == "attended").Class.Should().Be(StageClass.Won);
     }
 
+    /// <summary>A deploy's workflow file: labels per language, the default stage and the custom fields' schema, written
+    /// in an order other than the one the store keeps.</summary>
+    private const string DeskSpec = """
+        {
+          "stages": [
+            { "key": "candidate", "label": { "en": "Candidate", "uz": "Nomzod" }, "class": "open" },
+            { "key": "attended", "label": { "en": "Attended", "uz": "Qatnashgan" }, "class": "won" },
+            { "key": "skipped", "label": { "en": "Skipped", "uz": "O'tkazib yuborilgan" }, "class": "lost" }
+          ],
+          "defaultStage": "candidate",
+          "fields": {
+            "type": "object",
+            "properties": {
+              "cost": { "type": "string", "title": { "en": "Cost", "uz": "Xarajat" }, "maxLength": 500 },
+              "sourceUrl": { "type": "string", "title": { "en": "Source link" }, "format": "uri", "readOnly": true }
+            }
+          }
+        }
+        """;
+
+    /// <summary>The same workflow as <see cref="DeskSpec"/> with every object's members in reverse order.</summary>
+    private const string DeskSpecReordered = """
+        {
+          "fields": {
+            "properties": {
+              "sourceUrl": { "readOnly": true, "format": "uri", "title": { "en": "Source link" }, "type": "string" },
+              "cost": { "maxLength": 500, "title": { "uz": "Xarajat", "en": "Cost" }, "type": "string" }
+            },
+            "type": "object"
+          },
+          "defaultStage": "candidate",
+          "stages": [
+            { "class": "open", "label": { "uz": "Nomzod", "en": "Candidate" }, "key": "candidate" },
+            { "class": "won", "label": { "uz": "Qatnashgan", "en": "Attended" }, "key": "attended" },
+            { "class": "lost", "label": { "uz": "O'tkazib yuborilgan", "en": "Skipped" }, "key": "skipped" }
+          ]
+        }
+        """;
+
+    [Fact]
+    public async Task WorkflowPut_Spec_ShouldWriteLabelsAndFields_FromAFile_ThenChangeNothingOnARerun()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"events-workflow-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(path, DeskSpec);
+        try
+        {
+            var first = await RunSpecAsync(string.Empty, "workflow", "put", "--owner-org", Ocharo, "--spec", path);
+            var second = await RunSpecAsync(string.Empty, "workflow", "put", "--owner-org", Ocharo, "--spec", path);
+
+            first.Should().Be((0, "workflow-put-result ok=true stages=3 changed=true revision=1"));
+            second.Should().Be((0, "workflow-put-result ok=true stages=3 changed=false revision=1"));
+            var workflow = Value(await (await AsOwner()).GetRequiredService<IEventWorkflowsBroker>().GetAsync());
+            workflow.DefaultStage.Should().Be("candidate");
+            workflow.Stages.Select(stage => (stage.Key, stage.Class)).Should().Equal(
+                ("candidate", StageClass.Open), ("attended", StageClass.Won), ("skipped", StageClass.Lost));
+            workflow.Stages[1].Label.Should().Equal(new Dictionary<string, string> { ["en"] = "Attended", ["uz"] = "Qatnashgan" });
+            workflow.Fields!.Value.GetProperty("properties").GetProperty("sourceUrl").GetProperty("readOnly").GetBoolean().Should().BeTrue();
+            workflow.Fields!.Value.GetProperty("properties").GetProperty("cost").GetProperty("title").GetProperty("uz").GetString().Should().Be("Xarajat");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task WorkflowPut_Spec_ShouldReadStandardInput_AndKeepTheStoredRevisionWhenOnlyTheKeyOrderDiffers()
+    {
+        var first = await RunSpecAsync(DeskSpec, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+        var reordered = await RunSpecAsync(DeskSpecReordered, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        first.Should().Be((0, "workflow-put-result ok=true stages=3 changed=true revision=1"));
+        reordered.Should().Be((0, "workflow-put-result ok=true stages=3 changed=false revision=1"), "the store keeps a JSON object's keys in its own order");
+    }
+
+    [Fact]
+    public async Task WorkflowPut_Spec_ShouldWriteAtTheStoredRevision_WhenALabelOrFieldChanges()
+    {
+        await RunWithInputAsync(DeskSpec, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        var relabelled = await RunSpecAsync(DeskSpec.Replace("Nomzod", "Nomzodlar", StringComparison.Ordinal), "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+        var retitled = await RunSpecAsync(DeskSpec.Replace("\"maxLength\": 500", "\"maxLength\": 600", StringComparison.Ordinal).Replace("Nomzod", "Nomzodlar", StringComparison.Ordinal), "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+        var again = await RunSpecAsync(DeskSpec.Replace("\"maxLength\": 500", "\"maxLength\": 600", StringComparison.Ordinal).Replace("Nomzod", "Nomzodlar", StringComparison.Ordinal), "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        relabelled.Should().Be((0, "workflow-put-result ok=true stages=3 changed=true revision=2"));
+        retitled.Should().Be((0, "workflow-put-result ok=true stages=3 changed=true revision=3"));
+        again.Should().Be((0, "workflow-put-result ok=true stages=3 changed=false revision=3"));
+    }
+
+    [Fact]
+    public async Task WorkflowPut_Spec_ShouldIgnoreTheSpecsOwnExpectedRevision()
+    {
+        await RunWithInputAsync(DeskSpec, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        var result = await RunSpecAsync(DeskSpec.Replace("Nomzod", "Nomzodlar", StringComparison.Ordinal).Replace("\"stages\"", "\"expectedRevision\": 99, \"stages\"", StringComparison.Ordinal), "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        result.Should().Be((0, "workflow-put-result ok=true stages=3 changed=true revision=2"));
+    }
+
+    [Theory]
+    [InlineData("not json", "spec-not-json")]
+    [InlineData("   ", "spec-empty")]
+    [InlineData("null", "spec-empty")]
+    [InlineData("""{"stages":[{"key":"candidate","lable":{"en":"Candidate"},"class":"open"}],"defaultStage":"candidate"}""", "spec-not-json")]
+    [InlineData("""{"stages":[{"key":"candidate","class":"open"}]}""", "spec-not-json")]
+    [InlineData("""{"stages":[{"key":"candidate","class":"sideways"}],"defaultStage":"candidate"}""", "spec-not-json")]
+    public async Task WorkflowPut_Spec_ShouldRefuseASpecThatIsNotAWorkflow_WithTheMessageBeforeTheResultLine(string spec, string reason)
+    {
+        var (exit, lines) = await RunWithInputAsync(spec, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        exit.Should().Be(1);
+        lines[^1].Should().Be($"workflow-put-result ok=false reason={reason}");
+        if (reason == "spec-not-json")
+            lines[0].Should().StartWith("workflow-put-error {\"message\":\"");
+        var stored = Value(await (await AsOwner()).GetRequiredService<IEventWorkflowsBroker>().GetAsync());
+        stored.Revision.Should().Be(0, "a refused spec writes nothing");
+    }
+
+    [Theory]
+    [InlineData("""{"stages":[{"key":"Candidate","class":"open"}],"defaultStage":"Candidate"}""", "stages[0].key")]
+    [InlineData("""{"stages":[{"key":"a","class":"open"},{"key":"a","class":"won"}],"defaultStage":"a"}""", "repeats an earlier stage")]
+    [InlineData("""{"stages":[{"key":"candidate","class":"open"}],"defaultStage":"missing"}""", "defaultStage")]
+    [InlineData("""{"stages":[],"defaultStage":"candidate"}""", "stages")]
+    [InlineData("""{"stages":[{"key":"candidate","class":"open"}],"defaultStage":"candidate","fields":[1]}""", "fields")]
+    public async Task WorkflowPut_Spec_ShouldRefuseASpecThatFailsEventsValidation_WithItsFullMessage(string spec, string expected)
+    {
+        var (exit, lines) = await RunWithInputAsync(spec, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        exit.Should().Be(1);
+        lines.Should().HaveCount(2);
+        lines[0].Should().StartWith("workflow-put-error {\"message\":\"").And.Contain(expected);
+        lines[1].Should().StartWith("workflow-put-result ok=false reason=").And.NotContain(" stages=");
+        var stored = Value(await (await AsOwner()).GetRequiredService<IEventWorkflowsBroker>().GetAsync());
+        stored.Revision.Should().Be(0, "a refused spec writes nothing");
+    }
+
+    [Theory]
+    [InlineData("""{"stages":[null,null,null],"defaultStage":"candidate"}""")]
+    [InlineData("""{"stages":null,"defaultStage":"candidate"}""")]
+    public async Task WorkflowPut_Spec_ShouldRefuseNullStages_AgainstAStoredWorkflow_WithoutCrashing(string spec)
+    {
+        await RunWithInputAsync(DeskSpec, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        var (exit, lines) = await RunWithInputAsync(spec, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        exit.Should().Be(1);
+        lines[0].Should().StartWith("workflow-put-error {\"message\":\"");
+        lines[^1].Should().StartWith("workflow-put-result ok=false reason=");
+        Value(await (await AsOwner()).GetRequiredService<IEventWorkflowsBroker>().GetAsync()).Revision.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task WorkflowPut_Spec_ShouldRefuseAFileThatCannotBeRead()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"events-workflow-{Guid.NewGuid():N}-missing.json");
+
+        var (exit, lines) = await RunWithInputAsync(string.Empty, "workflow", "put", "--owner-org", Ocharo, "--spec", path);
+
+        exit.Should().Be(1);
+        lines[^1].Should().Be("workflow-put-result ok=false reason=spec-unreadable");
+        lines[0].Should().NotContain(path, "the line names no path");
+    }
+
+    [Fact]
+    public async Task WorkflowPut_Spec_ShouldStillTakeTheStagesForm_AfterASpecWroteLabelsAndFields()
+    {
+        await RunWithInputAsync(DeskSpec, "workflow", "put", "--owner-org", Ocharo, "--spec", "-");
+
+        var same = await RunAsync("workflow", "put", "--owner-org", Ocharo, "--default", "candidate", "--stages", "candidate:open,attended:won,skipped:lost");
+
+        same.Should().Be((0, "workflow-put-result ok=true stages=3 changed=false revision=1"));
+    }
+
     private const string Bundle = """
         {"format":"wow2.events-import.v1","source":"ocharo-desk","rows":[
           {"legacyId":"0193f3a4-0000-7000-8000-0000000000a1",
@@ -157,6 +330,11 @@ public sealed class ProvisionCommandTests : IAsyncLifetime
     [InlineData("catalog", "ensure", "ocharo-fashion")]
     [InlineData("workflow", "put", "--owner-org", Ocharo, "--stages", "candidate:open")]
     [InlineData("catalog", "ensure", "ocharo-fashion", "--owner-org", Ocharo, "--unknown", "x")]
+    [InlineData("workflow", "put", "--owner-org", Ocharo, "--spec", "-", "--stages", "candidate:open", "--default", "candidate")]
+    [InlineData("workflow", "put", "--owner-org", Ocharo, "--spec", "-", "--default", "candidate")]
+    [InlineData("workflow", "put", "--spec", "-")]
+    [InlineData("workflow", "put", "--owner-org", Ocharo, "--spec")]
+    [InlineData("catalog", "ensure", "ocharo-fashion", "--owner-org", Ocharo, "--spec", "-")]
     public async Task Verbs_ShouldRefuseIncompleteArguments(params string[] args)
     {
         (await RunAsync(args)).Exit.Should().Be(1);
@@ -184,6 +362,27 @@ public sealed class ProvisionCommandTests : IAsyncLifetime
         using var output = new StringWriter();
         var exit = await ProvisionCommand.RunAsync(args, configuration, output);
         return (exit, output.ToString().Trim());
+    }
+
+    /// <summary>Runs a verb with standard input, answering the exit code and the lines it printed joined as one.</summary>
+    private async Task<(int Exit, string Line)> RunSpecAsync(string input, params string[] args)
+    {
+        var (exit, lines) = await RunWithInputAsync(input, args);
+        return (exit, string.Join('\n', lines));
+    }
+
+    /// <summary>Runs a verb with standard input, answering the exit code and every line it printed.</summary>
+    private async Task<(int Exit, string[] Lines)> RunWithInputAsync(string input, params string[] args)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["DatabaseSettings:ConnectionString"] = postgres.ConnectionString,
+            ["Events:Auth:Issuers:0:Issuer"] = Issuer,
+        }).Build();
+        using var reader = new StringReader(input);
+        using var output = new StringWriter();
+        var exit = await ProvisionCommand.RunAsync(args, configuration, reader, output);
+        return (exit, output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
     }
 
     private async Task<(int Exit, string Report, string Last)> ImportAsync(string bundle, params string[] args)

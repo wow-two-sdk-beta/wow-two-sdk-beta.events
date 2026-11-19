@@ -9,6 +9,8 @@ namespace Events.Api.Provisioning;
 /// <param name="Kinds">The catalog's kind keys.</param>
 /// <param name="Stages">The workflow's stages, <c>key:class</c> each.</param>
 /// <param name="DefaultStage">The workflow's default stage.</param>
+/// <param name="Spec">The workflow's whole spec, a file's path or <c>-</c> for standard input; none for the
+/// <c>--stages</c> form.</param>
 public sealed record ProvisionArguments(
     string Verb,
     string? Slug,
@@ -17,7 +19,8 @@ public sealed record ProvisionArguments(
     string? Name,
     IReadOnlyList<string> Kinds,
     IReadOnlyList<string> Stages,
-    string? DefaultStage)
+    string? DefaultStage,
+    string? Spec)
 {
     /// <summary>Holds the catalog verb.</summary>
     public const string CatalogEnsure = "catalog ensure";
@@ -48,7 +51,7 @@ public sealed record ProvisionArguments(
             slug = args[index++];
         }
 
-        string? org = null, issuer = null, name = null, defaultStage = null;
+        string? org = null, issuer = null, name = null, defaultStage = null, spec = null;
         IReadOnlyList<string> kinds = [], stages = [];
         for (; index < args.Count; index++)
         {
@@ -63,17 +66,24 @@ public sealed record ProvisionArguments(
                 case "--kinds" when verb == CatalogEnsure: kinds = Split(value); break;
                 case "--stages" when verb == WorkflowPut: stages = Split(value); break;
                 case "--default" when verb == WorkflowPut: defaultStage = value; break;
+                case "--spec" when verb == WorkflowPut: spec = value; break;
                 default: return null;
             }
 
             index++;
         }
 
-        if (string.IsNullOrWhiteSpace(org) || (verb == WorkflowPut && (stages.Count == 0 || string.IsNullOrWhiteSpace(defaultStage))))
+        if (string.IsNullOrWhiteSpace(org) || (verb == WorkflowPut && !CompleteWorkflow(spec, stages, defaultStage)))
             return null;
 
-        return new ProvisionArguments(verb, slug, org.Trim(), issuer?.Trim(), name?.Trim(), kinds, stages, defaultStage?.Trim());
+        return new ProvisionArguments(verb, slug, org.Trim(), issuer?.Trim(), name?.Trim(), kinds, stages, defaultStage?.Trim(), spec?.Trim());
     }
+
+    /// <summary>Tells whether the workflow is named exactly one way: <c>--spec</c> alone, or <c>--stages</c> with <c>--default</c>.</summary>
+    private static bool CompleteWorkflow(string? spec, IReadOnlyList<string> stages, string? defaultStage) =>
+        spec is null
+            ? stages.Count > 0 && !string.IsNullOrWhiteSpace(defaultStage)
+            : !string.IsNullOrWhiteSpace(spec) && stages.Count == 0 && string.IsNullOrWhiteSpace(defaultStage);
 
     private static string[] Split(string value) =>
         value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
