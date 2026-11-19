@@ -95,7 +95,21 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   event no person decided and no organization tracks back to review, held by `source:{instance}`, so an off-topic event
   leaves the published feed; its content never applies, and only a revision that passes the filter again
   (`post.new`, `post.changed`, `post.extracted`) returns it to its classifier, never a relist or an unmerge. A tracked
-  event stays published, and its source reads `unmatched` until such a revision arrives.
+  event stays published, and its source reads `unmatched` until such a revision arrives. A selector subscription sends
+  it too, when a change of the selector (or a revision's new tags) no longer admits the post.
+- a source follows an SCFD subscription selector (harvest's `selector` subscription: Layer 1 tags and sources over one
+  container, which the client configures as data) when its `Filter` reads `selector:{name}`: intake pulls only while the
+  subscription is of kind `selector` and has that name, and refuses a channel, another selector or a plain filter key
+  that happens to read the same. One source, one selector, one cursor: what SCFD's selector admits arrives, and what it
+  stops admitting arrives as `post.unmatched`; the source's `Filter` names the selector, never an SCFD filter key.
+- a record's payload `context` carries the defaults that its selector's source ref attached (per channel: `defaultKind`,
+  `defaultCountry`, `defaultTimeZone`, and `sourceGroup` / `sourceName` naming the source), so one intake source serves
+  several channels; each takes precedence over the source's own setting, and a value that does not fit (a kind the
+  catalog lacks, a country that is not two capital letters, an unknown zone) is ignored, never a reason to quarantine.
+  The context lives in the stored payload, so the backlog pass re-maps an event with the same defaults.
+- a post a selector change admits again reaches Events at the revision it already stores (`post.changed`, reason
+  `resync`): the record is superseded as content, but it counts as a revision that passes the selector, so it ends an
+  unmatched hold and sets the source's state from its payload.
 - evidence per observation: SCFD instance, subscription, pipeline, `EventId`, `ItemId`, `PostId`, `Revision`, type,
   reason, observed time, each link's URL, source, capture and source fields, the mapping version when SCFD sends it,
   and the raw payload.
@@ -114,11 +128,12 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - a source's `DefaultCountry` is the operator's knowledge of the source, so it covers the cities the source names
   (`DefaultCities`, Uzbekistan's regional centres for the Afisha sources): a record naming another city (a foreign fair
   announced on a UZ source) keeps no country, a record naming no city takes the source's, and a country the record names
-  stands. A source with no list gives the country to every record.
+  stands. A source with no list gives the country to every record. A record's payload `context.defaultCountry` takes the
+  place of the source's country for that record, under the same list of cities.
 - a sourced event takes the deadlines SCFD states (`deadlines[]`: an application deadline a reader found) at their own
   precision, so "deadlines first" lists it; one with an unreadable date is left out. Its time zone is the source's
-  `DefaultTimeZone` when the start's stated offset is that zone's own on that date, and none otherwise: a guessed zone
-  would move the event's hour.
+  `DefaultTimeZone` (or its record's payload `context.defaultTimeZone`) when the start's stated offset is that zone's own
+  on that date, and none otherwise: a guessed zone would move the event's hour.
 - a sourced event's dates carry SCFD's `certainty`: `estimated` (an AI-estimated date of an undated post) reads as an
   estimated date, shown as approximate and never as announced; `stated`, or none on an older wire, reads as announced.
   A later revision that states the day replaces the estimate.
@@ -127,8 +142,9 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   the source already states that language. The observation's title link records the machine languages in its source
   fields (`machineTitles: ["en"]`). Readers pick a title by language prefix (`ru` finds `ru-Cyrl`).
 - a sourced event's kind, in order: the classifier's, when the catalog's taxonomy holds it; the kind the record itself
-  names; the source's `DefaultKind` (an exhibitions feed reads `exhibition`), when the record maps to `other` and the
-  taxonomy holds it; else `other`. A reviewer's kind stands over all of them.
+  names; the record's payload `context.defaultKind`, then the source's `DefaultKind` (an exhibitions feed reads
+  `exhibition`), when the record maps to `other` and the taxonomy holds it; else `other`. A reviewer's kind stands over
+  all of them.
 
 ## Review
 

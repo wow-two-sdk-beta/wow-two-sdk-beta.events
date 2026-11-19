@@ -441,6 +441,9 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     ///   - live again, no longer merged, or matching again: an event the source held for that reason returns to its
     ///     classifier, which the backlog pass runs after the poll; nothing is merged or moved, so SCFD's unmerge undoes
     ///     it whole, and a post matching again while its listing is gone stays held as gone
+    ///   - matching again at the stored revision counts too: a selector change re-matches a post at the revision Events
+    ///     already holds (<c>post.changed</c>, reason <c>resync</c>), which <see cref="ApplyPostAsync"/> marks superseded,
+    ///     yet it is a revision that passes the selector, so it releases the hold like a newer one
     ///   - a person's decision always stands; a stale record (an older revision than stored) changes nothing
     /// </remarks>
     private async Task ApplyLifecycleAsync(IntakePageState page, ObservationEntity observation, JsonElement? data, CancellationToken cancellationToken)
@@ -450,9 +453,10 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         var unmatched = observation.Type == UnmatchedType;
         var matching = MatchingTypes.Contains(observation.Type) && observation.State == Applied;
+        var sameRevision = MatchingTypes.Contains(observation.Type) && observation.State == Superseded;
         var state = ScfdEventMapper.PostState(data);
         var survivor = ScfdEventMapper.MergedInto(data);
-        if (state is null && survivor is null && !unmatched && !matching)
+        if (state is null && survivor is null && !unmatched && !matching && !sameRevision)
             return;
 
         var instance = page.Source.Instance;
@@ -460,6 +464,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         if (post?.EventId is not { } eventId || (observation.Revision is { } revision && revision < post.LatestRevision))
             return;
 
+        matching |= sameRevision && observation.Revision == post.LatestRevision;
         var item = await db.Events.FirstOrDefaultAsync(row => row.Id == eventId, cancellationToken);
         if (item is null || item.Review == Archived)
             return;
@@ -526,16 +531,20 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     /// <summary>Keeps the post's event source as the source last reported it (E15): its name, its listing's state and when
     /// it was posted, so a consumer shows "via Afisha" and a removed listing, whatever the source's review policy.</summary>
     /// <remarks>
-    ///   - the name: the record's context <c>sourceName</c>, else <c>sourceGroup</c>, else the intake source's name
+    ///   - the name: the payload's context <c>sourceName</c>, else <c>sourceGroup</c> (a selector subscription's source ref
+    ///     names its source there), else the record's own context <c>sourceName</c>, else <c>sourceGroup</c>, else the
+    ///     intake source's name
     ///   - the state: the payload's <c>state</c>; <c>unmatched</c> on <c>post.unmatched</c>, which stays until a revision
     ///     passes the filter again (<c>post.new</c>, <c>post.changed</c>, <c>post.extracted</c>), so a listing's gone or live
     ///     record never hides it
     ///   - the posted time: the payload's <c>postedAt</c>; a record that names none keeps the one before
-    ///   - a quarantined, superseded or stale record (an older revision than stored) changes nothing
+    ///   - a quarantined or stale record (an older revision than stored) changes nothing, and so does a superseded one,
+    ///     except a <c>post.new</c>, <c>post.changed</c> or <c>post.extracted</c> at the stored revision: a selector change
+    ///     re-matching the post, which sets the state from its payload as any matching revision does
     /// </remarks>
     private async Task DescribeSourceAsync(IntakePageState page, ScfdDeliveryRecord record, ObservationEntity observation, JsonElement? data, CancellationToken cancellationToken)
     {
-        if (observation.State == Quarantined || observation.State == Superseded || observation.PostId is not { } postId)
+        if (observation.State == Quarantined || observation.PostId is not { } postId)
             return;
 
         var instance = page.Source.Instance;
@@ -545,6 +554,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             .FirstOrDefaultAsync(cancellationToken);
         if (observation.Revision is { } revision && latest is { } stored && revision < stored)
             return;
+        if (observation.State == Superseded && !(MatchingTypes.Contains(observation.Type) && observation.Revision is { } at && latest == at))
+            return;
 
         var sourceId = $"{instance}/{postId:D}";
         var identity = db.Sources.Local.FirstOrDefault(row => row.CatalogId == page.Catalog.Id && row.Kind == Scfd && row.SourceId == sourceId)
@@ -552,7 +563,10 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         if (identity is null)
             return;
 
-        identity.Name = Fit(ContextValue(record, "sourceName") ?? ContextValue(record, "sourceGroup") ?? page.Source.Name, EventsConstants.MaxNameLength);
+        identity.Name = Fit(
+            ScfdEventMapper.ContextValue(data, "sourceName") ?? ScfdEventMapper.ContextValue(data, "sourceGroup")
+            ?? ContextValue(record, "sourceName") ?? ContextValue(record, "sourceGroup") ?? page.Source.Name,
+            EventsConstants.MaxNameLength);
         if (observation.Type == UnmatchedType)
             identity.State = UnmatchedState;
         else if ((identity.State != UnmatchedState || MatchingTypes.Contains(observation.Type)) && ScfdEventMapper.SourceState(data) is { } state)
@@ -586,8 +600,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         return null;
     }
 
-    /// <summary>Reads a payload's facts as this source delivers them: the mapping, the source's default country and time
-    /// zone, the classifier's kind, then validation; none when the payload is malformed.</summary>
+    /// <summary>Reads a payload's facts as this source delivers them: the mapping, the default country and time zone, the
+    /// classifier's kind, then validation; none when the payload is malformed.</summary>
     private static EventFacts? Facts(EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict) =>
         TryFacts(source, payload, kinds, verdict, out var facts, out _) ? facts : null;
 
@@ -595,6 +609,19 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private static string FactsError(EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict) =>
         TryFacts(source, payload, kinds, verdict, out _, out var reason) ? string.Empty : reason;
 
+    /// <summary>Reads a payload's facts as this source delivers them; false, with the reason, when the payload is malformed.</summary>
+    /// <remarks>
+    ///   - the record's payload <c>context</c> (a selector subscription's per-source defaults, harvest D9) comes before the
+    ///     source's own settings, so one intake source serves channels with different defaults; a context value that is
+    ///     unusable (an unknown kind, a country that is not two capital letters, an unknown zone) is ignored, never a
+    ///     reason to quarantine
+    ///   - the kind, in order: the classifier's, the record's own, the context's <c>defaultKind</c>, the source's
+    ///     <c>DefaultKind</c>, else <c>other</c>; the last two only when the record maps to <c>other</c> and the catalog
+    ///     holds the kind
+    ///   - the country: the record's own, the context's <c>defaultCountry</c>, the source's <c>DefaultCountry</c>; the
+    ///     source's <c>DefaultCities</c> decide for either
+    ///   - the zone: the context's <c>defaultTimeZone</c>, the source's <c>DefaultTimeZone</c>
+    /// </remarks>
     internal static bool TryFacts(
         EventsIntakeSourceOptions source, JsonElement payload, IReadOnlyCollection<string> kinds, IntakeVerdict? verdict,
         out EventFacts facts, out string reason)
@@ -603,19 +630,34 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         if (!ScfdEventMapper.TryMap(payload, kinds, out var mapped, out reason))
             return false;
 
-        // The source's country is the operator's knowledge of the source, so it covers the cities the operator names: a
-        // record naming another city (a foreign fair on a UZ source) keeps no country rather than a wrong one.
-        if (!string.IsNullOrWhiteSpace(source.DefaultCountry) && mapped.Place?.Country is null && InDefaultCountry(source, mapped.Place?.City))
-            mapped = mapped with { Place = (mapped.Place ?? new EventPlace()) with { Country = source.DefaultCountry.Trim().ToUpperInvariant() } };
-        // The source's zone, when the start's stated offset is that zone's own (E08).
-        if (ScfdEventMapper.TimeZone(payload, source.DefaultTimeZone) is { } zone)
-            mapped = mapped with { TimeZone = zone };
+        // The country is the operator's knowledge of the source (or of the channel the selector's ref names), so it covers
+        // the cities the operator names: a record naming another city (a foreign fair on a UZ source) keeps no country
+        // rather than a wrong one.
+        var country = ScfdEventMapper.ContextValue(payload, "defaultCountry") is { Length: 2 } named && named.All(char.IsAsciiLetterUpper)
+            ? named
+            : source.DefaultCountry?.Trim().ToUpperInvariant();
+        if (!string.IsNullOrEmpty(country) && mapped.Place?.Country is null && InDefaultCountry(source, mapped.Place?.City))
+            mapped = mapped with { Place = (mapped.Place ?? new EventPlace()) with { Country = country } };
+        // The zone, when the start's stated offset is that zone's own (E08).
+        var zone = ScfdEventMapper.ContextValue(payload, "defaultTimeZone") is { } stated && TimeZoneInfo.TryFindSystemTimeZoneById(stated, out _)
+            ? stated
+            : source.DefaultTimeZone;
+        if (ScfdEventMapper.TimeZone(payload, zone) is { } resolved)
+            mapped = mapped with { TimeZone = resolved };
         // The kind, in order: the classifier's, when the catalog holds it; the record's own, when the mapper read one; the
-        // source's DefaultKind, when the record maps to `other` and the catalog holds it.
+        // context's defaultKind, then the source's DefaultKind, when the record maps to `other` and the catalog holds it.
         if (verdict?.Kind is { } kind && kinds.Contains(kind))
+        {
             mapped = mapped with { Kind = kind };
-        else if (mapped.Kind == ProposedFacts.UnknownKind && source.DefaultKind?.Trim().ToLowerInvariant() is { Length: > 0 } fallback && kinds.Contains(fallback))
-            mapped = mapped with { Kind = fallback };
+        }
+        else if (mapped.Kind == ProposedFacts.UnknownKind)
+        {
+            var fallback = new[] { ScfdEventMapper.ContextValue(payload, "defaultKind"), source.DefaultKind }
+                .Select(candidate => candidate?.Trim().ToLowerInvariant())
+                .FirstOrDefault(candidate => candidate is { Length: > 0 } && kinds.Contains(candidate));
+            if (fallback is not null)
+                mapped = mapped with { Kind = fallback };
+        }
 
         if (EventFactsValidator.Validate(mapped, ProposedFacts.SourcedKinds(kinds), out var valid) is { } invalid)
         {

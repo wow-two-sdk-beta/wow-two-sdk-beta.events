@@ -2,6 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using WoW.Two.Sdk.Beta.Be.Events;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
@@ -336,6 +337,33 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         after.Revision.Should().Be(before.Revision + 1, "a second poll with nothing new changes nothing");
     }
 
+    /// <summary>An SCFD selector subscription's source ref attaches its channel's default kind to each record's payload
+    /// <c>context</c>, so one intake source gives each channel's records their kind (harvest D9): the source holds no
+    /// <c>DefaultKind</c> of its own, and an event the backlog pass re-maps keeps the kind, because the pass re-reads the
+    /// stored payload, context included.</summary>
+    [Fact]
+    public async Task BacklogPass_ShouldKeepTheContextDefaultKind_WhenRemapping()
+    {
+        var (slug, source) = await SourceAsync(auto => { auto.Review = "auto"; auto.Filter = "selector:ocharo-events"; }, "runway", "exhibition", "trade-fair");
+        fixture.Feed.Subscription(source, new ScfdSubscription(null, EventsConstants.EventSchema, ScfdSubscription.ActiveState, "selector", "ocharo-events"));
+        fixture.Feed.Append(source,
+            ScfdRecords.Post(Guid.NewGuid(), 1, "Build and Co", edit: data => data["context"] = new { catalog = "ocharo-fashion", defaultKind = "exhibition" }),
+            ScfdRecords.Post(Guid.NewGuid(), 1, "Texworld", edit: data => data["context"] = new { catalog = "ocharo-fashion", defaultKind = "trade-fair" }),
+            ScfdRecords.Post(Guid.NewGuid(), 1, "Unmarked fair"));
+        await fixture.PollAsync(source);
+        var published = await EventsAsync(slug, new EventQuery());
+        Kinds(published).Should().Equal(new Dictionary<string, string> { ["Build and Co"] = "exhibition", ["Texworld"] = "trade-fair", ["Unmarked fair"] = "other" });
+
+        foreach (var item in published)
+            await StoreKindAsync(item.Id, "other");
+        var first = await BacklogAsync(source, batch: 100);
+        var second = await BacklogAsync(source, batch: 100);
+
+        first.Should().Be(new BacklogPass(Checked: 3, Remapped: 2, Published: 0), "the two records with a context default regain their kind; the third has none");
+        second.Should().Be(new BacklogPass(Checked: 3, Remapped: 0, Published: 0), "a second pass finds nothing new");
+        Kinds(await EventsAsync(slug, new EventQuery())).Should().Equal(new Dictionary<string, string> { ["Build and Co"] = "exhibition", ["Texworld"] = "trade-fair", ["Unmarked fair"] = "other" });
+    }
+
     [Fact]
     public async Task Intake_ShouldKeepCandidates_WhenTheSourceReviewsManually()
     {
@@ -386,6 +414,19 @@ public sealed class IntakeAutoReviewTests(IntakeFixture fixture) : IClassFixture
         var db = scope.ServiceProvider.GetRequiredService<EventsDbContext>();
         var row = await db.Events.SingleAsync(item => item.Id == id);
         row.Facts = EventsJson.Write(EventsJson.Read<EventFacts>(row.Facts) with { Website = website });
+        await db.SaveChangesAsync();
+    }
+
+    private static Dictionary<string, string> Kinds(IEnumerable<EventModel> events) =>
+        events.ToDictionary(item => item.Facts.Title.Values.Single(), item => item.Facts.Kind);
+
+    /// <summary>Writes a kind into an event's stored facts, as an older mapping left it.</summary>
+    private async Task StoreKindAsync(Guid id, string kind)
+    {
+        await using var scope = fixture.Scope();
+        var db = scope.ServiceProvider.GetRequiredService<EventsDbContext>();
+        var row = await db.Events.SingleAsync(item => item.Id == id);
+        row.Facts = EventsJson.Write(EventsJson.Read<EventFacts>(row.Facts) with { Kind = kind });
         await db.SaveChangesAsync();
     }
 

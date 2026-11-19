@@ -59,6 +59,18 @@ internal static partial class ScfdEventMapper
             ? at.ToUniversalTime()
             : null;
 
+    /// <summary>Reads one string of the payload's top-level <c>context</c> object: the opaque defaults a selector subscription's
+    /// source ref attaches to each record it delivers (harvest D9), such as <c>defaultKind</c>, <c>defaultCountry</c>,
+    /// <c>defaultTimeZone</c>, <c>sourceGroup</c> and <c>sourceName</c>. Trimmed; none when the payload has no context, the
+    /// key is missing or is not text, or the text is blank.</summary>
+    /// <param name="data">The payload.</param>
+    /// <param name="key">The context key, case-sensitive.</param>
+    public static string? ContextValue(JsonElement? data, string key) =>
+        data is { ValueKind: JsonValueKind.Object } value && value.TryGetProperty("context", out var context)
+        && context.ValueKind == JsonValueKind.Object && String(context, key)?.Trim() is { Length: > 0 } text
+            ? text
+            : null;
+
     /// <summary>Reads the post another post absorbed this one into, on a <c>post.merged</c> record; none otherwise.</summary>
     public static Guid? MergedInto(JsonElement? data) =>
         data is { ValueKind: JsonValueKind.Object } value && Guid.TryParse(String(value, "mergedInto"), out var survivor) ? survivor : null;

@@ -66,15 +66,20 @@ public sealed class EventsIntakeSourceOptions
     /// <see cref="PayloadClassifier"/>.</summary>
     public string Classifier { get; set; } = FilterClassifier;
 
-    /// <summary>Gets or sets the name of the SCFD filter the subscription applies, such as <c>ocharo-fashion-v1</c>; it
-    /// names the <see cref="FilterClassifier"/>.</summary>
+    /// <summary>Gets or sets what the subscription applies, which intake checks before every pull and which names the
+    /// <see cref="FilterClassifier"/>: the name of an SCFD filter, such as <c>ocharo-fashion-v1</c>, which the subscription
+    /// carries as its <c>filterKey</c>; or <c>selector:{name}</c>, such as <c>selector:ocharo-events</c>, which binds the
+    /// source to the SCFD selector subscription of that name (a subscription of kind <c>selector</c> follows tags and
+    /// sources, not a filter, and carries no <c>filterKey</c>). The check refuses a subscription that is not that selector.</summary>
     public string? Filter { get; set; }
 
     /// <summary>Gets or sets the lowest confidence a <see cref="PayloadClassifier"/> verdict needs to publish, 0 to 1.</summary>
     public double MinConfidence { get; set; }
 
     /// <summary>Gets or sets the ISO-2 country the source covers, such as <c>UZ</c> for afisha.uz, set on a record whose place
-    /// names none: the operator's knowledge of the source, never a guess about one record.</summary>
+    /// names none: the operator's knowledge of the source, never a guess about one record. A record's payload
+    /// <c>context.defaultCountry</c> (two capital letters; a selector subscription's source ref sets it per channel)
+    /// takes precedence; a value that is not two capital letters is ignored.</summary>
     public string? DefaultCountry { get; set; }
 
     /// <summary>Gets the cities <see cref="DefaultCountry"/> covers, each in any spelling the city table knows (<c>Ташкент</c>,
@@ -86,13 +91,15 @@ public sealed class EventsIntakeSourceOptions
 
     /// <summary>Gets or sets the kind the source's records take when nothing else names one, such as <c>exhibition</c> for an
     /// exhibitions feed: applied when the record maps to <c>other</c>, no classifier gives a kind of the catalog and the
-    /// catalog's taxonomy holds it. A classifier's kind, and a kind the record itself names, take precedence; none leaves
-    /// the record <c>other</c>.</summary>
+    /// catalog's taxonomy holds it. A classifier's kind, a kind the record itself names and the record's payload
+    /// <c>context.defaultKind</c> (the per-channel default a selector subscription's source ref attaches, when the
+    /// taxonomy holds it; an unknown one is ignored) take precedence; none leaves the record <c>other</c>.</summary>
     public string? DefaultKind { get; set; }
 
     /// <summary>Gets or sets the IANA time zone the source's events happen in, such as <c>Asia/Tashkent</c>: an event takes it
     /// as its <c>TimeZone</c> when its start states an offset and that offset is this zone's on that date; a start with no
-    /// time, or another zone's offset, keeps none. None sets no zone.</summary>
+    /// time, or another zone's offset, keeps none. None sets no zone. A record's payload <c>context.defaultTimeZone</c>, when
+    /// the host knows the zone, takes its place for that record.</summary>
     public string? DefaultTimeZone { get; set; }
 
     /// <summary>Gets or sets the organization that must own the source's catalog, its id at its issuer: intake refuses a

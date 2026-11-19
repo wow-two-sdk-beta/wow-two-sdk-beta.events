@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using WoW.Two.Sdk.Beta.Be.Events;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Catalogs;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
@@ -192,6 +193,62 @@ public sealed class IntakeLifecycleTests(IntakeFixture fixture) : IClassFixture<
         stillHeld.ReviewReason.Should().Be(IntakeProcessor.GoneReason, "it matches again, but its listing is gone before the event");
     }
 
+    /// <summary>An SCFD selector change that admits a post again re-matches it at the revision Events already stores
+    /// (<c>post.changed</c>, reason <c>resync</c>), never a newer one: the record is superseded as content, yet it is a revision
+    /// that passes the selector, so it ends the unmatched hold and the source reads live again. A lifecycle record at that
+    /// revision (<c>post.relisted</c>) still ends nothing.</summary>
+    [Fact]
+    public async Task Rematch_ShouldReleaseAnUnmatchedHold_AtTheSameRevision()
+    {
+        var (slug, source) = await SelectorSourceAsync();
+        var post = Guid.NewGuid();
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Beauty expo"));
+        await fixture.PollAsync(source);
+        var published = (await EventsAsync(slug, new EventQuery())).Single();
+
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Beauty expo", type: IntakeProcessor.UnmatchedType) with { Reason = "resync" });
+        await fixture.PollAsync(source);
+        (await EventsAsync(slug, new EventQuery())).Should().BeEmpty("the selector no longer holds the post");
+        (await SourceOfAsync(slug, source, post)).State.Should().Be(EventSourceState.Unmatched);
+
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Beauty expo", type: "post.relisted"));
+        await fixture.PollAsync(source);
+        (await EventsAsync(slug, new EventQuery())).Should().BeEmpty("a relist at the same revision is no match");
+        (await SourceOfAsync(slug, source, post)).State.Should().Be(EventSourceState.Unmatched);
+
+        fixture.Feed.Append(source, ScfdRecords.Post(post, 1, "Beauty expo", type: "post.changed") with { Reason = "resync" });
+        await fixture.PollAsync(source);
+
+        var back = (await EventsAsync(slug, new EventQuery())).Should().ContainSingle("the selector admits the post again").Subject;
+        back.Id.Should().Be(published.Id);
+        back.ReviewedBy.Should().StartWith(IntakeVerdict.ClassifierActor, "the classifier reviews it again");
+        (await SourceOfAsync(slug, source, post)).State.Should().Be(EventSourceState.Live);
+    }
+
+    /// <summary>A selector subscription's source ref names its source in the record's payload <c>context</c> (<c>sourceName</c>,
+    /// else <c>sourceGroup</c>), ahead of the delivery's own context and the intake source's name: one intake source reads
+    /// "via CAEx" and "via Uzexpocentre" from the records it pulls.</summary>
+    [Fact]
+    public async Task SelectorSource_ShouldNameTheSourceFromThePayloadContext()
+    {
+        var (slug, source) = await SelectorSourceAsync();
+        var (named, grouped, enveloped, bare) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        fixture.Feed.Append(source,
+            ScfdRecords.Post(named, 1, "Named", edit: data => data["context"] = new { catalog = "ocharo-fashion", sourceGroup = "caex", sourceName = "CAEx" })
+                with { Context = Context(("sourceName", "Envelope name")) },
+            ScfdRecords.Post(grouped, 1, "Grouped", edit: data => data["context"] = new { catalog = "ocharo-fashion", sourceGroup = "Uzexpocentre" })
+                with { Context = Context(("sourceName", "Envelope name")) },
+            ScfdRecords.Post(enveloped, 1, "Enveloped") with { Context = Context(("sourceGroup", "Afisha Uzbekistan")) },
+            ScfdRecords.Post(bare, 1, "Bare"));
+
+        await fixture.PollAsync(source);
+
+        (await SourceOfAsync(slug, source, named)).Name.Should().Be("CAEx", "the payload's sourceName comes first");
+        (await SourceOfAsync(slug, source, grouped)).Name.Should().Be("Uzexpocentre", "the payload's sourceGroup beats the envelope's sourceName");
+        (await SourceOfAsync(slug, source, enveloped)).Name.Should().Be("Afisha Uzbekistan", "no payload context: the delivery's context names it as before");
+        (await SourceOfAsync(slug, source, bare)).Name.Should().Be(source.Name, "nothing names it: the intake source's name stands");
+    }
+
     /// <summary>SCFD's golden pages through the real intake (E15's check): the post's event source takes the intake source's
     /// name (the pages' context names no source), the posted time and each state the lifecycle page reports, gone and live
     /// again.</summary>
@@ -283,12 +340,26 @@ public sealed class IntakeLifecycleTests(IntakeFixture fixture) : IClassFixture<
 
     private static void Past(Dictionary<string, object?> data) => data["starts"] = new { value = "2026-10-01", precision = "day" };
 
-    private async Task<(string Slug, EventsIntakeSourceOptions Source)> SourceAsync()
+    private async Task<(string Slug, EventsIntakeSourceOptions Source)> SourceAsync(Action<EventsIntakeSourceOptions>? configure = null)
     {
         fixture.Principal.ActAsMember(Guid.NewGuid().ToString("N"));
         var slug = $"lifecycle-{Guid.NewGuid():N}";
         await TestCatalogs.CreateAsync(fixture.Services, slug, CatalogVisibility.Private, "runway");
-        return (slug, fixture.AddSource(slug, auto => auto.Review = EventsIntakeSourceOptions.AutoReview));
+        return (slug, fixture.AddSource(slug, auto =>
+        {
+            auto.Review = EventsIntakeSourceOptions.AutoReview;
+            configure?.Invoke(auto);
+        }));
+    }
+
+    /// <summary>A source bound to an SCFD selector subscription: its filter names the selector, and the subscription answers
+    /// as that selector does (no <c>filterKey</c>, kind and name instead).</summary>
+    private async Task<(string Slug, EventsIntakeSourceOptions Source)> SelectorSourceAsync()
+    {
+        const string name = "ocharo-events";
+        var (slug, source) = await SourceAsync(auto => auto.Filter = $"selector:{name}");
+        fixture.Feed.Subscription(source, new ScfdSubscription(null, EventsConstants.EventSchema, ScfdSubscription.ActiveState, "selector", name));
+        return (slug, source);
     }
 
     private async Task TrackAsync(Guid eventId)
