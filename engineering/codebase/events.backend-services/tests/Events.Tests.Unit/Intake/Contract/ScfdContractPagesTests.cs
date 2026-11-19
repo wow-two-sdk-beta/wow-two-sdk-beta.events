@@ -321,6 +321,21 @@ public sealed partial class ScfdContractPagesTests
         });
     }
 
+    /// <summary>A selector subscription's golden page (<c>selector/01-match.json</c>): the source ref's <c>defaultKind</c> rides
+    /// the payload's <c>context</c>, and the mapper takes the event's kind from it.</summary>
+    [Fact]
+    public async Task SelectorPages_ShouldMapKindFromThePayloadContext()
+    {
+        var (feed, _) = ContractPages.FeedFrom("selector/subscription.json", "selector/01-match.json");
+        var page = await feed.ReadAsync(ContractPages.Source(), cursor: null, limit: 50, CancellationToken.None);
+
+        var record = page.Records.Single();
+        record.Type.Should().Be("post.new");
+        record.Data!.Value.GetProperty("context").GetProperty("defaultKind").GetString().Should().Be("exhibition");
+        IntakeProcessor.TryFacts(ContractPages.Source(), record.Data!.Value, ["exhibition", "runway"], null, out var facts, out var reason).Should().BeTrue(reason);
+        facts.Kind.Should().Be("exhibition", "data.context.defaultKind names it");
+    }
+
     [Fact]
     public async Task Purge_ShouldNameThePostAndCarryNoPayload()
     {

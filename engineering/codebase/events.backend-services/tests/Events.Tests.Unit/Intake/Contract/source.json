@@ -1,7 +1,7 @@
 {
   "repository": "wow-two-sdk-beta/wow-two-sdk-beta.harvest",
-  "tag": "v0.2.30",
-  "commit": "dd66b28ff36a1178b0aa312ba4f44a880f2572c1",
+  "tag": "v0.2.38",
+  "commit": "2f66f5670113b719ba2669e133b9b8edb55678c8",
   "path": "engineering/codebase/harvest.backend-services/tests/Contract/wow2.event.v1",
-  "copiedOn": "2026-11-19"
+  "copiedOn": "2026-11-20"
 }

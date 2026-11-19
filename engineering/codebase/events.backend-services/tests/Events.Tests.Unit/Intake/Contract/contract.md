@@ -6,6 +6,10 @@ SCFD's golden pages of the pull wire Events reads, copied unchanged from harvest
   answer per file, `subscription.json` (the subscription's own `GET`) and `manifest.json` (`sha256` and case names per
   file). Harvest's `EventContractPagesTests` fails on the first byte its host serves differently, so the files are the
   wire. Never edit one here.
+- `wow2.event.v1/selector/` is harvest's `selector/` folder byte for byte: a selector subscription's `subscription.json`,
+  `01-match.json` (`post.new`, kind from `data.context.defaultKind`), `02-change.json` (`post.unmatched` after a selector
+  change) and its own `manifest.json`. `SelectorPages_ShouldMapKindFromThePayloadContext` (unit) and
+  `SelectorReplay_ShouldPublishTheMatch_AndHoldTheUnmatchedAfterTheSelectorChange` (integration) read it.
 - `source.json` records the harvest tag and commit the folder was copied from.
 - `ScfdContractPagesTests` (unit) checks every file against the manifest, reads each page through the real
   `ScfdObservationFeed`, and pins what Events reads from it: facts, place, time zone, lifecycle state, classification,

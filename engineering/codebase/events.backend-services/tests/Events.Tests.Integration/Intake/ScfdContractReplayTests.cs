@@ -126,6 +126,67 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
         rows.Should().ContainSingle(row => row.Type == "post.purged");
     }
 
+    /// <summary>SCFD's selector pages (<c>selector/</c>): a source bound to <c>selector:ocharo-events</c> publishes the matching
+    /// post with the kind its payload context names, and holds it for a person when a selector change makes it stop
+    /// matching.</summary>
+    [Fact]
+    public async Task SelectorReplay_ShouldPublishTheMatch_AndHoldTheUnmatchedAfterTheSelectorChange()
+    {
+        fixture.Principal.ActAsMember(Guid.NewGuid().ToString("N"));
+        var slug = $"selector-{Guid.NewGuid():N}";
+        await TestCatalogs.CreateAsync(fixture.Services, slug, CatalogVisibility.Private, "exhibition");
+        try
+        {
+            var source = ContractPages.Source(auto =>
+            {
+                auto.Name = $"ocharo-events-{Guid.NewGuid():N}";
+                auto.Catalog = slug;
+                auto.Filter = "selector:ocharo-events";
+                auto.Review = EventsIntakeSourceOptions.AutoReview;
+                auto.OwnerOrg = fixture.Principal.OrganizationId;
+                auto.OwnerIssuer = fixture.Principal.Issuer;
+            });
+            var (feed, _) = ContractPages.FeedFrom("selector/subscription.json", "selector/01-match.json", "selector/02-change.json");
+            var served = new List<ObservationFeedPage>();
+
+            var subscription = await feed.ReadSubscriptionAsync(source, CancellationToken.None);
+            subscription.Kind.Should().Be("selector");
+            subscription.Name.Should().Be("ocharo-events");
+            subscription.MismatchWith(source).Should().BeNull("the selector's name is the filter");
+
+            async Task PullAsync()
+            {
+                await using var scope = fixture.Scope();
+                var processor = new IntakeProcessor(scope.ServiceProvider.GetRequiredService<EventsDbContext>(), new Recording(feed, served), fixture.Clock, []);
+                (await processor.ProcessPageAsync(source, CancellationToken.None)).ValueOrThrow().Should().Be(new IntakePageOutcome(1, Quarantined: 0, HasMore: false));
+            }
+
+            await using var read = fixture.Scope();
+            var events = read.ServiceProvider.GetRequiredService<ICatalogEventsBroker>();
+
+            await PullAsync();
+            var published = (await events.ListAsync(slug, new EventQuery())).ValueOrThrow().Items.Should().ContainSingle().Subject;
+            published.Facts.Kind.Should().Be("exhibition", "01's source ref names it in data.context.defaultKind");
+            published.ReviewedBy.Should().Be("classifier:filter:selector:ocharo-events");
+
+            await PullAsync();
+            var held = (await events.ListAsync(slug, new EventQuery { Review = EventReviewState.Candidate })).ValueOrThrow().Items.Should().ContainSingle().Subject;
+            held.ReviewedBy.Should().Be($"{IntakeProcessor.SourceActor}{source.Instance}");
+            held.ReviewReason.Should().Be(IntakeProcessor.UnmatchedReason);
+            (await events.ListAsync(slug, new EventQuery())).ValueOrThrow().Items.Should().BeEmpty("the change withdrew it from the published list");
+        }
+        finally
+        {
+            // The golden pages reuse the first replay's post and delivery ids, and the intake dedups on them across sources: this
+            // test removes its own rows so the other replay in the shared database still sees its pages as new.
+            await using var cleanup = fixture.Scope();
+            var db = cleanup.ServiceProvider.GetRequiredService<EventsDbContext>();
+            var catalogId = await db.Catalogs.Where(row => row.Slug == slug).Select(row => row.Id).SingleAsync();
+            await db.Observations.Where(row => row.CatalogId == catalogId).ExecuteDeleteAsync();
+            await db.SourcePosts.Where(row => row.CatalogId == catalogId).ExecuteDeleteAsync();
+        }
+    }
+
     /// <summary>Reads an event's source title: its one title, or the one beside SCFD's machine <c>en</c> (OE06).</summary>
     private static string SourceTitle(EventModel item) =>
         item.Facts.Title.OrderBy(pair => pair.Key == "en" && item.Facts.Title.Count > 1 ? 1 : 0).First().Value;

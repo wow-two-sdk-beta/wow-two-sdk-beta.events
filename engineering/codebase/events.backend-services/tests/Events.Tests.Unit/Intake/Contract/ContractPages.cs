@@ -52,9 +52,15 @@ internal static class ContractPages
     /// the subscription's own <c>GET</c> with <c>subscription.json</c>.</summary>
     /// <param name="pages">The page files a pull answers with, one per pull.</param>
     /// <returns>The feed, and the handler that recorded each pull's cursor.</returns>
-    public static (ScfdObservationFeed Feed, ContractScfdHandler Scfd) Feed(params string[] pages)
+    public static (ScfdObservationFeed Feed, ContractScfdHandler Scfd) Feed(params string[] pages) => FeedFrom(SubscriptionName, pages);
+
+    /// <summary>Builds the real feed over a handler that answers the subscription's own <c>GET</c> with the given file, for
+    /// pages in a subfolder such as <c>selector/</c>.</summary>
+    /// <param name="subscription">The subscription file the handler answers with, relative to the schema folder.</param>
+    /// <param name="pages">The page files a pull answers with, one per pull.</param>
+    public static (ScfdObservationFeed Feed, ContractScfdHandler Scfd) FeedFrom(string subscription, params string[] pages)
     {
-        var handler = new ContractScfdHandler(pages);
+        var handler = new ContractScfdHandler(pages, subscription);
         return (new ScfdObservationFeed(new SingleHandlerClientFactory(handler)), handler);
     }
 
@@ -89,7 +95,8 @@ internal sealed record ContractFile(string Name, string Sha256, IReadOnlyList<st
 
 /// <summary>Stands in for SCFD's HTTP API over the golden files: the bytes harvest's host served, unchanged.</summary>
 /// <param name="pages">The page files a pull answers with, one per pull, in order.</param>
-internal sealed class ContractScfdHandler(IReadOnlyList<string> pages) : HttpMessageHandler
+/// <param name="subscription">The file the subscription's own <c>GET</c> answers with.</param>
+internal sealed class ContractScfdHandler(IReadOnlyList<string> pages, string subscription = ContractPages.SubscriptionName) : HttpMessageHandler
 {
     private int pulls;
 
@@ -100,10 +107,10 @@ internal sealed class ContractScfdHandler(IReadOnlyList<string> pages) : HttpMes
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var path = request.RequestUri!.AbsolutePath;
-        var subscription = $"/api/subscriptions/{ContractPages.SubscriptionId}";
-        if (request.Method == HttpMethod.Get && path == subscription)
-            return Task.FromResult(Json(ContractPages.Bytes(ContractPages.SubscriptionName)));
-        if (request.Method != HttpMethod.Get || path != subscription + "/events" || pulls >= pages.Count)
+        var route = $"/api/subscriptions/{ContractPages.SubscriptionId}";
+        if (request.Method == HttpMethod.Get && path == route)
+            return Task.FromResult(Json(ContractPages.Bytes(subscription)));
+        if (request.Method != HttpMethod.Get || path != route + "/events" || pulls >= pages.Count)
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
 
         var cursor = request.RequestUri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
