@@ -194,6 +194,49 @@ describe('console routes', () => {
     expect(accept.headers.get('X-Csrf-Token')).toBe('csrf-1');
   });
 
+  it('splits a source off an opened event with the session antiforgery token, then reloads the page', async () => {
+    const source = (id: string, name: string, matchedBy?: string) => ({
+      kind: 'scfd',
+      id: `scfd/${id}`,
+      name,
+      state: 'live',
+      firstSeenAtUtc: '2026-11-01T10:00:00Z',
+      lastSeenAtUtc: '2026-11-02T10:00:00Z',
+      ...(matchedBy ? { matchedBy } : {}),
+    });
+    const fair = {
+      ...candidate,
+      id: 'e2',
+      review: 'published',
+      revision: 4,
+      sources: [source('p1', 'Afisha Uzbekistan'), source('p2', 'Uzexpocentre', 'rule:title-date-city')],
+    };
+    const requests = serve(signedIn, (url, request) => {
+      if (request.method === 'POST' && url.pathname.endsWith('/e2/split'))
+        return Response.json({ data: { ...candidate, id: 'c3' } });
+      if (url.pathname.endsWith('/events/e2')) return Response.json({ data: fair });
+      return url.pathname.endsWith('/events')
+        ? Response.json({ data: { items: [fair], nextCursor: null } })
+        : undefined;
+    });
+    const wrapper = await renderAt('/events');
+
+    await wrapper.get('[data-test="catalog-event-row"] button').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-test="source-matched"]').text()).toContain('Joined by rule');
+    const press = (text: string) =>
+      [...wrapper.element.querySelectorAll('button')].find((item) => item.textContent?.trim() === text)?.click();
+    press('Split source');
+    await flushPromises();
+    press('Confirm split');
+    await flushPromises();
+
+    const split = requests.find((request) => request.method === 'POST')!;
+    expect(new URL(split.url).pathname).toBe('/api/events/v1/catalogs/ocharo/review/e2/split');
+    expect(split.headers.get('X-Csrf-Token')).toBe('csrf-1');
+    expect(await split.json()).toEqual({ kind: 'scfd', sourceId: 'scfd/p1', expectedRevision: 4 });
+  });
+
   it('renders observations, catalog events and intake', async () => {
     serve(signedIn);
 

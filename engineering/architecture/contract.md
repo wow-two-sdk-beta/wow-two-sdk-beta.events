@@ -11,7 +11,7 @@
 |---|---|---|
 | `IEventCatalogsBroker` | `GetAsync(slug)`, `ListAsync()`, `PutAsync(slug, CatalogSpec)` | reads: owner org, or anyone for a public catalog; put: creates for the caller's org, or replaces a catalog it owns |
 | `ICatalogEventsBroker` | `ListAsync(catalog, EventQuery)`, `GetAsync`, `CreateAsync(EventSpec)`, `ProposeAsync(EventSpec)`, `UpdateAsync`, `ArchiveAsync(expectedRevision)` | reads: published events for readers, every state for the owner; writes: owner org; a curator's entry publishes, a member's proposal publishes in a private catalog and is a candidate in a shared or public one |
-| `IEventReviewBroker` | `ListAsync(ReviewQuery)`, `AcceptAsync(id, ReviewDecision)`, `RejectAsync`, `MergeAsync(id, MergeDecision)`, `ApplyChangeAsync(observationId, ReviewDecision)`, `DismissChangeAsync`, `ListObservationsAsync(ObservationQuery)`, `GetObservationAsync` | owner org |
+| `IEventReviewBroker` | `ListAsync(ReviewQuery)`, `AcceptAsync(id, ReviewDecision)`, `RejectAsync`, `MergeAsync(id, MergeDecision)`, `SplitSourceAsync(id, SourceSplitDecision)` (one source leaves an event for a new candidate; the pair is kept apart), `ApplyChangeAsync(observationId, ReviewDecision)`, `DismissChangeAsync`, `ListObservationsAsync(ObservationQuery)`, `GetObservationAsync` | owner org |
 | `IEventTrackingBroker` | `ListAsync(catalog, TrackingQuery)`, `GetAsync(catalog, eventId)`, `PutAsync(TrackingSpec)`, `DeleteAsync(expectedRevision)`, `GetHistoryAsync`, `GetSummaryAsync(today)` and `GetSummaryAsync(TrackingSummaryQuery)` (a default interface method, so an older implementation ignores the kinds) | the caller's active organization; its own tracking only |
 | `IEventWorkflowsBroker` | `GetAsync()`, `PutAsync(WorkflowSpec)` | the caller's active organization |
 | `IEventImportsBroker` | `ImportAsync(catalog, EventImportBundle, dryRun)` | owner org; tracking lands in the caller's org |
@@ -48,6 +48,7 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 | `POST …/catalogs/{c}/review/{id}/accept` (body `ReviewDecision`) | review `AcceptAsync` | `events.review` · `events:review` |
 | `POST …/catalogs/{c}/review/{id}/reject?expectedRevision=` | review `RejectAsync` | `events.review` · `events:review` |
 | `POST …/catalogs/{c}/review/{id}/merge` (body `MergeDecision`) | review `MergeAsync` | `events.review` · `events:review` |
+| `POST …/catalogs/{c}/review/{id}/split` (body `SourceSplitDecision`: `kind`, `sourceId`, `expectedRevision`; answers the new candidate) | review `SplitSourceAsync` | `events.review` · `events:review` |
 | `POST …/catalogs/{c}/observations/{id}/apply` (body `ReviewDecision`) | review `ApplyChangeAsync` | `events.review` · `events:review` |
 | `POST …/catalogs/{c}/observations/{id}/dismiss` | review `DismissChangeAsync` | `events.review` · `events:review` |
 | `GET …/catalogs/{c}/observations?state&eventId&cursor&limit` | review `ListObservationsAsync` | `events.review` · `events:review` |

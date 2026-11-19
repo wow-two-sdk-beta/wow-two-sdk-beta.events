@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ReviewQueue } from '../src/admin';
 import type { ReviewItemModel } from '../src/contracts';
-import { envelope, eventModel, fakeService, observationModel } from './Fixtures';
+import { envelope, eventModel, fakeService, observationModel, sourceModel } from './Fixtures';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -125,6 +125,37 @@ describe('review queue', () => {
     button(wrapper, 'Dismiss')?.click();
     await flushPromises();
     expect(new URL(requests[3]!.url).pathname).toBe('/api/events/v1/catalogs/ocharo/observations/o2/dismiss');
+  });
+
+  it('splits a source off a candidate that holds two, then reloads the queue', async () => {
+    const twoSources: ReviewItemModel = {
+      event: eventModel(
+        'candidate-2',
+        { title: { und: 'TITF 2026' } },
+        {
+          review: 'candidate',
+          revision: 3,
+          sources: [sourceModel('afisha'), sourceModel('uzexpo', { matchedBy: 'rule:title-date-city' })],
+        },
+      ),
+      observations: [],
+    };
+    const { wrapper, requests } = await render(
+      queue(twoSources),
+      () => envelope(eventModel('candidate-3', {}, { review: 'candidate' })),
+      queue(),
+    );
+
+    expect(wrapper.get('[data-test="source-matched"]').text()).toContain('Joined by rule');
+    button(wrapper, 'Split source')?.click();
+    await flushPromises();
+    button(wrapper, 'Confirm split')?.click();
+    await flushPromises();
+
+    expect(new URL(requests[1]!.url).pathname).toBe('/api/events/v1/catalogs/ocharo/review/candidate-2/split');
+    expect(await requests[1]!.json()).toEqual({ kind: 'scfd', sourceId: 'scfd/afisha', expectedRevision: 3 });
+    expect(wrapper.get('[role="status"]').text()).toBe('Source split into a new candidate.');
+    expect(wrapper.text()).toContain('Nothing to review.');
   });
 
   it('says which permission is missing on a 403', async () => {

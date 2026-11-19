@@ -222,6 +222,129 @@ internal sealed class ModuleReviewBroker(EventsDbContext db, IEventsCallerServic
     }
 
     /// <inheritdoc />
+    public async Task<Result<EventModel>> SplitSourceAsync(string catalog, Guid id, SourceSplitDecision decision, CancellationToken cancellationToken = default)
+    {
+        var owned = await OwnedAsync(catalog, cancellationToken);
+        if (owned is not Result<CatalogEntity>.Success { Value: var found })
+            return Result<EventModel>.Fail(Error(owned));
+        if (decision is null)
+            return Result<EventModel>.Fail(EventsErrors.Invalid("decision", "required"));
+        var sourceId = decision.SourceId?.Trim();
+        if (string.IsNullOrEmpty(sourceId))
+            return Result<EventModel>.Fail(EventsErrors.Invalid("sourceId", "required"));
+        if (decision.Kind == EventSourceKind.Import)
+            return Result<EventModel>.Fail(EventsErrors.Invalid("kind", "scfd or manual: an import's source stays with its import"));
+
+        var row = await db.Events.FirstOrDefaultAsync(item => item.Id == id && item.CatalogId == found.Id, cancellationToken);
+        if (row is null)
+            return Result<EventModel>.Fail(EventsErrors.EventNotFound());
+        if (row.Review != Candidate && row.Review != Published)
+            return Result<EventModel>.Fail(EventsErrors.ReviewStateInvalid("a candidate or published"));
+        if (row.Revision != decision.ExpectedRevision)
+            return Result<EventModel>.Fail(EventsErrors.RevisionConflict());
+
+        var kind = EventsLabels.Of(decision.Kind);
+        var sources = await db.Sources.Where(source => source.EventId == row.Id).ToListAsync(cancellationToken);
+        var leaving = sources.FirstOrDefault(source => source.Kind == kind && source.SourceId == sourceId);
+        if (leaving is null)
+            return Result<EventModel>.Fail(EventsErrors.Invalid("sourceId", "a source of the event"));
+        if (sources.Count < 2)
+            return Result<EventModel>.Fail(EventsErrors.Invalid("sourceId", "not the event's only source: it has nowhere to split from"));
+
+        var now = time.StoredUtcNow();
+        var post = decision.Kind == EventSourceKind.Scfd ? await PostOfAsync(found.Id, row.Id, sourceId, cancellationToken) : null;
+        var facts = await FactsOfAsync(row, post, cancellationToken);
+        var created = new CatalogEventEntity
+        {
+            Id = Guid.CreateVersion7(now),
+            CatalogId = found.Id,
+            Review = Candidate,
+            Revision = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await EventWrites.ApplyAsync(db, created, facts, isNew: true, cancellationToken);
+        db.Events.Add(created);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (EventWrites.ErrorOf(exception) is not null)
+        {
+            return Result<EventModel>.Fail(EventWrites.ErrorOf(exception)!);
+        }
+
+        // The source, its post and its evidence now speak for the new candidate: a later revision lands there.
+        if (post is not null)
+        {
+            await db.SourcePosts.Where(item => item.CatalogId == found.Id && item.SourceInstance == post.SourceInstance && item.PostId == post.PostId)
+                .ExecuteUpdateAsync(set => set.SetProperty(item => item.EventId, created.Id), cancellationToken);
+            await db.Observations.Where(item => item.CatalogId == found.Id && item.SourceInstance == post.SourceInstance && item.PostId == post.PostId
+                    && item.EventId == row.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(item => item.EventId, created.Id), cancellationToken);
+        }
+
+        // The source it started the new candidate from; the event it left follows the first source still on it.
+        var wasLead = leaving.MatchedBy is null;
+        leaving.EventId = created.Id;
+        leaving.MatchedBy = null;
+        if (wasLead && sources.Where(source => source != leaving).All(source => source.MatchedBy is not null))
+        {
+            var successor = sources.Where(source => source != leaving).OrderBy(source => source.FirstSeenAt).First();
+            successor.MatchedBy = null;
+        }
+
+        // The pair never matches again: intake attaches no later delivery of this source to the event it left.
+        var caller = callers.Current;
+        db.KeepApart.Add(new EventKeepApartEntity
+        {
+            CatalogId = found.Id,
+            EventId = row.Id,
+            SourceKind = kind,
+            SourceId = sourceId,
+            CreatedAt = now,
+            CreatedBy = ReviewStamp.PersonActor + (caller.Subject ?? "unknown"),
+        });
+        row.Revision++;
+        row.UpdatedAt = now;
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (EventWrites.ErrorOf(exception) is not null)
+        {
+            return Result<EventModel>.Fail(EventWrites.ErrorOf(exception)!);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return Result<EventModel>.Ok(await EventModels.LoadAsync(db, found.Slug, created, cancellationToken));
+    }
+
+    /// <summary>Finds the SCFD post behind a source identity (<c>{instance}/{post}</c>) as the event holds it.</summary>
+    private async Task<SourcePostEntity?> PostOfAsync(Guid catalogId, Guid eventId, string sourceId, CancellationToken cancellationToken)
+    {
+        var cut = sourceId.LastIndexOf('/');
+        if (cut <= 0 || !Guid.TryParse(sourceId[(cut + 1)..], out var postId))
+            return null;
+
+        var instance = sourceId[..cut];
+        return await db.SourcePosts.AsNoTracking().FirstOrDefaultAsync(
+            item => item.CatalogId == catalogId && item.SourceInstance == instance && item.PostId == postId && item.EventId == eventId, cancellationToken);
+    }
+
+    /// <summary>Reads the facts the leaving source reported (its post's latest proposal), else the event's own, with no key.</summary>
+    private async Task<EventFacts> FactsOfAsync(CatalogEventEntity row, SourcePostEntity? post, CancellationToken cancellationToken)
+    {
+        var proposed = post is null
+            ? null
+            : await db.Observations.AsNoTracking().Where(item => item.Id == post.LatestObservationId).Select(item => item.Proposed).FirstOrDefaultAsync(cancellationToken);
+        return (proposed is null ? EventsJson.Read<EventFacts>(row.Facts) : EventsJson.Read<EventFacts>(proposed)) with { Key = null };
+    }
+
+    /// <inheritdoc />
     public async Task<Result<EventModel>> ApplyChangeAsync(string catalog, Guid observationId, ReviewDecision decision, CancellationToken cancellationToken = default)
     {
         var owned = await OwnedAsync(catalog, cancellationToken);

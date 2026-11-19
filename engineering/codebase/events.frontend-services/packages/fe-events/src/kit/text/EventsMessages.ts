@@ -310,6 +310,23 @@ export const EventsMessages = {
   mergeInto: entry('Merge into…', 'Объединить с…', 'Birlashtirish…'),
   mergeSearch: entry('Search published events', 'Поиск опубликованных', 'E’lon qilinganlardan qidirish'),
   merge: entry('Merge', 'Объединить', 'Birlashtirish'),
+  matchedByRule: entry(
+    'Joined by rule: same title, dates and city',
+    'Присоединён по правилу: то же название, даты и город',
+    'Qoida bo‘yicha qo‘shilgan: nomi, sanalari va shahri bir xil',
+  ),
+  splitSource: entry('Split source', 'Отделить источник', 'Manbani ajratish'),
+  confirmSplitSource: entry('Confirm split', 'Подтвердить отделение', 'Ajratishni tasdiqlash'),
+  splitSourceNote: entry(
+    'It leaves for a new candidate and is never attached to this event again.',
+    'Он уйдёт в новую заявку и больше не присоединится к этому мероприятию.',
+    'U yangi nomzodga o‘tadi va bu tadbirga boshqa qo‘shilmaydi.',
+  ),
+  split: entry(
+    'Source split into a new candidate.',
+    'Источник отделён в новую заявку.',
+    'Manba yangi nomzodga ajratildi.',
+  ),
   apply: entry('Apply', 'Применить', 'Qo‘llash'),
   applyWithEdits: entry('Apply with edits', 'Применить с правками', 'Tahrir bilan qo‘llash'),
   dismiss: entry('Dismiss', 'Отклонить', 'Bekor qilish'),

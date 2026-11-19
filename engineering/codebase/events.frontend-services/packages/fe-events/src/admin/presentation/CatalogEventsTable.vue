@@ -23,7 +23,7 @@ import { eventsText } from '../../kit/text/EventsMessages';
 
 /**
  * Lists every event of a catalog the caller owns, in every review state, with its dates, place, pending changes and a
- * two-step archive. Opening a row emits `open`.
+ * two-step archive. Opening a row emits `open` with its id and the event as listed.
  */
 defineOptions({ name: 'CatalogEventsTable' });
 
@@ -38,7 +38,7 @@ const props = withDefaults(
   { locale: 'en', kinds: undefined, pageSize: 50 },
 );
 
-const emit = defineEmits<{ open: [id: string]; archived: [event: EventModel] }>();
+const emit = defineEmits<{ open: [id: string, event: EventModel]; archived: [event: EventModel] }>();
 
 const review = shallowRef<EventReviewState | ''>('');
 const search = shallowRef('');
@@ -195,7 +195,7 @@ const reviewVariant = (state: EventReviewState) =>
                 <button
                   type="button"
                   class="text-left font-medium underline-offset-4 hover:underline"
-                  @click="emit('open', item.id)"
+                  @click="emit('open', item.id, item)"
                 >
                   {{ eventTitle(item.facts, locale) }}
                 </button>

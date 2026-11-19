@@ -53,6 +53,7 @@ export {
   type ObservationQuery,
   type ObservationState,
   type ReviewDecision,
+  type SourceSplitDecision,
   type ReviewItemModel,
   type ReviewPage,
   type ReviewQuery,

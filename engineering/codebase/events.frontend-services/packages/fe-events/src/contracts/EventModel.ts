@@ -23,6 +23,11 @@ export interface EventSourceModel {
   readonly state?: EventSourceState | null;
   /** When the source posted the listing (UTC); none when it does not say. */
   readonly postedAtUtc?: string | null;
+  /**
+   * The rule that attached the source to this event after another source started it, such as `rule:title-date-city`;
+   * none for the source the event started from, an import's and a curator's.
+   */
+  readonly matchedBy?: string | null;
   readonly firstSeenAtUtc: string;
   readonly lastSeenAtUtc: string;
 }

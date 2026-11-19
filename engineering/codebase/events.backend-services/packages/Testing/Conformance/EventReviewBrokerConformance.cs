@@ -7,7 +7,8 @@ using Xunit;
 namespace WoW.Two.Sdk.Beta.Be.Events.Testing.Conformance;
 
 /// <summary>The contract of <see cref="IEventReviewBroker"/>: the owner organization reviews; only a candidate is accepted,
-/// rejected or merged, at the revision read; observations answer 404 outside the catalog's own.</summary>
+/// rejected or merged, at the revision read; a source splits off an event that holds another one; observations answer 404
+/// outside the catalog's own.</summary>
 public abstract class EventReviewBrokerConformance : EventsConformance
 {
     /// <summary>A proposal joins the review queue.</summary>
@@ -103,6 +104,92 @@ public abstract class EventReviewBrokerConformance : EventsConformance
         archived.Review.Should().Be(EventReviewState.Archived);
         archived.MergedInto.Should().Be(target.Id);
     }
+
+    /// <summary>Splitting a source off an event moves it to a new candidate that holds the event's facts, leaves the event its
+    /// other source and queues the candidate for review.</summary>
+    [Fact]
+    public async Task SplitSourceAsync_ShouldMoveTheSourceToANewCandidate_AndLeaveTheEventItsOther()
+    {
+        var owner = NewMember();
+        var catalog = await CreateReviewedCatalogAsync(owner);
+        var (merged, leaving, kept) = await MergedEventAsync(owner, catalog.Slug);
+
+        var split = Value(await As(owner).Review.SplitSourceAsync(catalog.Slug, merged.Id, Decision(leaving, merged.Revision)));
+        var left = Value(await As(owner).Events.GetAsync(catalog.Slug, merged.Id));
+
+        split.Id.Should().NotBe(merged.Id);
+        split.Review.Should().Be(EventReviewState.Candidate);
+        split.Facts.Title.Should().Equal(merged.Facts.Title, "a curator's source reports no facts of its own");
+        split.Facts.Key.Should().BeNull("the key stays with the event");
+        split.Sources.Should().ContainSingle().Which.Id.Should().Be(leaving.Id);
+        left.Sources.Should().ContainSingle().Which.Id.Should().Be(kept.Id);
+        left.Review.Should().Be(EventReviewState.Published);
+        left.Revision.Should().BeGreaterThan(merged.Revision);
+        Value(await As(owner).Review.ListAsync(catalog.Slug, new ReviewQuery())).Items.Select(item => item.Event.Id).Should().Contain(split.Id);
+    }
+
+    /// <summary>A split needs another source to stay: an event's only source, or one it does not hold, fails validation.</summary>
+    [Fact]
+    public async Task SplitSourceAsync_ShouldFailValidation_WhenTheSourceIsTheOnlyOneOrNotTheEvents()
+    {
+        var owner = NewMember();
+        var catalog = await CreateReviewedCatalogAsync(owner);
+        var alone = await CreateEventAsync(owner, catalog.Slug);
+        var (merged, leaving, _) = await MergedEventAsync(owner, catalog.Slug);
+        var review = As(owner).Review;
+
+        Error(await review.SplitSourceAsync(catalog.Slug, alone.Id, Decision(alone.Sources.Single(), alone.Revision))).Type.Should().Be(AppErrorType.Validation);
+        Error(await review.SplitSourceAsync(catalog.Slug, merged.Id, new SourceSplitDecision { Kind = leaving.Kind, SourceId = "nobody/none", ExpectedRevision = merged.Revision }))
+            .Type.Should().Be(AppErrorType.Validation);
+        Error(await review.SplitSourceAsync(catalog.Slug, merged.Id, new SourceSplitDecision { Kind = EventSourceKind.Import, SourceId = leaving.Id, ExpectedRevision = merged.Revision }))
+            .Type.Should().Be(AppErrorType.Validation);
+        Value(await As(owner).Events.GetAsync(catalog.Slug, merged.Id)).Sources.Should().HaveCount(2, "a refused split changes nothing");
+    }
+
+    /// <summary>A split at a stale revision conflicts, and so does one on an event that is neither a candidate nor published.</summary>
+    [Fact]
+    public async Task SplitSourceAsync_ShouldFailConflict_WhenTheRevisionIsStale_OrTheEventIsRejected()
+    {
+        var owner = NewMember();
+        var catalog = await CreateReviewedCatalogAsync(owner);
+        var (merged, leaving, _) = await MergedEventAsync(owner, catalog.Slug);
+        var rejected = await ProposeEventAsync(owner, catalog.Slug);
+        Value(await As(owner).Review.RejectAsync(catalog.Slug, rejected.Id, rejected.Revision));
+
+        Error(await As(owner).Review.SplitSourceAsync(catalog.Slug, merged.Id, Decision(leaving, merged.Revision + 1))).Type.Should().Be(AppErrorType.Conflict);
+        Error(await As(owner).Review.SplitSourceAsync(catalog.Slug, rejected.Id, Decision(rejected.Sources.Single(), rejected.Revision + 1))).Type.Should().Be(AppErrorType.Conflict);
+    }
+
+    /// <summary>Another organization splits nothing of a private catalog's events: 404; an unknown event is 404 too.</summary>
+    [Fact]
+    public async Task SplitSourceAsync_ShouldFailNotFound_ForAnotherOrganization_OrAnUnknownEvent()
+    {
+        var owner = NewMember();
+        var catalog = await CreateReviewedCatalogAsync(owner);
+        var (merged, leaving, _) = await MergedEventAsync(owner, catalog.Slug);
+
+        Error(await As(NewMember()).Review.SplitSourceAsync(catalog.Slug, merged.Id, Decision(leaving, merged.Revision))).Type.Should().Be(AppErrorType.NotFound);
+        Error(await As(owner).Review.SplitSourceAsync(catalog.Slug, Guid.NewGuid(), Decision(leaving, 1))).Type.Should().Be(AppErrorType.NotFound);
+    }
+
+    /// <summary>Builds an event with two sources the way a reviewer's merge does: a curated event and a member's proposal
+    /// merged into it. Returns the event, the source that joined (the proposal's) and the one it started from.</summary>
+    private async Task<(EventModel Event, EventSourceModel Joined, EventSourceModel Started)> MergedEventAsync(EventsActor owner, string slug)
+    {
+        var target = await CreateEventAsync(owner, slug, Facts("Shared fair", "2026-12-05", key: $"shared-{Guid.NewGuid():N}"[..30]));
+        var candidate = await ProposeEventAsync(owner, slug, Facts("Shared fair twin", "2026-12-05"));
+        Value(await As(owner).Review.MergeAsync(slug, candidate.Id, new MergeDecision
+        {
+            IntoId = target.Id,
+            ExpectedRevision = candidate.Revision,
+            IntoExpectedRevision = target.Revision,
+        }));
+        var merged = Value(await As(owner).Events.GetAsync(slug, target.Id));
+        return (merged, candidate.Sources.Single(), target.Sources.Single());
+    }
+
+    private static SourceSplitDecision Decision(EventSourceModel source, int revision) =>
+        new() { Kind = source.Kind, SourceId = source.Id, ExpectedRevision = revision };
 
     /// <summary>Another organization reaches no queue of a private catalog: 404.</summary>
     [Fact]

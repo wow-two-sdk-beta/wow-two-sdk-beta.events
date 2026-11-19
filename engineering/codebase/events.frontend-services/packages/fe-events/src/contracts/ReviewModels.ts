@@ -90,6 +90,13 @@ export interface ReviewDecision {
   readonly facts?: EventFacts | null;
 }
 
+/** Mirrors `SourceSplitDecision`: the source that leaves an event for a candidate of its own, and the revision read. */
+export interface SourceSplitDecision {
+  readonly kind: EventSourceKind;
+  readonly sourceId: string;
+  readonly expectedRevision: number;
+}
+
 /** Mirrors `MergeDecision`: merging a candidate into an existing event. */
 export interface MergeDecision {
   readonly intoId: string;

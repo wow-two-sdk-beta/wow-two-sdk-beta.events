@@ -39,6 +39,7 @@ export const EventsRoutes = {
   reject: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.review}/${segment(id)}/reject`,
   reopen: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.review}/${segment(id)}/reopen`,
   merge: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.review}/${segment(id)}/merge`,
+  splitSource: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.review}/${segment(id)}/split`,
   observations: (slug: string) => `${catalog(slug)}/${EventsRouteConstants.observations}`,
   observation: (slug: string, id: string) => `${catalog(slug)}/${EventsRouteConstants.observations}/${segment(id)}`,
   applyChange: (slug: string, id: string) =>

@@ -29,7 +29,7 @@ to the consumer's Tailwind sources:
 |---|---|
 | `./contracts` | The TypeScript mirror of the be contract (camelCase JSON, enums as camelCase strings, localized text as `Record<locale, string>`), its constants and `EventsRoutes`, the route builders, with the query mappers |
 | `./kit` | `createEventsClient` (every route, `{ data }` unwrapped, failures mapped by status), date helpers honest about precision and certainty (`formatEventWhen`, `formatEventSpan`, `groupEventsByMonth`, `sortEventsByDate`), `downloadEventsCalendar` and one event's `createEventCalendar`, the title, price, region and source helpers (`pickTextEntry`, `eventTitleLanguage`, `formatOfferPrice`, `regionQuery`, `listingRemoved`), and `EventsFeed`, `EventCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm` |
-| `./admin` | The reviewer's and admin's screens: `ReviewQueue`, `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`, `ImportPanel`, and scheduled digests: `DigestsPanel` (list, editor, run history), `DigestEditor`, `DigestRunHistory`, `DigestRecipients`, `TelegramText` |
+| `./admin` | The reviewer's and admin's screens: `ReviewQueue`, `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`, `EventSourcesPanel` (an event's sources with the split of a joined one), `ImportPanel`, and scheduled digests: `DigestsPanel` (list, editor, run history), `DigestEditor`, `DigestRunHistory`, `DigestRecipients`, `TelegramText` |
 
 - Dates never claim more than they know: a month stays a month (`Oct 2026`), an estimate reads `≈ Oct 2026 (expected)`
   even when it names a day or a time, an unknown date `Dates not announced`, and undated events sort last. A start time

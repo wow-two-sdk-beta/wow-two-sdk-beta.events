@@ -1,6 +1,6 @@
 # wow-two-sdk-beta.events — Backlog
 
-*Last updated: 2026-11-17*
+*Last updated: 2026-11-20*
 
 Every unbuilt item, grouped; top of each group = next. Shipped work lives in [`version-track/`](version-track/).
 Shape: wow-two-ws/conventions/planning/version-track/version-track.md
@@ -50,12 +50,11 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 |---|---|---|
 | E26 Ship a conformance-tested in-memory Events fake | engineering | spec in `tasks-events-path.md` |
 | E23 Let catalog members read intake freshness | feature | spec in `tasks-events-path.md` |
-| E17 Attach cross-source duplicates to one event on intake | feature | spec in `tasks-events-path.md` |
 | E18 Move tracking to the survivor when SCFD merges posts | fix | spec in `tasks-events-path.md` |
 | O14 WoW2 Events prod target `events-prod` | engineering | spec in `tasks-platform.md` |
 | V01 Review console on AppFrame and the SDK session | engineering | spec in `tasks-platform.md` |
 | V02 Places and organizers as deduplicated entities | feature | spec in `tasks-platform.md` |
-| V03 Cross-source match proposals | feature | spec in `tasks-platform.md` |
+| V03 Cross-source match proposals | feature | spec in `tasks-platform.md`; E17's exact rule join is built, this adds scored proposals beside it (`pg_trgm`, a dismissed pair never re-proposes) |
 | V04 Custom field schemas per workflow | feature | spec in `tasks-platform.md` |
 | V05 Webhooks for published, changed, cancelled and deadline events | feature | spec in `tasks-platform.md` |
 | V06 Calendar export with VTIMEZONE blocks | fix | spec in `tasks-platform.md` |
@@ -77,7 +76,6 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 | Item | Type | Notes |
 |---|---|---|
 | Places, organizers and series as deduplicated entities; occurrences; parent events | feature | P2; P1 embeds place and organizer in the event |
-| Cross-source match proposals (edition, title, place, dates) | feature | P2; P1 matches by source identity only |
 | Catalog sharing with chosen organizations, and public catalogs, for catalogs with no sourced records | feature | P2; EV1, `ocharo-fashion` stays private (events-integration #7, #50) |
 | Curated event images in a Files instance | feature | P2; sourced images stay evidence (events-integration #31, #50); the instance stays open (#48) |
 | Translations of titles and summaries | feature | P2; events-integration #11 |

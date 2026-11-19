@@ -41,6 +41,10 @@ internal sealed class ApiEventReviewBroker(EventsApiTransport transport) : IEven
         transport.SendAsync<MergeDecision, EventModel>(HttpMethod.Post, EventsApiRoutes.Catalog(catalog, EventsRouteConstants.Review, id, "merge"), decision, cancellationToken);
 
     /// <inheritdoc />
+    public Task<Result<EventModel>> SplitSourceAsync(string catalog, Guid id, SourceSplitDecision decision, CancellationToken cancellationToken = default) =>
+        transport.SendAsync<SourceSplitDecision, EventModel>(HttpMethod.Post, EventsApiRoutes.Catalog(catalog, EventsRouteConstants.Review, id, "split"), decision, cancellationToken);
+
+    /// <inheritdoc />
     public Task<Result<EventModel>> ApplyChangeAsync(string catalog, Guid observationId, ReviewDecision decision, CancellationToken cancellationToken = default) =>
         transport.SendAsync<ReviewDecision, EventModel>(HttpMethod.Post, EventsApiRoutes.Catalog(catalog, EventsRouteConstants.Observations, observationId, "apply"), decision, cancellationToken);
 

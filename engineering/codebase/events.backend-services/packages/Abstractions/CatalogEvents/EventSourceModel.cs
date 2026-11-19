@@ -24,6 +24,10 @@ public sealed record EventSourceModel
     /// <summary>Gets when the source posted the listing (UTC); none when the source does not say.</summary>
     public DateTimeOffset? PostedAtUtc { get; init; }
 
+    /// <summary>Gets the rule that attached the source to this event after another source started it, such as
+    /// <c>rule:title-date-city</c>; none for the source the event started from, an import's and a curator's.</summary>
+    public string? MatchedBy { get; init; }
+
     /// <summary>Gets when the source first reported it (UTC).</summary>
     public required DateTimeOffset FirstSeenAtUtc { get; init; }
 

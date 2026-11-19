@@ -124,6 +124,21 @@ describe('writes', () => {
     expect(requests[0]!.url).toBe(`${serviceUrl}/api/events/v1/catalogs/ocharo/review/e1/reopen?expectedRevision=6`);
   });
 
+  it('splits a source off an event with the source and the revision read, and answers the new candidate', async () => {
+    const { client, requests } = fakeService(() => envelope(eventModel('e2', {}, { review: 'candidate' })));
+
+    const result = await client.splitSource('ocharo', 'e1', {
+      kind: 'scfd',
+      sourceId: 'scfd/post-2',
+      expectedRevision: 7,
+    });
+
+    expect(result.ok && result.value.id).toBe('e2');
+    expect(requests[0]!.method).toBe('POST');
+    expect(requests[0]!.url).toBe(`${serviceUrl}/api/events/v1/catalogs/ocharo/review/e1/split`);
+    expect(await requests[0]!.json()).toEqual({ kind: 'scfd', sourceId: 'scfd/post-2', expectedRevision: 7 });
+  });
+
   it('sends an import bundle with its legacy rows and the dry-run flag', async () => {
     const report = { dryRun: true, source: 'ocharo-desk', created: 1, updated: 0, unchanged: 0, failed: 0, map: [] };
     const { client, requests } = fakeService(() => envelope(report));

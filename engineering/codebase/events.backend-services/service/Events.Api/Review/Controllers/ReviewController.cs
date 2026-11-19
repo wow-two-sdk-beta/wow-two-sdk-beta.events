@@ -74,6 +74,17 @@ public sealed class ReviewController(IEventReviewBroker review) : EventsControll
     public async Task<IActionResult> Merge(string catalog, Guid id, [FromBody] MergeDecision decision, CancellationToken ct) =>
         Answer(await review.MergeAsync(catalog, id, decision, ct));
 
+    /// <summary>Splits one source off an event into a candidate of its own and keeps the pair apart.</summary>
+    /// <param name="catalog">The catalog's slug.</param>
+    /// <param name="id">The event the source leaves.</param>
+    /// <param name="decision">The source and the revision read.</param>
+    /// <param name="ct">The token that cancels the request.</param>
+    /// <returns>The new candidate.</returns>
+    [HttpPost(EventsRouteConstants.Review + "/{id:guid}/split")]
+    [ProducesResponseType<ApiResponse<EventModel>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Split(string catalog, Guid id, [FromBody] SourceSplitDecision decision, CancellationToken ct) =>
+        Answer(await review.SplitSourceAsync(catalog, id, decision, ct));
+
     /// <summary>Applies a pending change to its published event.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="id">The pending observation.</param>

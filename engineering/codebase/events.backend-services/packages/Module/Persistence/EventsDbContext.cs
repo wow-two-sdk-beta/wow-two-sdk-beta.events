@@ -16,6 +16,7 @@ internal sealed class EventsDbContext(DbContextOptions<EventsDbContext> options)
     public DbSet<CatalogEventEntity> Events => Set<CatalogEventEntity>();
     public DbSet<EventDeadlineEntity> Deadlines => Set<EventDeadlineEntity>();
     public DbSet<EventSourceEntity> Sources => Set<EventSourceEntity>();
+    public DbSet<EventKeepApartEntity> KeepApart => Set<EventKeepApartEntity>();
     public DbSet<ObservationEntity> Observations => Set<ObservationEntity>();
     public DbSet<SourcePostEntity> SourcePosts => Set<SourcePostEntity>();
     public DbSet<IntakeCursorEntity> IntakeCursors => Set<IntakeCursorEntity>();
@@ -66,6 +67,14 @@ internal sealed class EventsDbContext(DbContextOptions<EventsDbContext> options)
         source.HasKey(row => new { row.CatalogId, row.Kind, row.SourceId });
         source.Property(row => row.Kind).HasMaxLength(16);
         source.Property(row => row.SourceId).HasMaxLength(256);
+        source.Property(row => row.MatchedBy).HasMaxLength(64);
+
+        var keepApart = modelBuilder.Entity<EventKeepApartEntity>();
+        keepApart.ToTable("events_event_keep_apart");
+        keepApart.HasKey(row => new { row.CatalogId, row.SourceKind, row.SourceId, row.EventId });
+        keepApart.Property(row => row.SourceKind).HasMaxLength(16);
+        keepApart.Property(row => row.SourceId).HasMaxLength(256);
+        keepApart.Property(row => row.CreatedBy).HasMaxLength(256);
 
         var observation = modelBuilder.Entity<ObservationEntity>();
         observation.ToTable("events_observations");

@@ -13,4 +13,8 @@ internal sealed class EventSourceEntity
     public string? Name { get; set; }
     public string? State { get; set; }
     public DateTimeOffset? PostedAt { get; set; }
+
+    /// <summary>Gets or sets the rule that attached the source to an event it did not start; none for the source the event
+    /// started from, an import's and a curator's.</summary>
+    public string? MatchedBy { get; set; }
 }

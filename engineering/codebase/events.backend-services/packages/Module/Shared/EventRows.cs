@@ -64,7 +64,10 @@ internal static class EventRows
         Review = EventsLabels.Parse<EventReviewState>(row.Review),
         MergedInto = row.MergedInto,
         Sources = sources
+            // The source an event started from comes first, even when a page delivered several in one instant.
             .OrderBy(source => source.FirstSeenAt)
+            .ThenBy(source => source.MatchedBy is null ? 0 : 1)
+            .ThenBy(source => source.SourceId, StringComparer.Ordinal)
             .Select(source => new EventSourceModel
             {
                 Kind = EventsLabels.Parse<EventSourceKind>(source.Kind),
@@ -75,6 +78,7 @@ internal static class EventRows
                 Name = source.Name,
                 State = source.State is { } state ? EventsLabels.Parse<EventSourceState>(state) : null,
                 PostedAtUtc = source.PostedAt,
+                MatchedBy = source.MatchedBy,
             })
             .ToList(),
         PendingChanges = pendingChanges,

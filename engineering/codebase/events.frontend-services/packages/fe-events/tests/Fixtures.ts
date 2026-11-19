@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { EventFacts, EventModel, ObservationModel } from '../src/contracts';
+import type { EventFacts, EventModel, EventSourceModel, ObservationModel } from '../src/contracts';
 import { createEventsClient } from '../src/kit';
 
 export const serviceUrl = 'https://events.example.test';
@@ -26,6 +26,20 @@ export function eventModel(
     revision: 1,
     createdAtUtc: '2026-11-01T10:00:00Z',
     updatedAtUtc: '2026-11-01T10:00:00Z',
+    ...overrides,
+  };
+}
+
+/** Builds one source identity behind an event. */
+export function sourceModel(id: string, overrides: Partial<EventSourceModel> = {}): EventSourceModel {
+  return {
+    kind: 'scfd',
+    id: `scfd/${id}`,
+    url: `https://afisha.example.test/${id}`,
+    name: `Source ${id}`,
+    state: 'live',
+    firstSeenAtUtc: '2026-11-01T10:00:00Z',
+    lastSeenAtUtc: '2026-11-02T10:00:00Z',
     ...overrides,
   };
 }

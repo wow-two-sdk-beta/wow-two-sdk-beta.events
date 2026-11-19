@@ -12,14 +12,15 @@ import { EventsLabels } from '../../kit/text/EventsLabels';
 import type { EventsLocale } from '../../kit/text/EventsLocale';
 import { eventsText, type EventsMessageKey } from '../../kit/text/EventsMessages';
 import { factChanges } from '../review/FactsChanges';
+import EventSourcesPanel from './EventSourcesPanel.vue';
 import ReviewAttribution from './ReviewAttribution.vue';
 import ObservationEvidence from './ObservationEvidence.vue';
 import ReviewFactsEditor from './ReviewFactsEditor.vue';
 
 /**
  * Reviews one queue entry. A candidate is accepted (as is or with edits), rejected, or merged into a published event; a
- * published event's pending changes are applied (as proposed or with edits) or dismissed. Each observation's evidence
- * sits beside the decision.
+ * published event's pending changes are applied (as proposed or with edits) or dismissed. A source another source's
+ * event took in is split off into a candidate of its own. Each observation's evidence sits beside the decision.
  */
 defineOptions({ name: 'ReviewItem' });
 
@@ -158,6 +159,15 @@ function openMerge() {
     </header>
 
     <FailureNotice v-if="failure" :failure="failure" :locale="locale" context="review" />
+
+    <EventSourcesPanel
+      :client="client"
+      :catalog="catalog"
+      :event="event"
+      :locale="locale"
+      @split="emit('resolved', 'split')"
+      @stale="emit('stale')"
+    />
 
     <template v-if="isCandidate">
       <div class="flex flex-wrap gap-2">

@@ -71,7 +71,7 @@ events for ocharo and not post them anywhere else".
 | `offers` | kind (`ticket` · `exhibitor` · `sponsorship` · `submission` · `other`), name, price min/max/currency (null when unknown, never 0), free, terms, url |
 | `website`, `ticketUrl`, `onlineUrl` | http(s), ≤ 2,048 |
 | `images` | curated references: url, attribution (#31: no bytes copied in P1; sourced images stay evidence, #50) |
-| `sources` | every source identity that reported it: kind (`scfd` · `import` · `manual`), id, url, first and last seen; for SCFD also its name (the subscription's source name, else its group, else the intake source's), its listing's state (`live` · `suspect` · `gone` · `unmatched`) and when the source posted it |
+| `sources` | every source identity that reported it: kind (`scfd` · `import` · `manual`), id, url, first and last seen, and `matchedBy` (the rule that attached a source to an event another source started, `rule:title-date-city`; none for the first); for SCFD also its name (the subscription's source name, else its group, else the intake source's), its listing's state (`live` · `suspect` · `gone` · `unmatched`) and when the source posted it |
 | `review` | `candidate` · `published` · `rejected` · `archived`; consumers see `published` |
 | `revision` | optimistic concurrency; `createdAt`, `updatedAt`, `publishedAt` |
 
@@ -110,6 +110,17 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - a post a selector change admits again reaches Events at the revision it already stores (`post.changed`, reason
   `resync`): the record is superseded as content, but it counts as a revision that passes the selector, so it ends an
   unmatched hold and sets the source's state from its payload.
+- a new post whose title, dates and city match an event another source reported joins that event instead of starting a
+  second one (E17: one fair on Afisha and Uzexpocentre is one event): a candidate or published event of the same
+  catalog, no source's hold, whose title is equal without case, punctuation, quotes and years or shares at least four
+  fifths of the longer title's words, whose dates overlap the post's (an undated post or event matches nothing), and
+  whose city is equal, or none for both (`Toshkent` and `Tashkent` are one city). The post's source is recorded on the
+  event with `MatchedBy = rule:title-date-city`; the facts stay the first source's, under whatever review the event holds,
+  so a joined source's revisions are evidence only (observation `applied`, never a pending change) and the backlog pass
+  maps the first source's payload. The closest title wins among several matches, then the nearest start, a published
+  event, the oldest. One query reads the catalog's candidates by dates and city; titles are compared in memory. While
+  another source still lists an event, one source's end (`gone`, `merged`, `unmatched`) holds nothing; the event waits
+  for a person when every source has ended. A source a reviewer split off never matches the event it left (below).
 - evidence per observation: SCFD instance, subscription, pipeline, `EventId`, `ItemId`, `PostId`, `Revision`, type,
   reason, observed time, each link's URL, source, capture and source fields, the mapping version when SCFD sends it,
   and the raw payload.
@@ -154,6 +165,14 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
   current ones and their evidence; a source never overwrites a reviewer's accepted value, a stage or a note.
 - reviewers accept (publish, with edits), reject, merge a candidate into an existing event (sources and evidence move,
   the candidate archives), apply or dismiss a pending change, and reopen a published event for review.
+- reviewers split a source off an event that holds two or more (E17, the way to undo a wrong cross-source match): the
+  source, its posts and its evidence move to a new candidate that holds the facts that source reported (a curator's own
+  source, which reports none, gets a copy of the event's facts without its key), the event keeps its other sources and
+  gains a revision, and the pair is recorded in `events_event_keep_apart`, so a later delivery of that source never
+  attaches to the event it left. An import's source stays. When the source an event started from leaves, the first
+  source still on it speaks for the event; the new candidate is reviewed by its source's policy (under `auto` the
+  classifier may publish it at the next poll). The console lists a multi-source event's sources, marks the joined one and
+  offers "Split source" on the review screen and the events screen, in two steps.
 - an event the classifier published follows its source's newer revisions by itself until a person reviews it; from
   then on a newer revision waits as a pending change.
 - curators create and edit published events by hand; a curator's own entry is reviewed by definition.

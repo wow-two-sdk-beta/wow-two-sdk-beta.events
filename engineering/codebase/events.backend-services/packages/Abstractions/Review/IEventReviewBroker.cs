@@ -49,6 +49,18 @@ public interface IEventReviewBroker
     /// <returns>The target event, with the candidate's sources.</returns>
     Task<Result<EventModel>> MergeAsync(string catalog, Guid id, MergeDecision decision, CancellationToken cancellationToken = default);
 
+    /// <summary>Splits one source off an event: the source, its posts and its evidence move to a new candidate with the
+    /// facts that source reported, and the pair is kept apart, so intake never attaches that source to the event again.
+    /// Undoes a wrong cross-source match (events-integration E17).</summary>
+    /// <param name="catalog">The catalog's slug.</param>
+    /// <param name="id">The event the source leaves, a candidate or published.</param>
+    /// <param name="decision">The source and the revision read.</param>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>The new candidate, holding the source; <see cref="EventsErrors.ReviewStateInvalid"/> unless the event is a
+    /// candidate or published, a validation error when the event has no such source, holds only that one, or the source is an
+    /// import's, and <see cref="EventsErrors.RevisionConflict"/> on a stale revision.</returns>
+    Task<Result<EventModel>> SplitSourceAsync(string catalog, Guid id, SourceSplitDecision decision, CancellationToken cancellationToken = default);
+
     /// <summary>Applies a pending source change to its published event, with its proposed facts or the reviewer's edits.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="observationId">The pending observation.</param>

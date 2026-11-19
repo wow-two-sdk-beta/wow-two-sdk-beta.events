@@ -31,6 +31,7 @@ import {
   type ReviewDecision,
   type ReviewPage,
   type ReviewQuery,
+  type SourceSplitDecision,
   type TrackedEventModel,
   type TrackingHistoryEntryModel,
   type TrackingModel,
@@ -93,6 +94,16 @@ export interface EventsClient {
   /** Returns a published event to the review queue as a candidate. */
   reopenEvent(catalog: string, id: string, expectedRevision: number, signal?: AbortSignal): EventsResult<EventModel>;
   mergeEvent(catalog: string, id: string, decision: MergeDecision, signal?: AbortSignal): EventsResult<EventModel>;
+  /**
+   * Splits one source off an event into a new candidate that holds it, and keeps the pair apart so intake never attaches
+   * that source to the event again. Answers the new candidate.
+   */
+  splitSource(
+    catalog: string,
+    id: string,
+    decision: SourceSplitDecision,
+    signal?: AbortSignal,
+  ): EventsResult<EventModel>;
   applyChange(
     catalog: string,
     observationId: string,
@@ -249,6 +260,8 @@ export function createEventsClient(options: EventsClientOptions = {}): EventsCli
       post(EventsRoutes.reopen(catalog, id), EventsDecoders.event, undefined, signal, revision(expectedRevision)),
     mergeEvent: (catalog, id, decision, signal) =>
       post(EventsRoutes.merge(catalog, id), EventsDecoders.event, decision, signal),
+    splitSource: (catalog, id, decision, signal) =>
+      post(EventsRoutes.splitSource(catalog, id), EventsDecoders.event, decision, signal),
     applyChange: (catalog, observationId, decision, signal) =>
       post(EventsRoutes.applyChange(catalog, observationId), EventsDecoders.event, decision, signal),
     dismissChange: (catalog, observationId, signal) =>

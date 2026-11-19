@@ -18,6 +18,8 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 /// <remarks>
 ///   - a retry is a no-op: a delivery already stored under (instance, subscription, <c>EventId</c>) is skipped
 ///   - a post is one identity per SCFD instance, whichever subscription delivers it; its highest revision wins
+///   - a new post whose title, dates and city match an event another source reported joins that event (E17,
+///     <see cref="CrossSourceMatcher"/>): its facts never change the event, its revisions are evidence only
 ///   - a malformed record is stored as quarantined and never fails the page; nothing publishes unreviewed
 /// </remarks>
 /// <param name="db">The module's store, in the page's own scope.</param>
@@ -56,6 +58,7 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     private static readonly string Accepted = EventsLabels.Of(ObservationState.Accepted);
     private static readonly string Archived = EventsLabels.Of(EventReviewState.Archived);
     private static readonly string UnmatchedState = EventsLabels.Of(EventSourceState.Unmatched);
+    private static readonly string GoneState = EventsLabels.Of(EventSourceState.Gone);
 
     /// <summary>Holds the actor prefix of a decision the source's own lifecycle made: a listing gone, a post merged or
     /// no longer matching.</summary>
@@ -124,6 +127,9 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
                 join observation in db.Observations on post.LatestObservationId equals observation.Id
                 where post.SourceInstance == instance && post.CatalogId == catalogId && observation.Payload != null
                       && observation.Seq > after
+                      // A source that joined the event (E17) is evidence: the source the event started from maps its facts.
+                      && !db.Sources.Any(joined => joined.EventId == item.Id && joined.MatchedBy != null
+                          && joined.SourceId == post.SourceInstance + "/" + post.PostId.ToString())
                       && ((item.Review == Candidate && item.ReviewedBy == null)
                           || ((item.Review == Candidate || item.Review == Published) && item.ReviewedBy!.StartsWith(classifier)))
                 orderby observation.Seq
@@ -349,6 +355,13 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         if (post.EventId is null)
         {
+            // Another source may have reported this event already (E17): the post joins it instead of starting a second one.
+            if (await CrossSourceMatcher.FindAsync(db, page.Catalog.Id, Scfd, sourceId, facts, cancellationToken) is { } twin)
+            {
+                Attach(page, twin, sourceId, url, post, observation);
+                return;
+            }
+
             var created = await CreateCandidateAsync(page, facts, sourceId, url, cancellationToken);
             post.EventId = created.Id;
             Review(created, verdict, page.Now);
@@ -365,6 +378,14 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
 
         var target = await db.Events.FirstOrDefaultAsync(row => row.Id == post.EventId, cancellationToken);
         observation.EventId = post.EventId;
+        if (identity?.MatchedBy is not null && (target?.Review == Candidate || target?.Review == Published))
+        {
+            // A source that joined an event it did not start is evidence: its revisions never change the event's facts,
+            // pending or applied, whoever reviewed them; the source the event started from speaks for it.
+            observation.State = Applied;
+            return;
+        }
+
         var byPerson = target?.ReviewedBy?.StartsWith(ReviewStamp.PersonActor, StringComparison.Ordinal) == true;
         if (target?.Review == Candidate && !byPerson)
         {
@@ -445,6 +466,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
     ///     already holds (<c>post.changed</c>, reason <c>resync</c>), which <see cref="ApplyPostAsync"/> marks superseded,
     ///     yet it is a revision that passes the selector, so it releases the hold like a newer one
     ///   - a person's decision always stands; a stale record (an older revision than stored) changes nothing
+    ///   - an event another source still lists (a source not gone or unmatched, E17) is never held for one source's end: SCFD
+    ///     reports one source's listing, and the event waits for a person only when every source has ended
     /// </remarks>
     private async Task ApplyLifecycleAsync(IntakePageState page, ObservationEntity observation, JsonElement? data, CancellationToken cancellationToken)
     {
@@ -479,6 +502,9 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
                     : !Automatic(item) || await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken))
                 return;
 
+            if (await ListedElsewhereAsync(item, $"{instance}/{postId:D}", cancellationToken))
+                return;
+
             Hold(item, actor, UnmatchedReason, page.Now);
             return;
         }
@@ -496,7 +522,8 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         var merged = survivor is { } into && into != postId;
         if (merged || state == "gone")
         {
-            if (heldBySource || !Automatic(item) || (!merged && Ended(item)) || await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken))
+            if (heldBySource || !Automatic(item) || (!merged && Ended(item)) || await db.Tracking.AnyAsync(row => row.EventId == item.Id, cancellationToken)
+                || await ListedElsewhereAsync(item, $"{instance}/{postId:D}", cancellationToken))
                 return;
 
             Hold(item, actor, merged ? MergedReason : GoneReason, page.Now);
@@ -506,6 +533,14 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
             Release(item, page.Now);
         }
     }
+
+    /// <summary>Tells whether another source of the event still lists it: a source (E17) not gone or unmatched. SCFD reports
+    /// one source's listing, so while a twin lists the event, one source's end holds nothing.</summary>
+    private async Task<bool> ListedElsewhereAsync(CatalogEventEntity item, string sourceId, CancellationToken cancellationToken) =>
+        await db.Sources.AsNoTracking().AnyAsync(
+            source => source.EventId == item.Id && source.SourceId != sourceId
+                && (source.State == null || (source.State != GoneState && source.State != UnmatchedState)),
+            cancellationToken);
 
     /// <summary>Sends an event back to review, held by its source with the reason.</summary>
     private static void Hold(CatalogEventEntity item, string actor, string reason, DateTimeOffset now)
@@ -692,6 +727,29 @@ internal sealed class IntakeProcessor(EventsDbContext db, IObservationFeed feed,
         {
             row.ReviewReason = "held: " + verdict.Reason;
         }
+    }
+
+    /// <summary>Joins a new source identity to the event another source already reported: the source is recorded with the
+    /// rule that matched it, the post follows the event, and the facts stay the first source's, under whatever review the
+    /// event holds. The observation counts as applied: it is the event's evidence, never a change.</summary>
+    private void Attach(IntakePageState page, CatalogEventEntity twin, string sourceId, string? url, SourcePostEntity post, ObservationEntity observation)
+    {
+        post.EventId = twin.Id;
+        twin.Revision++;
+        twin.UpdatedAt = page.Now;
+        observation.State = Applied;
+        observation.EventId = twin.Id;
+        db.Sources.Add(new EventSourceEntity
+        {
+            CatalogId = page.Catalog.Id,
+            Kind = Scfd,
+            SourceId = sourceId,
+            EventId = twin.Id,
+            Url = url,
+            FirstSeenAt = page.Now,
+            LastSeenAt = page.Now,
+            MatchedBy = CrossSourceMatcher.Rule,
+        });
     }
 
     private async Task<CatalogEventEntity> CreateCandidateAsync(IntakePageState page, EventFacts facts, string sourceId, string? url, CancellationToken cancellationToken)
