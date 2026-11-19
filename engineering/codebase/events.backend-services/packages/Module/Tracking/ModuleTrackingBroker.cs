@@ -40,8 +40,13 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
         if (!PageCursor.TryDecode(scope, query.Cursor, out var offset))
             return Result<TrackingPage>.Fail(EventsErrors.CursorInvalid());
 
+        if ((EventListQuery.CheckCountries("countries", query.Countries) ?? EventListQuery.CheckCountries("excludeCountries", query.ExcludeCountries)) is { } invalid)
+            return Result<TrackingPage>.Fail(invalid);
+
         var limit = PageCursor.Limit(query.Limit);
-        var filter = new EventListFilter(query.From, query.To, query.Kind, query.Country, null, null, query.DeadlineBefore, query.IncludeUndated);
+        var filter = new EventListFilter(
+            query.From, query.To, query.Kind, query.Country, null, null, query.DeadlineBefore, query.IncludeUndated,
+            query.Countries, query.ExcludeCountries, query.IncludeUnknownCountry);
         var events = EventListQuery.Filter(EventListQuery.PublishedEvents(db, catalogRow.Id), db, filter, EventListQuery.Today(time));
         var issuer = caller.Issuer;
         var organization = caller.OrganizationId!;
@@ -243,7 +248,10 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
             upcoming.Add(new UpcomingDeadlineModel { EventId = item.Id, Title = facts.Title, Deadline = facts.Deadlines[item.Ordinal], Stage = item.Stage });
         }
 
-        return Result<TrackingSummaryModel>.Ok(new TrackingSummaryModel { ByStage = byStage, UpcomingDeadlines = upcoming });
+        var untracked = await EventListQuery.PublishedEvents(db, catalogRow.Id)
+            .CountAsync(row => !db.Tracking.Any(item => item.EventId == row.Id && item.Issuer == issuer && item.OrganizationId == organization), cancellationToken);
+
+        return Result<TrackingSummaryModel>.Ok(new TrackingSummaryModel { ByStage = byStage, Untracked = untracked, UpcomingDeadlines = upcoming });
     }
 
     /// <summary>Finds an event one tracking call may act on: a published event of a readable catalog, or a candidate the

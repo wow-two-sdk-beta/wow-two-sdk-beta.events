@@ -171,6 +171,67 @@ public abstract class EventTrackingBrokerConformance : EventsConformance
         all.Items.Should().HaveCount(3);
     }
 
+    /// <summary>Country lists (E21): <c>Countries</c> lists the events in any of them, <c>ExcludeCountries</c> leaves those out,
+    /// and an event with no country matches a country filter only with <c>IncludeUnknownCountry</c>; with no country filter
+    /// every event lists.</summary>
+    [Fact]
+    public async Task ListAsync_ShouldFilterByCountryLists_AndLetUnknownCountriesInOnlyWhenAsked()
+    {
+        var owner = NewMember();
+        var catalog = (await CreateCatalogAsync(owner)).Slug;
+        var local = await CreateEventAsync(owner, catalog, InCountry("UZ"));
+        var regional = await CreateEventAsync(owner, catalog, InCountry("KZ"));
+        var abroad = await CreateEventAsync(owner, catalog, InCountry("FR"));
+        var unknown = await CreateEventAsync(owner, catalog, InCountry(null));
+
+        async Task<IEnumerable<Guid>> List(TrackingQuery query) =>
+            Value(await As(owner).Tracking.ListAsync(catalog, query)).Items.Select(item => item.Event.Id);
+
+        (await List(new TrackingQuery())).Should().BeEquivalentTo([local.Id, regional.Id, abroad.Id, unknown.Id]);
+        (await List(new TrackingQuery { Countries = ["uz", "KZ"] })).Should().BeEquivalentTo([local.Id, regional.Id]);
+        (await List(new TrackingQuery { Country = "FR", Countries = ["UZ"] })).Should().BeEquivalentTo([local.Id, abroad.Id], "the single country adds to the list");
+        (await List(new TrackingQuery { Countries = ["UZ"], IncludeUnknownCountry = true })).Should().BeEquivalentTo([local.Id, unknown.Id]);
+        (await List(new TrackingQuery { ExcludeCountries = ["UZ", "KZ"] })).Should().BeEquivalentTo([abroad.Id], "an event with no country matches no chip");
+        (await List(new TrackingQuery { ExcludeCountries = ["UZ", "KZ"], IncludeUnknownCountry = true })).Should().BeEquivalentTo([abroad.Id, unknown.Id]);
+        (await List(new TrackingQuery { Countries = ["UZ", "KZ"], ExcludeCountries = ["KZ"] })).Should().BeEquivalentTo([local.Id]);
+    }
+
+    /// <summary>A country code that is not two letters is invalid.</summary>
+    [Fact]
+    public async Task ListAsync_ShouldFailValidation_ForAMalformedCountryCode()
+    {
+        var (owner, catalog, _) = await EventAsync();
+
+        Error(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { Countries = ["UZB"] })).Type.Should().Be(AppErrorType.Validation);
+        Error(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { ExcludeCountries = ["1A"] })).Type.Should().Be(AppErrorType.Validation);
+    }
+
+    /// <summary>The summary counts the published events the organization does not track (E21), apart from another
+    /// organization's tracking.</summary>
+    [Fact]
+    public async Task GetSummaryAsync_ShouldCountTheUntrackedEvents()
+    {
+        var owner = NewMember();
+        var catalog = (await CreateCatalogAsync(owner, CatalogVisibility.Public)).Slug;
+        var first = await CreateEventAsync(owner, catalog);
+        var second = await CreateEventAsync(owner, catalog);
+        await CreateEventAsync(owner, catalog);
+        Value(await As(owner).Tracking.PutAsync(catalog, first.Id, new TrackingSpec()));
+        var other = As(NewMember());
+        var before = Value(await As(owner).Tracking.GetSummaryAsync(catalog, new DateOnly(2026, 11, 10)));
+        if (await other.Tracking.PutAsync(catalog, second.Id, new TrackingSpec()) is Result<TrackingModel>.Success)
+            Value(await other.Tracking.GetSummaryAsync(catalog, new DateOnly(2026, 11, 10))).Untracked.Should().Be(2, "another organization tracks one");
+
+        var summary = Value(await As(owner).Tracking.GetSummaryAsync(catalog, new DateOnly(2026, 11, 10)));
+
+        before.Untracked.Should().Be(2);
+        summary.Untracked.Should().Be(2, "another organization's tracking leaves the owner's count alone");
+    }
+
+    /// <summary>Builds facts placed in a country, or in none.</summary>
+    private static EventFacts InCountry(string? country) =>
+        Facts(starts: "2026-12-01") with { Place = country is null ? new EventPlace { City = "Somewhere" } : new EventPlace { City = "Capital", Country = country } };
+
     /// <summary>A tracking read carries each event's sources as the catalog reads them, with their name, listing state and
     /// posted time (E15); a curator's own entry names no source, state or posted time.</summary>
     [Fact]

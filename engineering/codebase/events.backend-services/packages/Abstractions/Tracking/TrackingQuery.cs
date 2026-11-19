@@ -22,8 +22,19 @@ public sealed record TrackingQuery
     /// <summary>Gets the kind to list.</summary>
     public string? Kind { get; init; }
 
-    /// <summary>Gets the ISO-2 country to list.</summary>
+    /// <summary>Gets the ISO-2 country to list; with <see cref="Countries"/>, an event in either matches.</summary>
     public string? Country { get; init; }
+
+    /// <summary>Gets the ISO-2 countries to list: an event matches when its country is one of them (and
+    /// <see cref="Country"/>), at most <see cref="EventsConstants.MaxCountryFilter"/>.</summary>
+    public IReadOnlyList<string> Countries { get; init; } = [];
+
+    /// <summary>Gets the ISO-2 countries to leave out, at most <see cref="EventsConstants.MaxCountryFilter"/>.</summary>
+    public IReadOnlyList<string> ExcludeCountries { get; init; } = [];
+
+    /// <summary>Gets whether an event with no known country matches a country filter (<see cref="Country"/>,
+    /// <see cref="Countries"/> or <see cref="ExcludeCountries"/>); without a country filter every event matches.</summary>
+    public bool IncludeUnknownCountry { get; init; }
 
     /// <summary>Gets text matched in titles, organizer, city, venue, key and the tracking's notes.</summary>
     public string? Text { get; init; }

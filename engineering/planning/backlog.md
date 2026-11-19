@@ -51,7 +51,6 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 | E01 Pull all five default Ocharo SCFD subscriptions into Events | fix | spec in `tasks-events-path.md` |
 | E26 Ship a conformance-tested in-memory Events fake | engineering | spec in `tasks-events-path.md` |
 | E20 Discover intake subscriptions instead of per-index settings | feature | spec in `tasks-events-path.md` |
-| E21 Add country lists and untracked counts to tracking reads | feature | spec in `tasks-events-path.md` |
 | E23 Let catalog members read intake freshness | feature | spec in `tasks-events-path.md` |
 | E17 Attach cross-source duplicates to one event on intake | feature | spec in `tasks-events-path.md` |
 | E18 Move tracking to the survivor when SCFD merges posts | fix | spec in `tasks-events-path.md` |

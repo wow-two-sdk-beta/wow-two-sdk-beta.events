@@ -30,6 +30,15 @@ public sealed class TrackingQueryParameters
     /// <summary>Gets or sets the country code.</summary>
     public string? Country { get; set; }
 
+    /// <summary>Gets or sets the countries to list, as repeated <c>countries</c> keys.</summary>
+    public string[]? Countries { get; set; }
+
+    /// <summary>Gets or sets the countries to leave out, as repeated <c>excludeCountries</c> keys.</summary>
+    public string[]? ExcludeCountries { get; set; }
+
+    /// <summary>Gets or sets whether an event with no country matches a country filter; false when absent.</summary>
+    public bool? IncludeUnknownCountry { get; set; }
+
     /// <summary>Gets or sets the free text.</summary>
     public string? Text { get; set; }
 
@@ -70,6 +79,9 @@ public sealed class TrackingQueryParameters
             To = to,
             Kind = Kind,
             Country = Country,
+            Countries = Countries ?? [],
+            ExcludeCountries = ExcludeCountries ?? [],
+            IncludeUnknownCountry = IncludeUnknownCountry ?? false,
             Text = Text,
             DeadlineBefore = deadlineBefore,
             IncludeUndated = IncludeUndated ?? true,

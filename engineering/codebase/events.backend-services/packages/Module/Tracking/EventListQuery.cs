@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Persistence;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
+using WoW.Two.Sdk.Beta.Be.Foundation.Errors;
 
 namespace WoW.Two.Sdk.Beta.Be.Events.Module.Tracking;
 
@@ -38,11 +39,19 @@ internal static class EventListQuery
             events = events.Where(row => row.StartsMin == null || row.StartsMin <= to);
         if (Normalize(filter.Kind) is { } kind)
             events = events.Where(row => row.Kind == kind);
-        if (!string.IsNullOrWhiteSpace(filter.Country))
-        {
-            var country = filter.Country.Trim().ToUpperInvariant();
-            events = events.Where(row => row.Country == country);
-        }
+        // Country lists (E21): an event matches a listed country and no left-out one; one with no country matches only
+        // when the filter lets unknown countries in.
+        var listed = (filter.Countries ?? []).Append(filter.Country)
+            .Where(code => !string.IsNullOrWhiteSpace(code)).Select(code => code!.Trim().ToUpperInvariant()).Distinct().ToArray();
+        var excluded = (filter.ExcludeCountries ?? []).Select(code => code.Trim().ToUpperInvariant()).Distinct().ToArray();
+        if (listed.Length > 0)
+            events = filter.IncludeUnknownCountry
+                ? events.Where(row => row.Country == null || listed.Contains(row.Country))
+                : events.Where(row => row.Country != null && listed.Contains(row.Country));
+        if (excluded.Length > 0)
+            events = filter.IncludeUnknownCountry
+                ? events.Where(row => row.Country == null || !excluded.Contains(row.Country))
+                : events.Where(row => row.Country != null && !excluded.Contains(row.Country));
 
         if (Normalize(filter.City) is { } city)
             events = events.Where(row => row.City == city);
@@ -53,6 +62,21 @@ internal static class EventListQuery
                 deadline.EventId == row.Id && deadline.AtMin <= before && deadline.AtMax >= today));
 
         return events;
+    }
+
+    /// <summary>Checks a list of ISO-2 country codes: two letters each, at most <see cref="EventsConstants.MaxCountryFilter"/>.</summary>
+    /// <param name="field">The field the codes came in.</param>
+    /// <param name="codes">The codes.</param>
+    /// <returns>The validation error; none when every code reads.</returns>
+    public static AppError? CheckCountries(string field, IReadOnlyList<string>? codes)
+    {
+        if (codes is null || codes.Count == 0)
+            return null;
+        if (codes.Count > EventsConstants.MaxCountryFilter)
+            return EventsErrors.Invalid(field, $"at most {EventsConstants.MaxCountryFilter} countries");
+        return codes.All(code => code?.Trim() is { Length: 2 } text && text.All(char.IsAsciiLetter))
+            ? null
+            : EventsErrors.Invalid(field, "ISO-2 country codes");
     }
 
     /// <summary>Orders events as the events list does: start ascending with unknown last, then title, then id.</summary>

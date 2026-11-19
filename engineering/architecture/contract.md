@@ -52,8 +52,8 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 | `POST …/catalogs/{c}/observations/{id}/dismiss` | review `DismissChangeAsync` | `events.review` · `events:review` |
 | `GET …/catalogs/{c}/observations?state&eventId&cursor&limit` | review `ListObservationsAsync` | `events.review` · `events:review` |
 | `GET …/catalogs/{c}/observations/{id}` | review `GetObservationAsync` | `events.review` · `events:review` |
-| `GET …/catalogs/{c}/tracking?trackedOnly&stage&priority&from&to&kind&country&text&deadlineBefore&includeUndated&cursor&limit` | tracking `ListAsync` | `events.read` · `events:read` |
-| `GET …/catalogs/{c}/tracking/summary?today=` | tracking `GetSummaryAsync` | `events.read` · `events:read` |
+| `GET …/catalogs/{c}/tracking?trackedOnly&stage&priority&from&to&kind&country&countries&excludeCountries&includeUnknownCountry&text&deadlineBefore&includeUndated&cursor&limit` | tracking `ListAsync`; `countries` and `excludeCountries` repeat (`countries=UZ&countries=KZ`), and an event with no country matches a country filter only with `includeUnknownCountry=true` | `events.read` · `events:read` |
+| `GET …/catalogs/{c}/tracking/summary?today=` | tracking `GetSummaryAsync`: `byStage`, `untracked` (published events the organization does not track), `upcomingDeadlines` | `events.read` · `events:read` |
 | `GET …/catalogs/{c}/tracking/{eventId}` | tracking `GetAsync` | `events.read` · `events:read` |
 | `PUT …/catalogs/{c}/tracking/{eventId}` (body `TrackingSpec`) | tracking `PutAsync` | `events.track` · `events:track` |
 | `DELETE …/catalogs/{c}/tracking/{eventId}?expectedRevision=` | tracking `DeleteAsync` | `events.track` · `events:track` |

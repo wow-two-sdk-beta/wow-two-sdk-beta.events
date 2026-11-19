@@ -30,6 +30,9 @@ public static class EventsConstants
     /// <summary>Holds the most tags, deadlines, offers, images or references one record carries.</summary>
     public const int MaxListLength = 50;
 
+    /// <summary>Holds the most countries one list filter names (<c>countries</c>, <c>excludeCountries</c>).</summary>
+    public const int MaxCountryFilter = 250;
+
     /// <summary>Holds the default page size.</summary>
     public const int DefaultPageSize = 50;
 

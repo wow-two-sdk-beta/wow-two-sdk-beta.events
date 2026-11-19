@@ -63,6 +63,21 @@ public sealed class EventsClientWireTests : IDisposable
             "https://events.example.test/api/events/v1/catalogs/fashion/events?from=2026-10-01&text=week&status=movedOnline&review=candidate&includeUndated=false&limit=20");
     }
 
+    /// <summary>E21: the country lists go as repeated keys, the unknown-country flag only when set.</summary>
+    [Fact]
+    public async Task TrackingList_ShouldSendTheCountryLists_AsRepeatedKeys()
+    {
+        await service.Broker<IEventTrackingBroker>().ListAsync("fashion", new TrackingQuery
+        {
+            Countries = ["UZ", "KZ"],
+            ExcludeCountries = ["RU"],
+            IncludeUnknownCountry = true,
+        });
+
+        service.Requests.Single().Url.Should().Be(
+            "https://events.example.test/api/events/v1/catalogs/fashion/tracking?countries=UZ&countries=KZ&excludeCountries=RU&includeUnknownCountry=true&limit=50");
+    }
+
     [Fact]
     public async Task Propose_ShouldPostToTheCandidates()
     {

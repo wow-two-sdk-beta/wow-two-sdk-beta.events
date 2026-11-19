@@ -18,6 +18,14 @@ internal sealed class EventsApiQuery
         return this;
     }
 
+    /// <summary>Adds each text value under the same name, as a repeated key.</summary>
+    public EventsApiQuery Add(string name, IEnumerable<string>? values)
+    {
+        foreach (var value in values ?? [])
+            Add(name, value);
+        return this;
+    }
+
     /// <summary>Adds a whole number.</summary>
     public EventsApiQuery Add(string name, int? value) =>
         value is { } number ? Add(name, number.ToString(CultureInfo.InvariantCulture)) : this;

@@ -10,6 +10,9 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Module.Tracking;
 /// <param name="Status">The status label.</param>
 /// <param name="DeadlineBefore">The last day an open deadline may fall on.</param>
 /// <param name="IncludeUndated">Whether events with no known start match.</param>
+/// <param name="Countries">More ISO-2 countries to list, with <paramref name="Country"/>; uppercase.</param>
+/// <param name="ExcludeCountries">The ISO-2 countries to leave out; uppercase.</param>
+/// <param name="IncludeUnknownCountry">Whether an event with no country matches a country filter.</param>
 internal sealed record EventListFilter(
     DateOnly? From,
     DateOnly? To,
@@ -18,4 +21,7 @@ internal sealed record EventListFilter(
     string? City,
     string? Status,
     DateOnly? DeadlineBefore,
-    bool IncludeUndated);
+    bool IncludeUndated,
+    IReadOnlyList<string>? Countries = null,
+    IReadOnlyList<string>? ExcludeCountries = null,
+    bool IncludeUnknownCountry = false);
