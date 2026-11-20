@@ -338,6 +338,8 @@ export function createFeedFake(options: { posters?: readonly string[]; latencyMs
     const path = url.pathname;
     if (path.endsWith('/workflow')) return answer(feedWorkflow);
     if (path.endsWith('/tracking/summary')) return answer(summary());
+    const history = /\/tracking\/([^/]+)\/history$/.exec(path);
+    if (request.method === 'GET' && history) return answer([]);
     if (path.endsWith('/tracking/facets')) return answer(facets(parseQuery(url.searchParams)));
     if (request.method === 'POST' && path.endsWith('/candidates')) {
       const spec = (await request.json()) as { facts: EventFacts };
@@ -371,6 +373,17 @@ export function createFeedFake(options: { posters?: readonly string[]; latencyMs
       };
       tracked.set(eventId, next);
       return answer(next);
+    }
+    const read = /\/tracking\/([^/]+)$/.exec(path);
+    if (request.method === 'GET' && read) {
+      const eventId = decodeURIComponent(read[1]!);
+      const event = store.get(eventId);
+      return event
+        ? answer({ event, tracking: tracked.get(eventId) ?? null })
+        : Response.json(
+            { title: 'Not found' },
+            { status: 404, headers: { 'Content-Type': 'application/problem+json' } },
+          );
     }
     if (request.method === 'GET' && path.endsWith('/tracking')) {
       const query = parseQuery(url.searchParams);

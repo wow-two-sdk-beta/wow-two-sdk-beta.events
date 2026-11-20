@@ -579,7 +579,7 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
       </p>
       <div v-for="text in shownPreview.texts" v-else :key="text.language" class="space-y-1">
         <p class="text-xs text-muted-foreground">
-          <Badge size="sm" :variant="BadgeVariant.Neutral">{{ languageName[text.language] ?? text.language }}</Badge>
+          <Badge :variant="BadgeVariant.Neutral">{{ languageName[text.language] ?? text.language }}</Badge>
           · {{ text.recipients }}
         </p>
         <TelegramText :text="text.text" />

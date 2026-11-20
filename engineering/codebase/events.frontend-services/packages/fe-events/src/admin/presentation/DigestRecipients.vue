@@ -37,7 +37,7 @@ const variants: Readonly<Record<DigestRecipientStatus, BadgeVariant>> = {
       :data-status="recipient.status"
     >
       <span class="font-mono text-xs">{{ recipient.subject }}</span>
-      <Badge size="sm" :variant="variants[recipient.status] ?? BadgeVariant.Neutral">
+      <Badge :variant="variants[recipient.status] ?? BadgeVariant.Neutral">
         {{ labels[recipient.status] ? eventsText(labels[recipient.status], locale) : recipient.status }}
       </Badge>
       <code class="text-xs text-muted-foreground">{{ recipient.status }}</code>

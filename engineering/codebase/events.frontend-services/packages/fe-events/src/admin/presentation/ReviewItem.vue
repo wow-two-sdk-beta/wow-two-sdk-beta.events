@@ -138,14 +138,14 @@ function openMerge() {
   >
     <header class="space-y-1">
       <div class="flex flex-wrap items-center gap-2">
-        <Badge size="sm" :variant="isCandidate ? BadgeVariant.Warning : BadgeVariant.Info">
+        <Badge :variant="isCandidate ? BadgeVariant.Warning : BadgeVariant.Info">
           {{
             isCandidate
               ? EventsLabels.review('candidate', locale)
               : eventsText('pendingChanges', locale, { count: pendingChanges.length })
           }}
         </Badge>
-        <Badge v-if="event.facts.kind" size="sm" :variant="BadgeVariant.Outline">
+        <Badge v-if="event.facts.kind" :variant="BadgeVariant.Outline">
           {{ EventsLabels.kind(event.facts.kind, kinds, locale) }}
         </Badge>
         <span class="text-xs text-muted-foreground">r{{ event.revision }}</span>

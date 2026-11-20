@@ -90,4 +90,19 @@ describe('events feed page', () => {
 
     expect(wrapper.get('[data-test="feed-last"]').text()).toMatch(/^track ev-\d+ → shortlisted$/);
   });
+
+  it("opens a card into its event's detail above the feed", async () => {
+    const wrapper = mount(FeedGallery, { props: { latencyMs: 0 } });
+    wrappers.push(wrapper);
+    await settle();
+
+    await wrapper.get('[data-test="event-media-card"] h3 a').trigger('click', { button: 0 });
+    await settle();
+
+    expect(wrapper.get('[data-test="feed-last"]').text()).toMatch(/^open ev-\d+$/);
+    expect(wrapper.get('[data-test="feed-detail"] #event-detail-title').text()).not.toBe('');
+    expect(wrapper.find('[data-test="feed-detail"] [data-test="event-scope"]').exists()).toBe(true);
+    await wrapper.get('[data-test="feed-detail"] > button').trigger('click');
+    expect(wrapper.find('[data-test="feed-detail"]').exists()).toBe(false);
+  });
 });

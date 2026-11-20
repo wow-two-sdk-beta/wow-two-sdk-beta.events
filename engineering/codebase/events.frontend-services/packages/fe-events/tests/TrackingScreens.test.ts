@@ -146,6 +146,14 @@ describe('event detail (PG04, PG07, PG08, PG11, PG13, PG17)', () => {
 
     expect(wrapper.get('#event-detail-title').text()).toBe('Выставка текстиля');
     expect(wrapper.get('[data-test="event-scope"]').text()).toBe('Местные');
+    // The header and source pills take the fe sdk's default pill size (24 px, px-2.5), as the SCFD pills do.
+    for (const pill of [
+      wrapper.get('[data-test="event-scope"]'),
+      wrapper.get('[data-test="event-source"] span.inline-flex'),
+    ]) {
+      expect(pill.classes()).toEqual(expect.arrayContaining(['h-6', 'px-2.5']));
+      expect(pill.classes()).not.toContain('h-5');
+    }
     expect(wrapper.get('[data-test="event-dates"]').text()).toBe('5 дек. 2026, 19:00');
     expect(wrapper.text()).not.toContain('Asia/Tashkent');
     const sources = wrapper.findAll('[data-test="event-source"]');
@@ -195,6 +203,12 @@ describe('deadlines panel (PG14)', () => {
     expect(wrapper.get('[data-test="deadline-when"]').text()).toBe('Apply by 20 Nov 2026');
     expect(wrapper.get('[data-test="deadline"] a').attributes('href')).toBe('/events/e1');
     expect(wrapper.get('[data-test="deadline"]').text()).toContain('Candidate');
+    const stage = wrapper
+      .get('[data-test="deadline"]')
+      .findAll('span')
+      .find((item) => item.text() === 'Candidate')!;
+    expect(stage.classes()).toEqual(expect.arrayContaining(['h-6', 'px-2.5']));
+    expect(stage.classes()).not.toContain('h-5');
     await wrapper.get('[data-test="deadline"] a').trigger('click', { button: 0 });
     expect(wrapper.emitted('open')).toEqual([['e1']]);
   });

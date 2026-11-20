@@ -126,7 +126,7 @@ watch([() => props.catalog, () => props.client], () => {
             @click="choose(digest)"
           >
             <span>{{ digest.name }}</span>
-            <Badge v-if="!digest.enabled" size="sm" :variant="BadgeVariant.Neutral">
+            <Badge v-if="!digest.enabled" :variant="BadgeVariant.Neutral">
               {{
                 eventsText('digestOff', locale)
               }}

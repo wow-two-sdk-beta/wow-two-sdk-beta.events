@@ -90,7 +90,7 @@ watch(
       >
         <div class="flex flex-wrap items-center gap-2">
           <h3 class="font-semibold">{{ source.name }}</h3>
-          <Badge size="sm" :variant="source.enabled ? BadgeVariant.Success : BadgeVariant.Neutral">
+          <Badge :variant="source.enabled ? BadgeVariant.Success : BadgeVariant.Neutral">
             {{ source.enabled ? eventsText('enabled', locale) : eventsText('disabled', locale) }}
           </Badge>
           <span class="text-xs text-muted-foreground">{{ source.catalog }} · {{ eventsText('subscription', locale) }} {{ source.subscriptionId }}</span>

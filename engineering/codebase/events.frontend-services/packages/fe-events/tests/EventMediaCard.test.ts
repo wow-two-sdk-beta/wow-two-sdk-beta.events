@@ -470,6 +470,28 @@ describe('event media card', () => {
   });
 });
 
+describe('event media card pills', () => {
+  it('draws every pill at the default pill size, 24 px with px-2.5, as the SCFD pills do', () => {
+    const wrapper = render(
+      build({ status: 'cancelled', attendance: 'online' }, { sources: [sourceModel('a', { state: 'gone' })] }),
+      { tracking: tracking('shortlisted'), stages },
+    );
+
+    const pills = wrapper.findAll('[data-test="event-pills"] > span');
+    expect(pills.map((pill) => pill.attributes('data-test'))).toEqual([
+      'event-kind',
+      'event-stage',
+      'event-status',
+      'event-online',
+      'event-removed',
+    ]);
+    for (const pill of pills) {
+      expect(pill.classes()).toEqual(expect.arrayContaining(['h-6', 'px-2.5']));
+      expect(pill.classes()).not.toContain('h-5');
+    }
+  });
+});
+
 describe('event media card zone slots', () => {
   const renderWith = (slots: Record<string, (scope: never) => unknown>, event = build(), props = {}) => {
     const wrapper = mount(EventMediaCard, {

@@ -110,7 +110,7 @@ defineExpose({ reload: () => summary.run() });
           >
             {{ daysLeftLabel(daysLeft(item) ?? 0, locale) }}
           </span>
-          <Badge size="sm" :variant="BadgeVariant.Brand">{{ EventsLabels.stage(item.stage, stages, locale) }}</Badge>
+          <Badge :variant="BadgeVariant.Brand">{{ EventsLabels.stage(item.stage, stages, locale) }}</Badge>
         </li>
       </ol>
     </div>

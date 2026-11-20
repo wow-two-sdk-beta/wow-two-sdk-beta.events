@@ -284,19 +284,19 @@ const track = (next: string) => emit('track', props.event.id, next);
         :removed="removed"
       >
         <div class="flex max-w-[10.5rem] flex-wrap items-center gap-1.5" data-test="event-pills">
-          <Badge v-if="kind" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-kind">
+          <Badge v-if="kind" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-kind">
             {{ lower(kind) }}
           </Badge>
-          <Badge v-if="stageLabel" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-stage">
+          <Badge v-if="stageLabel" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-stage">
             {{ lower(stageLabel) }}
           </Badge>
-          <Badge v-if="statusPill" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-status">
+          <Badge v-if="statusPill" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-status">
             {{ lower(statusPill) }}
           </Badge>
-          <Badge v-if="online" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-online">
+          <Badge v-if="online" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-online">
             {{ lower(EventsLabels.attendance('online', locale)) }}
           </Badge>
-          <Badge v-if="removed" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-removed">
+          <Badge v-if="removed" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-removed">
             {{ lower(eventsText('sourceStateGone', locale)) }}
           </Badge>
         </div>

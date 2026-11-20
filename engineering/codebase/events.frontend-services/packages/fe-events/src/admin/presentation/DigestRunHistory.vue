@@ -98,7 +98,7 @@ watch([() => props.catalog, () => props.digestId, () => props.client], () => loa
           <span class="text-muted-foreground">{{
             eventsText(run.trigger === 'manual' ? 'triggerManual' : 'triggerSchedule', locale)
           }}</span>
-          <Badge size="sm" :variant="statusVariants[run.status] ?? BadgeVariant.Neutral">
+          <Badge :variant="statusVariants[run.status] ?? BadgeVariant.Neutral">
             {{ statusKeys[run.status] ? eventsText(statusKeys[run.status], locale) : run.status }}
           </Badge>
           <span class="text-muted-foreground">

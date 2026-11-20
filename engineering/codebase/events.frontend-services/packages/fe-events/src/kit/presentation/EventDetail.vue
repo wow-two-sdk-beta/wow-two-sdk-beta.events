@@ -192,21 +192,20 @@ watch([() => props.catalog, () => props.eventId, () => props.client, () => props
     <article v-else-if="event && facts" class="space-y-5" aria-labelledby="event-detail-title">
       <header class="space-y-2">
         <div class="flex flex-wrap gap-2">
-          <Badge v-if="event.review !== 'published'" size="sm" :variant="BadgeVariant.Warning">
+          <Badge v-if="event.review !== 'published'" :variant="BadgeVariant.Warning">
             {{ EventsLabels.review(event.review, locale) }}
           </Badge>
-          <Badge v-if="facts.kind" size="sm" :variant="BadgeVariant.Outline">
+          <Badge v-if="facts.kind" :variant="BadgeVariant.Outline">
             {{ EventsLabels.kind(facts.kind, kinds, locale) }}
           </Badge>
           <Badge
             v-if="facts.status && facts.status !== 'scheduled'"
-            size="sm"
             :variant="facts.status === 'cancelled' ? BadgeVariant.Danger : BadgeVariant.Info"
           >
             {{ EventsLabels.status(facts.status, locale) }}
           </Badge>
-          <Badge v-if="scope" size="sm" :variant="BadgeVariant.Neutral" data-test="event-scope">{{ scope }}</Badge>
-          <Badge v-if="removed" size="sm" :variant="BadgeVariant.Warning" data-test="event-removed">
+          <Badge v-if="scope" :variant="BadgeVariant.Neutral" data-test="event-scope">{{ scope }}</Badge>
+          <Badge v-if="removed" :variant="BadgeVariant.Warning" data-test="event-removed">
             {{ eventsText('listingRemoved', locale) }}
           </Badge>
         </div>
@@ -288,7 +287,7 @@ watch([() => props.catalog, () => props.eventId, () => props.client, () => props
         <div v-if="facts.tags?.length">
           <dt class="text-xs font-medium uppercase text-muted-foreground">{{ eventsText('tags', locale) }}</dt>
           <dd class="flex flex-wrap gap-1">
-            <Badge v-for="tag in facts.tags" :key="tag" size="sm" :variant="BadgeVariant.Neutral">{{ tag }}</Badge>
+            <Badge v-for="tag in facts.tags" :key="tag" :variant="BadgeVariant.Neutral">{{ tag }}</Badge>
           </dd>
         </div>
       </dl>
@@ -368,7 +367,7 @@ watch([() => props.catalog, () => props.eventId, () => props.client, () => props
               {{ item.label }}
             </a>
             <span v-else class="font-medium">{{ item.label }}</span>
-            <Badge v-if="item.source.state" size="sm" :variant="stateVariant(item.source.state)">
+            <Badge v-if="item.source.state" :variant="stateVariant(item.source.state)">
               {{ EventsLabels.sourceState(item.source.state, locale) }}
             </Badge>
             <span class="text-xs text-muted-foreground">

@@ -100,10 +100,10 @@ async function split(source: EventSourceModel) {
             {{ row.label }}
           </a>
           <span v-else class="font-medium">{{ row.label }}</span>
-          <Badge v-if="row.source.state" size="sm" :variant="stateVariant(row.source.state)">
+          <Badge v-if="row.source.state" :variant="stateVariant(row.source.state)">
             {{ EventsLabels.sourceState(row.source.state, locale) }}
           </Badge>
-          <Badge v-if="row.source.matchedBy" size="sm" :variant="BadgeVariant.Info" data-test="source-matched">
+          <Badge v-if="row.source.matchedBy" :variant="BadgeVariant.Info" data-test="source-matched">
             {{ eventsText('matchedByRule', locale) }}
           </Badge>
           <span class="text-xs text-muted-foreground">

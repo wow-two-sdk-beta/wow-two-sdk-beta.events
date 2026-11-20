@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { EventsFeed, eventTitle, formatEventWhen } from '@wow-two-beta/fe-events/kit';
+import { EventDetail, EventsFeed, eventTitle, formatEventWhen } from '@wow-two-beta/fe-events/kit';
 import { ref } from 'vue';
 import expoPoster from './posters/poster-expo.svg?no-inline';
 import runwayPoster from './posters/poster-runway.svg?no-inline';
@@ -10,7 +10,8 @@ import { createFeedFake, feedRegions, feedWorkflow } from './FeedFake';
 /**
  * Renders `EventsFeed` in tracking mode over an in-memory service (`FeedFake`: 40 events, pages of 12, facets that
  * follow the query), with Ocharo's regions, kinds, workflow, hidden stages and quick stages and one consumer attention
- * pill, to check the facet bar, the scroll and the cards by eye at any width. A development page only: `feed.html`,
+ * pill, to check the facet bar, the scroll and the cards by eye at any width; opening a card shows its `EventDetail`
+ * above the feed. A development page only: `feed.html`,
  * served by the dev server and left out of the build.
  */
 defineOptions({ name: 'FeedGallery' });
@@ -25,6 +26,7 @@ const fake = createFeedFake({
 const pastEvents = fake.events.filter((event) => (event.facts.starts?.value ?? '9') < sampleToday);
 const attention = [{ key: 'past', label: `${pastEvents.length} past to close`, count: pastEvents.length }];
 const last = ref('');
+const opened = ref<string | null>(null);
 </script>
 
 <template>
@@ -35,6 +37,18 @@ const last = ref('');
         {{ last || 'Open a card, pick a stage, or add an event to see it here.' }}
       </p>
     </header>
+    <section v-if="opened" class="space-y-3 rounded-lg border border-border p-4" data-test="feed-detail">
+      <EventDetail
+        :client="fake.client"
+        catalog="ocharo"
+        :event-id="opened"
+        :today="sampleToday"
+        :kinds="sampleKinds"
+        :regions="feedRegions"
+        trackable
+      />
+      <button type="button" class="text-sm underline underline-offset-4" @click="opened = null">Close event</button>
+    </section>
     <EventsFeed
       :client="fake.client"
       catalog="ocharo"
@@ -51,7 +65,12 @@ const last = ref('');
       :page-size="12"
       :attention="attention"
       :event-href="(id) => `#${id}`"
-      @open="(id) => (last = `open ${id}`)"
+      @open="
+        (id) => {
+          last = `open ${id}`;
+          opened = id;
+        }
+      "
       @tracked="(tracking) => (last = `track ${tracking.eventId} → ${tracking.stage}`)"
       @proposed="(event) => (last = `proposed ${event.id}`)"
     >

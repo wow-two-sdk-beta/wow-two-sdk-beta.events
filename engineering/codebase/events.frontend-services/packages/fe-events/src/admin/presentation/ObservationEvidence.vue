@@ -76,7 +76,7 @@ const facts = computed(() =>
     :data-state="observation.state"
   >
     <div class="flex flex-wrap items-center gap-2">
-      <Badge size="sm" :variant="stateVariant">{{ EventsLabels.observation(observation.state, locale) }}</Badge>
+      <Badge :variant="stateVariant">{{ EventsLabels.observation(observation.state, locale) }}</Badge>
       <code class="text-xs">{{ observation.type }}</code>
       <span class="text-xs text-muted-foreground">{{ observation.sourceKind }}</span>
       <span class="text-xs text-muted-foreground">
