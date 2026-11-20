@@ -31,3 +31,6 @@ picks.
 - 2026-11-10 — Events reads SCFD's wire with its own reader until SCFD publishes `Harvest.Client` (events-integration
   #15): the package is on no registry.
 - 2026-11-10 — PostgreSQL only, with Testcontainers in every tier but unit: the domain template's current shape.
+- 2026-11-20 — intake maps a sourced event's media into `facts.images`: the source URL stays the credit link and SCFD's
+  Files copy rides as `fileRef`; sourcing stays internal use only, each item credited by its external link
+  (events-integration #31, #50).

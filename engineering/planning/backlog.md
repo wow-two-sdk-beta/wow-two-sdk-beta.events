@@ -26,7 +26,7 @@ The events lane's verdict and phase for each contract it owns (events-integratio
 | #26 | Import bundle | add | P1 | `wow2.events-import.v1`, below in § Imports; `dryRun`; idempotent on (catalog, organization, `legacyId`), so a rerun returns the same id map; month precision and `estimated` kept; language per row, `und` when unknown |
 | #28 | Deploy | add | P1 | `deploy.yml`: product and service `events`, PostgreSQL (`needs: [postgres]`), site `app` (API, pages and console), typed issuer, audience, SCFD base URL, token endpoint, client id and secret, subscription id; signal route `/signals/identity`; dev check on health and status |
 | #30 | Review console | add | P1 | Events' own pages on the `app` site; reviewers sign in through Ocharo's Identity with Identity's BFF as confidential client `events-console` (code with PKCE) and need `events:review` in the catalog's owner organization; platform registers the client, wheelhouse types its redirect URIs and secret; reviewers from other issuers wait for P2 |
-| #31 | Event images | change | P1 references, P2 curated bytes | P1: no bytes copied; sourced images stay evidence in their observation and never become content (#50); only a curator adds an image reference. P2: curated images in a Files instance, not Ocharo's tenant (#48 open) |
+| #31 | Event images | change | P1 references, P2 curated bytes | P1: no bytes copied; intake maps a sourced event's media into its image references, each keeping its source URL as the credit link and SCFD's Files copy as `fileRef` when SCFD holds one; a curator may add more. P2: curated images in a Files instance, not Ocharo's tenant (#48 open) |
 | #24 | Service tokens (check) | provided | P1 | be sdk `10.0.111-beta` `Http/Auth` ships `AddOAuth2ClientCredentials` and `AddOAuth2TokenExchange` (with `IOAuth2SubjectTokenSource`); Identity `Client`'s BFF feeds a person's token (`BffSubjectTokenSource`); no Identity or core change (no #40 blocker) |
 
 ## Features
@@ -75,7 +75,7 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 |---|---|---|
 | Places, organizers and series as deduplicated entities; occurrences; parent events | feature | P2; P1 embeds place and organizer in the event |
 | Catalog sharing with chosen organizations, and public catalogs, for catalogs with no sourced records | feature | P2; EV1, `ocharo-fashion` stays private (events-integration #7, #50) |
-| Curated event images in a Files instance | feature | P2; sourced images stay evidence (events-integration #31, #50); the instance stays open (#48) |
+| Curated event images in a Files instance | feature | P2; a sourced image already rides as a reference with SCFD's Files copy in `fileRef` (events-integration #31); the instance for curated bytes stays open (#48) |
 | Translations of titles and summaries | feature | P2; events-integration #11 |
 
 ## Tracking

@@ -1,8 +1,8 @@
 # @wow-two-beta/fe-events
 
 The Events domain's UI: a shared catalog of dated happenings (fairs, fashion weeks, competitions) curated in review,
-with each organization's private tracking. Sourced records serve internal tracking only: sourced images and text are
-review evidence, never content.
+with each organization's private tracking. Sourced records serve internal use only, and every item credits its source by the external link; a sourced
+event's images arrive in `facts.images` with the source URL, and `fileRef` when SCFD holds a copy.
 
 ```bash
 pnpm add @wow-two-beta/fe-events @wow-two-beta/fe vue
@@ -84,7 +84,7 @@ to the consumer's Tailwind sources:
     `attention` (`{ key, label, count }[]`), each expanding to the `#attention` slot (`{ key, close }`).
   - Breaks from v1: `EventCard` and the `variant` prop are gone (every event is a card), `shownFields` is dropped
     from the feed (cost stays off cards; `TrackingShownField` stays for `EventDetail`), and the peer floor is `0.0.56`.
-    The card shows the curated `facts.images[0]`, else a date tile (the start's day in large type with the month under it, the kind's icon; a
+    The card shows `facts.images[0]`, else a date tile (the start's day in large type with the month under it, the kind's icon; a
     month-only start the full month name with the year under it and no large day; an undated event the icon alone). Top start: lower-case glass pills for the kind, the stage when tracked, cancelled /
     postponed / online and removed. Top end: a menu of `quickStages` for an event at the default stage, and a mark for
     high priority. Panel: the title in two lines, "dates · city" (`ongoing` / `finished`), then the next open deadline

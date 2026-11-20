@@ -9,8 +9,9 @@ Defer to `wow-two-ws/conventions/development/frontend/`.
   contract and route builders), `./kit` (`createEventsClient`, date helpers honest about precision, `EventsFeed`,
   `EventMediaCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm`) and `./admin`
   (`ReviewQueue`, `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`, `ImportPanel`, and the digests'
-  `DigestsPanel`, `DigestEditor`, `DigestRunHistory`). Sourced images and text show
-  only in `./admin`, labelled source evidence (events-integration #50). It peers `@wow-two-beta/fe` at `>=0.0.n <0.1.0`, `n` the pinned
+  `DigestsPanel`, `DigestEditor`, `DigestRunHistory`). A sourced event's images reach the
+  kit through `facts.images` (the source URL as the credit link, `fileRef` when SCFD holds a copy); its text shows only in `./admin`,
+  labelled source evidence (events-integration #50). It peers `@wow-two-beta/fe` at `>=0.0.n <0.1.0`, `n` the pinned
   version; `check:package` enforces it and fails when one of the three exports is missing.
 - `apps/web` is `@events/web`, private: the review console (`/`, `/observations`, `/events`, `/intake`, `/imports`,
   `/digests`), signed in

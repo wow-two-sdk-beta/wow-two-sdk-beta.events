@@ -1,6 +1,6 @@
 # wow-two-sdk-beta.events
 
-Internal event catalog fed by SCFD and curated in review, with private tracking per organization — as a .NET package family, an npm package and a service image, under one contract. Sourced records serve internal tracking only and are never republished.
+Internal event catalog fed by SCFD and curated in review, with private tracking per organization — as a .NET package family, an npm package and a service image, under one contract. Sourced records serve internal use only, and every item credits its source by the external link.
 
 ## Lazy loading
 
