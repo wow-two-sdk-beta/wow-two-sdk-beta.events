@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
-import { EventsFeed } from '../src/kit';
+import { EventCard, EventMediaCard, EventsFeed } from '../src/kit';
 import { envelope, eventModel, fakeService } from './Fixtures';
 
 const wrappers: ReturnType<typeof mount>[] = [];
@@ -58,6 +58,49 @@ describe('events feed', () => {
     ]);
     expect(wrapper.text()).toContain('Неделя моды');
     expect(wrapper.text()).toContain('≈ окт. 2026 (ожидается)');
+  });
+
+  it('lists events as EventCard rows by default', async () => {
+    const { wrapper } = await render({}, page);
+
+    expect(wrapper.findAllComponents(EventCard)).toHaveLength(3);
+    expect(wrapper.findAllComponents(EventMediaCard)).toHaveLength(0);
+    const lists = wrapper.findAll('[data-test="event-group"] > ul');
+    expect(lists).toHaveLength(3);
+    expect(lists.every((list) => list.classes().join(' ') === 'grid gap-3')).toBe(true);
+    expect(wrapper.find('[data-test="event-cards"]').exists()).toBe(false);
+  });
+
+  it('lists events as image-first cards in a grid with variant "cards", keeping the month headers', async () => {
+    const { wrapper } = await render({ variant: 'cards', eventHref: (id: string) => `/events/${id}` }, page);
+
+    expect(wrapper.findAll('[data-test="event-group"] > h3').map((heading) => heading.text())).toEqual([
+      'October 2026',
+      'March 2027',
+      'Date not announced',
+    ]);
+    expect(wrapper.findAllComponents(EventCard)).toHaveLength(0);
+    expect(wrapper.findAllComponents(EventMediaCard)).toHaveLength(3);
+    const grids = wrapper.findAll('[data-test="event-cards"]');
+    expect(grids).toHaveLength(3);
+    expect(grids[0]!.classes()).toContain('grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))]');
+    expect(wrapper.findAll('[data-test="event-media-card"]')).toHaveLength(3);
+    expect(wrapper.findAll('img').map((image) => image.attributes('src'))).toEqual([
+      'https://cdn.example.test/curated.jpg',
+    ]);
+    expect(wrapper.findAll('h3 a').map((link) => link.attributes('href'))).toEqual([
+      '/events/october',
+      '/events/march',
+      '/events/undated',
+    ]);
+  });
+
+  it('opens an event from a card', async () => {
+    const { wrapper } = await render({ variant: 'cards' }, page);
+
+    await wrapper.get('[data-test="event-media-card"] h3 button').trigger('click');
+
+    expect(wrapper.emitted('open')).toEqual([['october']]);
   });
 
   it('sends a proposal for review and says it is not published yet', async () => {

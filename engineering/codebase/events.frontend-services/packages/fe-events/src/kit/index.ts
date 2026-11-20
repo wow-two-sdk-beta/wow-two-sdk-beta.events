@@ -71,6 +71,7 @@ export {
 export { EventsMessages, eventsText, type EventsMessageKey } from './text/EventsMessages';
 export { EventsLabels, eventsFailureMessage, type EventsFailureContext } from './text/EventsLabels';
 export { default as EventCard } from './presentation/EventCard.vue';
+export { default as EventMediaCard } from './presentation/EventMediaCard.vue';
 export { default as EventsFeed } from './presentation/EventsFeed.vue';
 export { default as EventsDeadlines } from './presentation/EventsDeadlines.vue';
 export { default as EventDetail } from './presentation/EventDetail.vue';

@@ -82,6 +82,7 @@ const requiredNames = {
     'eventsText',
     'EventsFeed',
     'EventCard',
+    'EventMediaCard',
     'EventsDeadlines',
     'EventDetail',
     'EventProposalForm',

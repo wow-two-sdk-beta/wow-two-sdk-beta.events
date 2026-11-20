@@ -27,6 +27,7 @@ import { EventsLabels } from '../text/EventsLabels';
 import { pickText, type EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
 import EventCard from './EventCard.vue';
+import EventMediaCard from './EventMediaCard.vue';
 import EventProposalForm from './EventProposalForm.vue';
 import FailureNotice from './FailureNotice.vue';
 
@@ -45,7 +46,10 @@ interface FeedPage {
  * filters, past events on request, a calendar download, and — for members — a proposal: in a private catalog it publishes
  * at once and the feed reloads to show it; in a shared or public one it waits for review. With `tracking`, it lists the
  * organization's tracking instead (PG01): each card carries its stage (an untracked one the default stage), priority and
- * chosen fields; a stage filter with counts, stages hidden by default, and quick stage actions.
+ * chosen fields; a stage filter with counts, stages hidden by default, and quick stage actions. With `variant="cards"`,
+ * each month's events are image-first `EventMediaCard`s in a responsive grid — the image or a date tile, kind and stage
+ * pills, a stage menu and priority mark, the title, dates, city and next deadline; scope, cost, organizer and the review
+ * state stay off the card. The default, `list`, is the `EventCard` rows.
  */
 defineOptions({ name: 'EventsFeed' });
 
@@ -81,6 +85,8 @@ const props = withDefaults(
     proposal?: EventProposalOptions;
     /** The viewer's IANA zone, to name a start time's zone only when it differs; the browser's by default. */
     viewerZone?: string;
+    /** How each month's events show: `list` rows (`EventCard`, the default) or image-first `cards` (`EventMediaCard`). */
+    variant?: 'list' | 'cards';
   }>(),
   {
     locale: 'en',
@@ -98,6 +104,7 @@ const props = withDefaults(
     shownFields: () => [],
     proposal: () => ({}),
     viewerZone: undefined,
+    variant: 'list',
   },
 );
 
@@ -455,7 +462,31 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
           >
             {{ eventGroupHeading(group.key, locale) }}
           </h3>
-          <ul class="grid gap-3">
+          <ul
+            v-if="variant === 'cards'"
+            class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-3"
+            data-test="event-cards"
+          >
+            <li v-for="item in group.items" :key="item.event.id" class="min-w-0">
+              <EventMediaCard
+                :event="item.event"
+                :locale="locale"
+                :today="day"
+                :kinds="kinds"
+                :href="eventHref?.(item.event.id)"
+                :tracking="item.tracking"
+                :stages="stages"
+                :default-stage="defaultStage"
+                :quick-stages="quickStages"
+                :can-track="tracking && canTrack"
+                :track-pending="trackRequest.pending.value"
+                :viewer-zone="viewerZone"
+                @open="(id) => emit('open', id)"
+                @track="track"
+              />
+            </li>
+          </ul>
+          <ul v-else class="grid gap-3">
             <li v-for="item in group.items" :key="item.event.id" class="min-w-0">
               <EventCard
                 :event="item.event"

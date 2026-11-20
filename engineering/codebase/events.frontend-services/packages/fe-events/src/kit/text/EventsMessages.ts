@@ -66,6 +66,8 @@ export const EventsMessages = {
     'Mamlakat kiritilmaguncha qamrov noma’lum.',
   ),
   untrackedMarker: entry('New — review', 'Новое — посмотрите', 'Yangi — ko‘rib chiqing'),
+  ongoing: entry('ongoing', 'идёт сейчас', 'davom etmoqda'),
+  finished: entry('finished', 'завершено', 'tugagan'),
   via: entry('via {source}', 'через {source}', '{source} orqali'),
   listingRemoved: entry('Listing removed at source', 'Объявление снято у источника', 'E’lon manbada olib tashlangan'),
   sourceStateLive: entry('Live', 'Активно', 'Faol'),
@@ -83,6 +85,9 @@ export const EventsMessages = {
     'Tadbir bu orada o‘zgardi; ro‘yxat yangilandi.',
   ),
   applyBy: entry('Apply by {date}', 'Подать заявку до {date}', 'Ariza {date} gacha'),
+  deadlineKindBy: entry('{kind} by {date}', '{kind} до {date}', '{kind} {date} gacha'),
+  daysShort: entry('{count}d', '{count} дн.', '{count} kun'),
+  todayShort: entry('today', 'сегодня', 'bugun'),
   recordChanged: entry(
     'This record changed. Reload the latest version before trying again.',
     'Запись изменилась. Загрузите последнюю версию и попробуйте снова.',

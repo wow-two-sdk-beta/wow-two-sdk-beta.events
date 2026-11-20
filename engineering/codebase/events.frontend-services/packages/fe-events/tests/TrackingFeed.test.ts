@@ -7,6 +7,7 @@ import { envelope, eventModel, fakeService } from './Fixtures';
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
   for (const wrapper of wrappers.splice(0)) wrapper.unmount();
+  document.body.innerHTML = '';
 });
 
 const workflow: WorkflowModel = {
@@ -152,6 +153,32 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
     expect(await put.json()).toEqual({ stage: 'shortlisted', expectedRevision: null });
     expect(listRequests(requests)).toHaveLength(2);
     expect(wrapper.emitted('tracked')).toHaveLength(1);
+  });
+
+  it('moves an untracked event from the stage menu on its card with variant "cards"', async () => {
+    const { wrapper, requests } = await render({ ...ocharo, variant: 'cards' }, router(items));
+
+    expect(wrapper.findAll('[data-test="event-card"]')).toHaveLength(0);
+    const cards = wrapper.findAll('[data-test="event-media-card"]');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]!.find('[data-test="event-stage"]').exists()).toBe(false);
+    expect(cards[0]!.find('[data-test="event-scope"]').exists()).toBe(false);
+    expect(cards[1]!.get('[data-test="event-stage"]').text()).toBe('shortlisted');
+    expect(cards[1]!.get('[data-test="event-priority"]').attributes('aria-label')).toBe('High priority');
+    expect(cards[1]!.find('[data-test="event-stage-menu"]').exists()).toBe(false);
+
+    await cards[0]!.get('[data-test="event-stage-menu"]').trigger('click');
+    await flushPromises();
+    const entries = [...document.querySelectorAll<HTMLElement>('[data-test="event-quick-stage"]')];
+    expect(entries.map((entry) => entry.textContent?.trim())).toEqual(['Shortlisted', 'Skipped']);
+    entries[0]!.click();
+    await flushPromises();
+
+    const put = requests.find((request) => request.method === 'PUT')!;
+    expect(new URL(put.url).pathname).toBe('/api/events/v1/catalogs/ocharo/tracking/imported');
+    expect(await put.json()).toEqual({ stage: 'shortlisted', expectedRevision: null });
+    expect(wrapper.emitted('tracked')).toHaveLength(1);
+    expect(wrapper.emitted('open')).toBeUndefined();
   });
 
   it('reloads and says so when the quick action meets a newer version', async () => {
