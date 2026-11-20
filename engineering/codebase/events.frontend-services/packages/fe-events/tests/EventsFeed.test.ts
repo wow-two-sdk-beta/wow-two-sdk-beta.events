@@ -102,7 +102,12 @@ describe('events feed', () => {
     const facets = wrapper.findComponent(FacetBar).props('facets') as readonly FacetDefinition[];
     expect(facets.map((facet) => facet.key)).toEqual(['scope', 'kind', 'when']);
     expect(facets.find((facet) => facet.key === 'kind')?.kind).toBe('single');
-    expect(facets.flatMap((facet) => facet.options).every((option) => option.count === undefined)).toBe(true);
+    expect(
+      facets
+        .flatMap((facet) => (facet.kind === 'toggle' ? [] : facet.options))
+        .every((option) => option.count === undefined),
+    ).toBe(true);
+    expect(facets.some((facet) => facet.kind === 'toggle')).toBe(false);
     expect(wrapper.find('[data-test="attention-pills"]').exists()).toBe(false);
   });
 

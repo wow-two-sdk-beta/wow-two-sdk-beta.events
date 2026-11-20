@@ -241,6 +241,7 @@ export const EventsMessages = {
   anyValue: entry('Any', 'Любой', 'Istalgan'),
   selectedCount: entry('{count} selected', 'Выбрано: {count}', 'Tanlangan: {count}'),
   removeFilter: entry('Remove {facet}: {value}', 'Убрать {facet}: {value}', 'Olib tashlash: {facet}: {value}'),
+  removeToggleFilter: entry('Remove {facet}', 'Убрать: {facet}', 'Olib tashlash: {facet}'),
   matchOf: entry('{matched} of {total}', '{matched} из {total}', '{total} tadan {matched}'),
   dateFacet: entry('Date', 'Дата', 'Sana'),
   datePresetUpcoming: entry('Upcoming', 'Предстоящие', 'Yaqinlashayotgan'),
@@ -252,9 +253,7 @@ export const EventsMessages = {
   customRange: entry('Pick a range', 'Выберите период', 'Davrni tanlang'),
   sourceFacet: entry('Source', 'Источник', 'Manba'),
   sourceCurated: entry('Curated', 'Вручную', 'Qo‘lda kiritilgan'),
-  hiddenStages: entry('Hidden stages', 'Скрытые этапы', 'Yashirin bosqichlar'),
-  deadlineFacet: entry('Deadline', 'Срок', 'Muddat'),
-  deadlineSoon: entry('Within 30 days', 'В ближайшие 30 дней', '30 kun ichida'),
+  deadlineSoon: entry('Deadline within 30 days', 'Срок в ближайшие 30 дней', '30 kun ichida tugaydigan muddat'),
   deadlinesSoonOne: entry('1 deadline in 14 days', '1 срок в ближайшие 14 дней', '14 kun ichida 1 ta muddat'),
   deadlinesSoon: entry(
     '{count} deadlines in 14 days',

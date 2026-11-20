@@ -120,8 +120,13 @@ type Mounted = Awaited<ReturnType<typeof render>>['wrapper'];
 const bar = (wrapper: Mounted) => wrapper.findComponent(FacetBar);
 const facetOf = (wrapper: Mounted, key: string) =>
   (bar(wrapper).props('facets') as readonly FacetDefinition[]).find((item) => item.key === key);
+/** The options of a choice facet; a toggle has none. */
+const optionsOf = (wrapper: Mounted, key: string) => {
+  const facet = facetOf(wrapper, key);
+  return facet && facet.kind !== 'toggle' ? facet.options : [];
+};
 const countsOf = (wrapper: Mounted, key: string) =>
-  Object.fromEntries((facetOf(wrapper, key)?.options ?? []).map((option) => [option.value, option.count]));
+  Object.fromEntries(optionsOf(wrapper, key).map((option) => [option.value, option.count]));
 /** Reports a choice the way the bar does, so the feed takes the whole selection. */
 async function choose(wrapper: Mounted, selection: FacetSelection) {
   bar(wrapper).vm.$emit('update:modelValue', selection);
@@ -182,11 +187,29 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
     expect(countsOf(wrapper, 'kind')).toEqual({ runway: 2, exhibition: 0 });
     expect(facetOf(wrapper, 'kind')?.kind).toBe('multi');
     expect(countsOf(wrapper, 'city')).toEqual({ tashkent: 1, almaty: 1 });
-    expect(facetOf(wrapper, 'city')?.options.map((option) => option.label)).toEqual(['Tashkent', 'Almaty']);
-    expect(facetOf(wrapper, 'source')?.options.map((option) => option.label)).toEqual(['Afisha', 'Curated']);
-    expect(countsOf(wrapper, 'priority')).toEqual({ high: 1 });
-    expect(countsOf(wrapper, 'deadline')).toEqual({ soon: 1 });
-    expect(facetOf(wrapper, 'when')?.options.map((option) => option.label)).toEqual([
+    expect(optionsOf(wrapper, 'city').map((option) => option.label)).toEqual(['Tashkent', 'Almaty']);
+    expect(optionsOf(wrapper, 'source').map((option) => option.label)).toEqual(['Afisha', 'Curated']);
+    expect(facetOf(wrapper, 'priority')).toEqual({
+      key: 'priority',
+      label: 'High priority',
+      kind: 'toggle',
+      placement: 'popover',
+      count: 1,
+    });
+    expect(facetOf(wrapper, 'deadline')).toEqual({
+      key: 'deadline',
+      label: 'Deadline within 30 days',
+      kind: 'toggle',
+      placement: 'popover',
+      count: 1,
+    });
+    expect(facetOf(wrapper, 'hidden')).toEqual({
+      key: 'hidden',
+      label: 'Show Skipped, Rejected',
+      kind: 'toggle',
+      placement: 'popover',
+    });
+    expect(optionsOf(wrapper, 'when').map((option) => option.label)).toEqual([
       'Upcoming',
       'This month',
       'Next 3 months',
@@ -323,13 +346,13 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
   it('turns a popover choice into a removable chip, and removing it drops the filter', async () => {
     const { wrapper, requests } = await render(ocharo, router());
 
-    await choose(wrapper, { city: ['tashkent'], priority: 'high' });
+    await choose(wrapper, { city: ['tashkent'], priority: true });
 
     expect(lastParams(listRequests(requests)).getAll('cities')).toEqual(['tashkent']);
     expect(lastParams(listRequests(requests)).get('priority')).toBe('high');
     const chips = wrapper.get('[data-facet-chips]');
     expect(chips.text()).toContain('City: Tashkent');
-    expect(chips.text()).toContain('Priority: High');
+    expect(chips.text()).toContain('High priority');
     expect(wrapper.get('[data-facet-filters-count]').text()).toBe('2');
 
     await wrapper.get('[aria-label="Remove City: Tashkent"]').trigger('click');
@@ -343,10 +366,10 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
   it('shows hidden stages on request or by their own filter, and filters by scope chips', async () => {
     const { wrapper, requests } = await render(ocharo, router());
 
-    await choose(wrapper, { hidden: 'show' });
+    await choose(wrapper, { hidden: true });
     expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual([]);
 
-    await choose(wrapper, { hidden: 'show', stage: ['skipped'] });
+    await choose(wrapper, { hidden: true, stage: ['skipped'] });
     expect(lastParams(listRequests(requests)).getAll('stages')).toEqual(['skipped']);
     expect(facetOf(wrapper, 'hidden')).toBeUndefined();
 
@@ -433,6 +456,110 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
       '/events/imported',
       '/events/shortlisted',
     ]);
+  });
+});
+
+describe('toggle facets', () => {
+  it('sets the priority query with "High priority", clears it, and its chip removes it', async () => {
+    const { wrapper, requests } = await render(ocharo, router());
+    expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
+
+    await choose(wrapper, { priority: true });
+
+    expect(lastParams(listRequests(requests)).get('priority')).toBe('high');
+    expect(lastParams(facetRequests(requests)).get('priority')).toBe('high');
+    expect(wrapper.get('[data-facet-chips]').text()).toContain('High priority');
+    expect(wrapper.get('[data-facet-filters-count]').text()).toBe('1');
+
+    await wrapper.get('[aria-label="Remove High priority"]').trigger('click');
+    await flushPromises();
+    expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
+    expect(lastParams(facetRequests(requests)).get('priority')).toBeNull();
+    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
+
+    await choose(wrapper, { priority: true });
+    await choose(wrapper, {});
+    expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
+  });
+
+  it('sets the deadline query 30 days from today with "Deadline within 30 days", clears it, and its chip removes it', async () => {
+    const { wrapper, requests } = await render(ocharo, router());
+    expect(lastParams(listRequests(requests)).get('deadlineBefore')).toBeNull();
+
+    await choose(wrapper, { deadline: true });
+
+    expect(lastParams(listRequests(requests)).get('deadlineBefore')).toBe('2026-12-10');
+    expect(lastParams(facetRequests(requests)).get('deadlineBefore')).toBe('2026-12-10');
+    expect(wrapper.get('[data-facet-chips]').text()).toContain('Deadline within 30 days');
+
+    await wrapper.get('[aria-label="Remove Deadline within 30 days"]').trigger('click');
+    await flushPromises();
+    expect(lastParams(listRequests(requests)).get('deadlineBefore')).toBeNull();
+    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
+
+    await choose(wrapper, { deadline: true });
+    await choose(wrapper, {});
+    expect(lastParams(listRequests(requests)).get('deadlineBefore')).toBeNull();
+  });
+
+  it('lifts the hidden-stage exclusion with "Show {hidden stages}", restores it on clear, and its chip removes it', async () => {
+    const { wrapper, requests } = await render(ocharo, router());
+    expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual(['skipped', 'rejected']);
+
+    await choose(wrapper, { hidden: true });
+
+    expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual([]);
+    expect(lastParams(facetRequests(requests)).getAll('excludeStages')).toEqual([]);
+    expect(wrapper.get('[data-facet-chips]').text()).toContain('Show Skipped, Rejected');
+
+    await wrapper.get('[aria-label="Remove Show Skipped, Rejected"]').trigger('click');
+    await flushPromises();
+    expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual(['skipped', 'rejected']);
+    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
+
+    await choose(wrapper, { hidden: true });
+    await choose(wrapper, {});
+    expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual(['skipped', 'rejected']);
+  });
+
+  it('flips a toggle from its switch row in the Filters popover', async () => {
+    const { wrapper, requests } = await render(ocharo, router());
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().startsWith('Filters'))!
+      .trigger('click');
+    await flushPromises();
+
+    const rows = [...document.querySelectorAll<HTMLElement>('[data-facet-toggle-row]')];
+    const switchOf = (row: HTMLElement) => row.querySelector<HTMLInputElement>('input[role="switch"]')!;
+    expect(rows.map((row) => switchOf(row).getAttribute('aria-label'))).toEqual([
+      'Show Skipped, Rejected',
+      'High priority',
+      'Deadline within 30 days',
+    ]);
+    expect(rows[1]!.textContent).toContain('1');
+
+    switchOf(rows[1]!).click();
+    await flushPromises();
+    expect(switchOf(rows[1]!).checked).toBe(true);
+    expect(lastParams(listRequests(requests)).get('priority')).toBe('high');
+    expect(wrapper.get('[data-facet-chips]').text()).toContain('High priority');
+
+    switchOf(rows[1]!).click();
+    await flushPromises();
+    expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
+    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
+  });
+
+  it("names a toggle chip's close button in each language", async () => {
+    for (const [locale, name] of [
+      ['ru', 'Убрать: Высокий приоритет'],
+      ['uz', 'Olib tashlash: Yuqori ustuvorlik'],
+    ] as const) {
+      const { wrapper } = await render({ ...ocharo, locale }, router());
+      await choose(wrapper, { priority: true });
+      expect(wrapper.find(`[aria-label="${name}"]`).exists(), locale).toBe(true);
+    }
   });
 });
 

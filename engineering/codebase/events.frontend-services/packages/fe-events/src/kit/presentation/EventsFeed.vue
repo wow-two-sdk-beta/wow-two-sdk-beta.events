@@ -67,9 +67,9 @@ interface FeedPage {
 /**
  * Lists a catalog's events as image-first `EventMediaCard`s in a responsive grid, behind the fe sdk's `FacetBar`: the
  * match pill ("12 of 72", tracking only), a search, inline scope chips (the consumer's `regions`) and kind chips, a
- * "Filters" popover (stage, city, source, high priority, deadline within 30 days, the hidden stages' toggle and the
- * date presets: upcoming by default, this month, next 3 months, this year, past, a custom range) whose picks show as
- * removable chips, a sort (start date, recently added, nearest deadline) and — at the end — the proposal button and an
+ * "Filters" popover (stage, city, source, the toggles "High priority", "Deadline within 30 days" and "Show {hidden
+ * stages}", and the date presets: upcoming by default, this month, next 3 months, this year, past, a custom range)
+ * whose picks show as removable chips, a sort (start date, recently added, nearest deadline) and — at the end — the proposal button and an
  * overflow menu with the calendar download. The list scrolls without a button: `useAdaptiveList` loads the next cursor
  * ahead of the reader. Under the `starts` sort each month has a divider, undated events last; under the other sorts
  * the grid is flat. With `tracking` (PG01) it lists the organization's tracking: each card carries its stage (an
@@ -203,13 +203,15 @@ const hiddenLabels = computed(() =>
   hidden.value.map((key) => EventsLabels.stage(key, stages.value, props.locale)).join(', '),
 );
 
-/** The values a facet holds, whatever its kind. */
+/** The values a choice facet holds, whatever its kind; a toggle holds none. */
 function pick(key: string): readonly string[] {
   const value = selection.value[key];
-  if (value === undefined || value === null || value === '') return [];
+  if (value === undefined || value === null || value === '' || typeof value === 'boolean') return [];
   return typeof value === 'string' ? [value] : value;
 }
 const one = (key: string) => pick(key)[0] ?? '';
+/** Whether a toggle facet is on: its selection value is `true`, its key absent while off. */
+const on = (key: string) => selection.value[key] === true;
 
 const selectedRegion = computed(() => props.regions?.find((item) => item.key === one('scope')) ?? null);
 const preset = computed<EventDatePreset>(() => {
@@ -257,11 +259,11 @@ const trackingFilter = computed<TrackingQuery>(() => {
     ...(pick('source').length ? { sources: pick('source') } : {}),
     ...(picked.length
       ? { stages: picked }
-      : hidden.value.length && one('hidden') !== 'show'
+      : hidden.value.length && !on('hidden')
         ? { excludeStages: hidden.value }
         : {}),
-    ...(one('priority') ? { priority: 'high' as const } : {}),
-    ...(one('deadline') ? { deadlineBefore: addEventDays(day.value, deadlineFacetDays) } : {}),
+    ...(on('priority') ? { priority: 'high' as const } : {}),
+    ...(on('deadline') ? { deadlineBefore: addEventDays(day.value, deadlineFacetDays) } : {}),
   };
 });
 /** The base query: nothing the reader chose, the default upcoming view with the hidden stages still left out. */
@@ -458,10 +460,9 @@ const facetDefinitions = computed<readonly FacetDefinition[]>(() => {
     if (hidden.value.length && !pick('stage').length) {
       definitions.push({
         key: 'hidden',
-        label: msg('hiddenStages'),
-        kind: FacetKind.Single,
+        label: msg('showHidden', { labels: hiddenLabels.value }),
+        kind: FacetKind.Toggle,
         placement: FacetPlacement.Popover,
-        options: [{ value: 'show', label: msg('showHidden', { labels: hiddenLabels.value }) }],
       });
     }
     if (counts?.cities.length || pick('city').length) {
@@ -495,23 +496,17 @@ const facetDefinitions = computed<readonly FacetDefinition[]>(() => {
     }
     definitions.push({
       key: 'priority',
-      label: msg('priority'),
-      kind: FacetKind.Single,
+      label: msg('highPriority'),
+      kind: FacetKind.Toggle,
       placement: FacetPlacement.Popover,
-      options: [
-        {
-          value: 'high',
-          label: EventsLabels.priority('high', props.locale),
-          ...(counts ? { count: countOf(counts.priorities, 'high') ?? 0 } : {}),
-        },
-      ],
+      ...(counts ? { count: countOf(counts.priorities, 'high') ?? 0 } : {}),
     });
     definitions.push({
       key: 'deadline',
-      label: msg('deadlineFacet'),
-      kind: FacetKind.Single,
+      label: msg('deadlineSoon'),
+      kind: FacetKind.Toggle,
       placement: FacetPlacement.Popover,
-      options: [{ value: 'soon', label: msg('deadlineSoon'), ...(counts ? { count: counts.openDeadline.count } : {}) }],
+      ...(counts ? { count: counts.openDeadline.count } : {}),
     });
   } else if (!props.regions?.length) {
     definitions.push({
@@ -680,6 +675,7 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
       :any-label="eventsText('anyValue', locale)"
       :selected-label="eventsText('selectedCount', locale, { count: '{count}' })"
       :remove-label="eventsText('removeFilter', locale, { facet: '{facet}', value: '{value}' })"
+      :remove-toggle-label="eventsText('removeToggleFilter', locale, { facet: '{facet}' })"
       :match-label="eventsText('matchOf', locale, { matched: '{matched}', total: '{total}' })"
       data-test="events-toolbar"
       @update:model-value="select"

@@ -58,16 +58,18 @@ to the consumer's Tailwind sources:
   stages in order with zeros, `priorities` all three with zeros, an untracked event counts under the default stage, and
   `openDeadline` is `{ before, count }`: the events with an open deadline on or before `before`, the query's
   `deadlineBefore` else 30 days ahead. The query's sort, cursor and limit are not sent.
-- `EventsFeed` v2 (fe sdk `0.0.53`, `FacetBar`, `useAdaptiveList`) is a grid of `EventMediaCard`s
+- `EventsFeed` v2 (fe sdk `0.0.56`, `FacetBar`, `useAdaptiveList`) is a grid of `EventMediaCard`s
   (`repeat(auto-fill, minmax(min(100%, 17rem), 1fr))`, fe sdk `MediaCard`) behind one toolbar:
   - the match pill "{n} of {N}" (tracking): `n` is the current query's facets `total`, `N` a base query's total (the
     default upcoming view, no chosen filter, hidden stages still left out), read on mount and after a tracking write;
   - search (debounced ~250 ms), inline scope chips from `regions` (all, each region; counts summed from the `countries`
     facet) and inline kind chips with counts (several kinds with `tracking`, one without);
-  - a "Filters" popover: stages (an untracked event counts under the default stage; the "Show {hidden stages}" toggle
-    stays), city, source (labels as stored, `curated` as "Curated"), a high-priority toggle, a "deadline within 30 days"
-    toggle and the date presets (upcoming by default, this month, next 3 months, this year, past, custom: the fe sdk's
-    `DateRangePicker` appears at the end of the bar); each pick shows as a removable chip;
+  - a "Filters" popover: stages (an untracked event counts under the default stage), city, source (labels as stored,
+    `curated` as "Curated"), three `FacetKind.Toggle` switch rows — "High priority" (`priority=high`, counted from the
+    `high` priority), "Deadline within 30 days" (`deadlineBefore` 30 days from today, counted from `openDeadline`) and
+    "Show {hidden stages}" (lifts `excludeStages`) — and the date presets (upcoming by default, this month, next 3
+    months, this year, past, custom: the fe sdk's `DateRangePicker` appears at the end of the bar); each pick shows as a
+    removable chip, a toggle that is on as one chip with its bare label closed by `Remove {label}`;
   - the sort (`starts`, `added`, `deadline`; tracking only), then the proposal button (`canPropose`) and an overflow menu
     holding the calendar download.
   Counts come from one `getTrackingFacets` call per query change (the list's own query, aborted when superseded; each
@@ -81,7 +83,7 @@ to the consumer's Tailwind sources:
     days" (open `application` deadlines of the tracking summary, expanding to `EventsDeadlines`) and the consumer's
     `attention` (`{ key, label, count }[]`), each expanding to the `#attention` slot (`{ key, close }`).
   - Breaks from v1: `EventCard` and the `variant` prop are gone (every event is a card), `shownFields` is dropped
-    from the feed (cost stays off cards; `TrackingShownField` stays for `EventDetail`), and the peer floor is `0.0.53`.
+    from the feed (cost stays off cards; `TrackingShownField` stays for `EventDetail`), and the peer floor is `0.0.56`.
     The card shows the curated `facts.images[0]`, else a date tile (the start's day and month, the kind's icon; an
     undated event the icon alone). Top start: lower-case glass pills for the kind, the stage when tracked, cancelled /
     postponed / online and removed. Top end: a menu of `quickStages` for an event at the default stage, and a mark for
