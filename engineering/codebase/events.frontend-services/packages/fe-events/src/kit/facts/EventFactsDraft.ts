@@ -80,7 +80,6 @@ export function validateEventFactsDraft(
     if (value.precision !== 'unknown' && !isEventWhenValue(value.value ?? '', value.precision))
       problems.add('dateShape');
   }
-  if (country && !/^[A-Z]{2}$/.test(country)) problems.add('countryShape');
   if (website && (!safeHttpUrl(website) || website.length > EventsConstants.maxUrlLength)) problems.add('urlShape');
   if (problems.size) return { facts: null, problems: [...problems] };
 

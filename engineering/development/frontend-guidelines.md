@@ -7,7 +7,7 @@ Defer to `wow-two-ws/conventions/development/frontend/`.
 - Frontend root: `engineering/codebase/events.frontend-services/`; Node `24.11.0` from `.nvmrc`, `pnpm@10.33.2`.
 - `packages/fe-events` is `@wow-two-beta/fe-events`, published to npm: `./contracts` (the TypeScript mirror of the be
   contract and route builders), `./kit` (`createEventsClient`, date helpers honest about precision, `EventsFeed`,
-  `EventCard`, `EventMediaCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm`) and `./admin`
+  `EventMediaCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm`) and `./admin`
   (`ReviewQueue`, `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`, `ImportPanel`, and the digests'
   `DigestsPanel`, `DigestEditor`, `DigestRunHistory`). Sourced images and text show
   only in `./admin`, labelled source evidence (events-integration #50). It peers `@wow-two-beta/fe` at `>=0.0.n <0.1.0`, `n` the pinned
@@ -17,8 +17,10 @@ Defer to `wow-two-ws/conventions/development/frontend/`.
   through Identity's BFF at `/api/identity/*`. It takes `fe-events` by
   `workspace:*`, through its `exports` only — the way a product would; the package never imports `apps/`.
   `cards.html` (with `src/bootstrap/cards.ts` and `src/presentation/gallery/`) is a development-only gallery of the event
-  card at 1440, 1024, 768 and 390 px: the dev server serves it, the build never includes it (`pnpm --filter @events/web
-  dev:http`, then `/cards.html`).
+  card at 1440, 1024, 768 and 390 px, and `feed.html` (`src/bootstrap/feed.ts`, `FeedGallery.vue`) a development-only
+  `EventsFeed` in tracking mode over an in-memory service (`FeedFake.ts`: 40 events, pages of 12, facets that follow the
+  query, tracking writes) with Ocharo's regions, kinds, workflow and one consumer attention pill: the dev server serves
+  both, the build never includes them (`pnpm --filter @events/web dev:http`, then `/cards.html` or `/feed.html`).
 - App source uses `bootstrap`, `presentation`, `application`, `domain`, and `integration` layers.
 - Routes live in `src/bootstrap/router/Routes.ts` on the fe sdk router (`createAppRouter`, `lazyPage`); a new hosted
   page is one route there, its path a constant in `fe-events/contracts`, its props decoded from the route.

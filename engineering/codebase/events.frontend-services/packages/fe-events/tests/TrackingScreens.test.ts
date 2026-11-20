@@ -1,7 +1,15 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { CountryPicker } from '@wow-two-beta/fe/presentation/forms';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TrackingModel, WorkflowModel } from '../src/contracts';
-import { EventDetail, EventProposalForm, EventsDeadlines, TrackingForm } from '../src/kit';
+import {
+  eventFactsDraft,
+  EventDetail,
+  EventFactsFields,
+  EventProposalForm,
+  EventsDeadlines,
+  TrackingForm,
+} from '../src/kit';
 import { envelope, eventModel, fakeService } from './Fixtures';
 
 const wrappers: ReturnType<typeof mount>[] = [];
@@ -216,7 +224,9 @@ describe('proposal form (PG04, PG16)', () => {
 
     expect(wrapper.get('[data-test="facts-scope"]').text()).toBe('Scope unknown until a country is entered.');
     await wrapper.get('input[name="title"]').setValue('Pop-up');
-    await wrapper.get('input[name="country"]').setValue('uz');
+    wrapper.getComponent(CountryPicker).vm.$emit('update:modelValue', 'UZ');
+    await flushPromises();
+    expect(wrapper.get<HTMLInputElement>('input[name="country"]').element.value).toBe('UZ');
     expect(wrapper.get('[data-test="facts-scope"]').text()).toBe('Local: Uzbekistan');
     await wrapper.get('input[name="applicationDeadline"]').setValue('2026-11-25');
     await wrapper.get('input[name="foundAt"]').setValue('https://t.example.test/post/1');
@@ -227,6 +237,7 @@ describe('proposal form (PG04, PG16)', () => {
     const [post, put] = service.requests;
     expect(await post!.json()).toMatchObject({
       facts: {
+        place: { country: 'UZ' },
         website: 'https://t.example.test/post/1',
         deadlines: [{ kind: 'application', at: { value: '2026-11-25', precision: 'day', certainty: 'announced' } }],
       },
@@ -239,5 +250,46 @@ describe('proposal form (PG04, PG16)', () => {
       expectedRevision: null,
     });
     expect(wrapper.emitted('proposed')![0]![1]).toMatchObject({ eventId: 'new' });
+  });
+});
+
+describe('event facts country (CountryPicker)', () => {
+  const regions = [
+    { key: 'local', label: { en: 'Local' }, countries: ['uz'] },
+    { key: 'regional', label: { en: 'Regional' }, countries: ['KZ', 'RU', 'UZ'] },
+    { key: 'international', label: { en: 'International' }, otherCountries: true },
+  ];
+
+  it('picks the country with the fe sdk picker and stores its alpha-2 code, with no two-letter hint', async () => {
+    const wrapper = mount(EventFactsFields, {
+      props: { modelValue: eventFactsDraft(undefined, 'en'), regions },
+    });
+    wrappers.push(wrapper);
+
+    expect(wrapper.find('input[name="country"][maxlength]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('two-letter');
+    const picker = wrapper.getComponent(CountryPicker);
+    expect(picker.props('modelValue')).toBeNull();
+
+    picker.vm.$emit('update:modelValue', 'UZ');
+    await flushPromises();
+
+    const emitted = wrapper.emitted('update:modelValue')!;
+    expect(emitted.at(-1)![0]).toMatchObject({ country: 'UZ' });
+    await wrapper.setProps({ modelValue: { ...eventFactsDraft(undefined, 'en'), country: 'UZ' } });
+    expect(wrapper.getComponent(CountryPicker).props('modelValue')).toBe('UZ');
+
+    wrapper.getComponent(CountryPicker).vm.$emit('update:modelValue', null);
+    await flushPromises();
+    expect(wrapper.emitted('update:modelValue')!.at(-1)![0]).toMatchObject({ country: '' });
+  });
+
+  it("lists the countries of the consumer's regions first, once each, and none without regions", () => {
+    const withRegions = mount(EventFactsFields, { props: { modelValue: eventFactsDraft(undefined, 'en'), regions } });
+    const without = mount(EventFactsFields, { props: { modelValue: eventFactsDraft(undefined, 'en') } });
+    wrappers.push(withRegions, without);
+
+    expect(withRegions.getComponent(CountryPicker).props('preferred')).toEqual(['UZ', 'KZ', 'RU']);
+    expect(without.getComponent(CountryPicker).props('preferred')).toBeUndefined();
   });
 });

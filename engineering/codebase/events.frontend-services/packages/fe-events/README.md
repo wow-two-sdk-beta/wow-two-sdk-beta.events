@@ -28,7 +28,7 @@ to the consumer's Tailwind sources:
 | Export | Holds |
 |---|---|
 | `./contracts` | The TypeScript mirror of the be contract (camelCase JSON, enums as camelCase strings, localized text as `Record<locale, string>`), its constants and `EventsRoutes`, the route builders, with the query mappers (`trackingQueryParams`, `trackingFacetsQueryParams`, …) |
-| `./kit` | `createEventsClient` (every route, `{ data }` unwrapped, failures mapped by status), date helpers honest about precision and certainty (`formatEventWhen`, `formatEventSpan`, `groupEventsByMonth`, `sortEventsByDate`), `downloadEventsCalendar` and one event's `createEventCalendar`, the title, price, region and source helpers (`pickTextEntry`, `eventTitleLanguage`, `formatOfferPrice`, `regionQuery`, `listingRemoved`), and `EventsFeed`, `EventCard`, `EventMediaCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm` |
+| `./kit` | `createEventsClient` (every route, `{ data }` unwrapped, failures mapped by status), date helpers honest about precision and certainty (`formatEventWhen`, `formatEventSpan`, `groupEventsByMonth`, `sortEventsByDate`), `downloadEventsCalendar` and one event's `createEventCalendar`, the title, price, region and source helpers (`pickTextEntry`, `eventTitleLanguage`, `formatOfferPrice`, `regionQuery`, `listingRemoved`, `eventDateRange`), and `EventsFeed`, `EventMediaCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm` |
 | `./admin` | The reviewer's and admin's screens: `ReviewQueue`, `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`, `EventSourcesPanel` (an event's sources with the split of a joined one), `ImportPanel`, and scheduled digests: `DigestsPanel` (list, editor, run history), `DigestEditor`, `DigestRunHistory`, `DigestRecipients`, `TelegramText` |
 
 - Dates never claim more than they know: a month stays a month (`Oct 2026`), an estimate reads `≈ Oct 2026 (expected)`
@@ -37,14 +37,12 @@ to the consumer's Tailwind sources:
 - Titles match by language prefix (`ru` finds `ru-Cyrl`, `uz` finds `uz-Latn`); a card and the detail tag a title written
   in another language (`RU`).
 - An organization's page lists its tracking with `<EventsFeed tracking :hidden-stages :regions :quick-stages :can-track
-  :shown-fields />`: each card carries its stage (an untracked event the workflow's default stage, marked "New — review"),
-  priority and chosen `tracking.fields`; a stage filter counts each stage; `hiddenStages` are left out unless the
-  "Show …" toggle or their own filter asks; `regions` (`{ key, label, countries | otherCountries }`) replace the country
-  input with chips over country sets and show each event's scope; `quickStages` move an event at the default stage in one
-  click. `EventsDeadlines` takes `deadlineKinds` and `eventHref`; `EventDetail` takes `trackable`, `regions`,
-  `shownFields`, `hiddenFields` and offers the event's own calendar file; `TrackingForm` keeps the draft on a 409, emits
-  `dirty`, and shows a schema field marked `readOnly` without offering it. Mark a stage `lost` in the workflow to keep
-  its events out of the deadlines.
+  :attention>`: every event is an `EventMediaCard` (stage pill when tracked, an untracked event the default stage's
+  quick actions in the card menu), `hiddenStages` are left out unless the "Show …" toggle or a stage pick asks, and
+  `quickStages` move an event at the default stage in one click. Mark a stage `lost` in the workflow to keep its events
+  out of the deadlines. `EventsDeadlines` takes `deadlineKinds` and `eventHref`; `EventDetail` takes `trackable`,
+  `regions`, `shownFields`, `hiddenFields` and offers the event's own calendar file; `TrackingForm` keeps the draft on a
+  409, emits `dirty`, and shows a schema field marked `readOnly` without offering it.
 - The tracking list's query (`TrackingQuery`) takes `kinds`, `cities`, `sources`, `status`, `publishedSince` and `sort`
   beside the filters before, and the client sends a list as a repeated key (`cities=tashkent&cities=samarkand`).
   `sources` matches the name each source of an event is stored under (`afisha` finds `Afisha`, without case); the
@@ -60,16 +58,54 @@ to the consumer's Tailwind sources:
   stages in order with zeros, `priorities` all three with zeros, an untracked event counts under the default stage, and
   `openDeadline` is `{ before, count }`: the events with an open deadline on or before `before`, the query's
   `deadlineBefore` else 30 days ahead. The query's sort, cursor and limit are not sent.
-- `EventsFeed` takes `variant`: `list` (the default, `EventCard` rows) or `cards`, an image-first grid of `EventMediaCard`s
-  (fe sdk `MediaCard`, so the peer floor is `0.0.52`) in the SCFD Posts tab's look; each month keeps its header. A card
-  shows the curated `facts.images[0]`, else a date tile (the start's day and month, the kind's icon; an undated event the
-  icon alone). Top start: lower-case glass pills for the kind, the stage when tracked, cancelled / postponed / online and
-  removed. Top end: a menu of `quickStages` for an event at the default stage, and a mark for high priority. Panel: the
-  title in two lines, "dates · city" (`ongoing` / `finished`), then the next open deadline ("apply by 3 Mar · 5d",
-  "registration by 20 Jan · 71d"; the year only 12 or more months out; red when urgent), else the source names. The whole card opens the event (`eventHref`, else `open`), and it is
-  dimmed when cancelled, removed or past. Organizer, scope, cost, the review state and the title-language tag stay on
-  the event's page. `EventMediaCard` takes `EventCard`'s props but `shownFields` and `regions`, and emits the same
-  `open` and `track`.
+- `EventsFeed` v2 (fe sdk `0.0.53`, `FacetBar`, `useAdaptiveList`) is a grid of `EventMediaCard`s
+  (`repeat(auto-fill, minmax(min(100%, 17rem), 1fr))`, fe sdk `MediaCard`) behind one toolbar:
+  - the match pill "{n} of {N}" (tracking): `n` is the current query's facets `total`, `N` a base query's total (the
+    default upcoming view, no chosen filter, hidden stages still left out), read on mount and after a tracking write;
+  - search (debounced ~250 ms), inline scope chips from `regions` (all, each region; counts summed from the `countries`
+    facet) and inline kind chips with counts (several kinds with `tracking`, one without);
+  - a "Filters" popover: stages (an untracked event counts under the default stage; the "Show {hidden stages}" toggle
+    stays), city, source (labels as stored, `curated` as "Curated"), a high-priority toggle, a "deadline within 30 days"
+    toggle and the date presets (upcoming by default, this month, next 3 months, this year, past, custom: the fe sdk's
+    `DateRangePicker` appears at the end of the bar); each pick shows as a removable chip;
+  - the sort (`starts`, `added`, `deadline`; tracking only), then the proposal button (`canPropose`) and an overflow menu
+    holding the calendar download.
+  Counts come from one `getTrackingFacets` call per query change (the list's own query, aborted when superseded; each
+  facet from its own array); a facets failure leaves the chips without counts. The list scrolls: `useAdaptiveList`
+  loads the next cursor ahead of the reader, with no button, and starts over from no cursor when a filter or the sort
+  changes. Month dividers show under the `starts` sort only (undated events last); `added` and `deadline` keep the
+  server's order in a flat grid. Without `tracking` the same toolbar filters the catalog list: search, kind, scope and
+  the date presets, with no counts, no pill, no sort and no stage, city, source or priority facets. `eventDateRange(preset,
+  today, custom?)` gives the `from` and `to` a preset means.
+  - Attention pills sit between the toolbar and the grid and hide at a count of 0: the built-in "{n} deadlines in 14
+    days" (open `application` deadlines of the tracking summary, expanding to `EventsDeadlines`) and the consumer's
+    `attention` (`{ key, label, count }[]`), each expanding to the `#attention` slot (`{ key, close }`).
+  - Breaks from v1: `EventCard` and the `variant` prop are gone (every event is a card), `shownFields` is dropped
+    from the feed (cost stays off cards; `TrackingShownField` stays for `EventDetail`), and the peer floor is `0.0.53`.
+    The card shows the curated `facts.images[0]`, else a date tile (the start's day and month, the kind's icon; an
+    undated event the icon alone). Top start: lower-case glass pills for the kind, the stage when tracked, cancelled /
+    postponed / online and removed. Top end: a menu of `quickStages` for an event at the default stage, and a mark for
+    high priority. Panel: the title in two lines, "dates · city" (`ongoing` / `finished`), then the next open deadline
+    ("apply by 3 Mar · 5d", "registration by 20 Jan · 71d"; the year only 12 or more months out; red when urgent), else
+    the source names. The whole card opens the event (`eventHref`, else `open`), and it is dimmed when cancelled,
+    removed or past. Organizer, scope, cost, the review state and the title-language tag stay on the event's page.
+- Card zones are slots (`EventMediaCard`; `EventsFeed` forwards `card-{zone}` to every card). Each defaults to the
+  content above, so a consumer swaps one zone and keeps the rest; every slot gets `{ event, tracking }` plus the values
+  its zone renders (types `EventCard*Slot`, zones `EventCardZones`):
+  | Slot (feed: `card-…`) | Zone | Replaces | Scope beside `event` and `tracking` |
+  |---|---|---|---|
+  | `media` | behind the card | the curated image | `image` (`{ url, alt }` or null) |
+  | `fallback` | behind the card, no media | the date tile | `tile` (`{ big, small, month }` or null), `kindKey` |
+  | `pills` | top start | kind, stage, status, online and removed pills | `kind`, `stage`, `status` (labels), `online`, `removed` |
+  | `actions` | top end | the high-priority mark and the quick-stage menu | `highPriority`, `quickStages`, `pending`, `track(stage)` |
+  | `title` | the heading | the stretched link or `open` button | `title`, `href`, `open()`, `follow(event)` |
+  | `meta` | first text line | dates, ongoing or finished, city | `dates`, `city`, `finished`, `ongoing` |
+  | `detail` | second text line | the next deadline, else the sources | `deadline` (`{ label, left, tone }` or null), `sources` |
+  A given `media` slot always shows (the `fallback` only shows with no media); a given `pills` or `actions` slot shows
+  even when the default would be empty. A zone with no slot keeps its default.
+- `EventFactsFields` (and so `EventProposalForm` and the review editor) picks the country with the fe sdk's
+  `CountryPicker`: a searchable list in the viewer's language that stores the alpha-2 code (`UZ`), clearable. With
+  `regions`, their countries head the list. The free-text code and its "two-letter code" check are gone.
 - A member's `proposeEvent` publishes at once in a private catalog (the member's organization is its only reader) and
   lands as a candidate awaiting review in a shared or public one; there only a reviewer publishes. `EventsFeed` says
   which and reloads to show a published proposal. Its `proposal` prop (`EventProposalOptions`) adds the application

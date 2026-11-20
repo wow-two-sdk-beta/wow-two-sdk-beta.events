@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { TextInput } from '@wow-two-beta/fe/presentation/forms';
+import { CountryPicker, TextInput } from '@wow-two-beta/fe/presentation/forms';
 import { computed } from 'vue';
 import { EventStatusValues, type CatalogKindModel, type EventStatus } from '../../contracts';
 import type { EventFactsDraft } from '../facts/EventFactsDraft';
@@ -11,8 +11,10 @@ import { eventsText } from '../text/EventsMessages';
 import WhenField from './WhenField.vue';
 
 /**
- * Edits an event's main facts in a draft: title, kind, status, dates, place (with the scope its country derives, when
- * regions are given), organizer and website — and, when asked, the application deadline and where it was found.
+ * Edits an event's main facts in a draft: title, kind, status, dates, place (the country from the fe sdk's
+ * `CountryPicker`, which stores its ISO alpha-2 code, with the countries of the consumer's `regions` listed first and
+ * the scope the country derives shown under it), organizer and website — and, when asked, the application deadline
+ * and where it was found.
  */
 defineOptions({ name: 'EventFactsFields' });
 
@@ -28,7 +30,7 @@ const props = withDefaults(
     withDeadline?: boolean;
     /** Whether "Where it was found" is offered: a link that stands in for the website when it has none. */
     withFoundAt?: boolean;
-    /** The consumer's regions: the form shows the scope the country derives. */
+    /** The consumer's regions: their countries head the country picker and the form shows the scope the country derives. */
     regions?: readonly EventRegion[];
     disabled?: boolean;
   }>(),
@@ -50,6 +52,12 @@ const scope = computed(() => {
   const label = pickText(region.label, props.locale) || region.key;
   return `${label}: ${countryName(draft.value.country.trim().toUpperCase(), props.locale) ?? draft.value.country}`;
 });
+
+/** The countries of the consumer's regions, uppercase and without repeats: the picker lists them first. */
+const preferred = computed(() => [
+  ...new Set((props.regions ?? []).flatMap((region) => region.countries ?? []).map((code) => code.toUpperCase())),
+]);
+const country = computed(() => draft.value.country.trim().toUpperCase() || null);
 
 const inputClass = 'rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground';
 const asStatus = (value: string) => value as EventStatus;
@@ -150,18 +158,23 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
           @update:model-value="set('city', $event)"
         />
       </label>
-      <label class="flex flex-col gap-1 text-sm">
+      <div class="flex flex-col gap-1 text-sm">
         <span class="font-medium">{{ eventsText('country', locale) }}</span>
-        <TextInput
-          :model-value="draft.country"
+        <CountryPicker
+          :model-value="country"
           name="country"
-          :maxlength="2"
-          autocomplete="off"
+          :locale="locale"
+          :preferred="preferred.length ? preferred : undefined"
+          :placeholder="eventsText('selectCountry', locale)"
+          :search-placeholder="eventsText('searchCountries', locale)"
+          :no-results-label="eventsText('noCountries', locale)"
+          v-bind="{ 'aria-label': eventsText('country', locale) }"
           :is-disabled="disabled"
-          @update:model-value="set('country', $event)"
+          is-clearable
+          @update:model-value="set('country', $event ?? '')"
         />
         <span v-if="scope" class="text-xs text-muted-foreground" data-test="facts-scope">{{ scope }}</span>
-      </label>
+      </div>
     </div>
     <label v-if="withDeadline" class="flex flex-col gap-1 text-sm sm:max-w-xs">
       <span class="font-medium">{{ eventsText('applicationDeadline', locale) }}</span>

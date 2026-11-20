@@ -23,6 +23,15 @@ import { EventsLabels } from '../text/EventsLabels';
 import { type EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
 import EventGlyph from './EventGlyph.vue';
+import type {
+  EventCardActionsSlot,
+  EventCardDetailSlot,
+  EventCardFallbackSlot,
+  EventCardMediaSlot,
+  EventCardMetaSlot,
+  EventCardPillsSlot,
+  EventCardTitleSlot,
+} from './EventMediaCardSlots';
 
 /**
  * Shows one event as an image-first card, the look of the SCFD Posts tab. The curated image (`facts.images[0]`) fills
@@ -34,6 +43,11 @@ import EventGlyph from './EventGlyph.vue';
  * source names. The whole card opens the event; it is dimmed when cancelled, removed or past. Organizer, scope, cost,
  * the review state and the title's language tag stay on the event's page. Sourced media never reaches it — only
  * `facts.images`.
+ *
+ * Each zone takes a slot whose default is the content above, so a consumer swaps one zone and keeps the rest: `media`
+ * (replaces the image), `fallback` (the tile shown with no media), `pills` (top start), `actions` (top end), `title`
+ * (the heading's content), `meta` (the dates · city line) and `detail` (the deadline-or-sources line). Every slot
+ * receives `{ event, tracking }` and the values its zone renders.
  */
 defineOptions({ name: 'EventMediaCard' });
 
@@ -81,6 +95,23 @@ const emit = defineEmits<{
   open: [id: string];
   /** Asks to move the event to a stage: a pick from the menu on an event at the default stage. */
   track: [eventId: string, stage: string];
+}>();
+
+const slots = defineSlots<{
+  /** Replaces the curated image behind the card. */
+  media?(props: EventCardMediaSlot): unknown;
+  /** Replaces the date tile shown when there is no media. */
+  fallback?(props: EventCardFallbackSlot): unknown;
+  /** Replaces the pills at the top start. */
+  pills?(props: EventCardPillsSlot): unknown;
+  /** Replaces the high-priority mark and the quick-stage menu at the top end. */
+  actions?(props: EventCardActionsSlot): unknown;
+  /** Replaces the content of the title heading. */
+  title?(props: EventCardTitleSlot): unknown;
+  /** Replaces the dates · city line. */
+  meta?(props: EventCardMetaSlot): unknown;
+  /** Replaces the deadline-or-sources line. */
+  detail?(props: EventCardDetailSlot): unknown;
 }>();
 
 const day = computed(() => props.today ?? localIsoDate());
@@ -183,148 +214,190 @@ function follow(event: MouseEvent) {
   event.preventDefault();
   emit('open', props.event.id);
 }
+const open = () => emit('open', props.event.id);
+const track = (next: string) => emit('track', props.event.id, next);
 </script>
 
 <template>
   <MediaCard :is-dimmed="dimmed" data-test="event-media-card" :data-event-id="event.id">
-    <template v-if="image" #media>
-      <img
-        :src="image.url"
-        :alt="image.alt"
-        class="size-full object-cover"
-        loading="lazy"
-        referrerpolicy="no-referrer"
-        data-test="event-image"
-        @error="failedUrl = image.url"
-      />
+    <template v-if="image || slots.media" #media>
+      <slot name="media" :event="event" :tracking="tracking" :image="image">
+        <img
+          v-if="image"
+          :src="image.url"
+          :alt="image.alt"
+          class="size-full object-cover"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          data-test="event-image"
+          @error="failedUrl = image.url"
+        />
+      </slot>
     </template>
 
     <template #fallback>
-      <div
-        class="grid size-full place-items-center bg-gradient-to-br from-primary/30 via-primary-soft to-muted text-primary-soft-foreground"
-        data-test="event-date-tile"
-      >
-        <div class="-mt-34 flex flex-col items-center">
-          <template v-if="tile">
-            <span class="text-6xl leading-none font-semibold tabular-nums" data-test="tile-day">{{ tile.big }}</span>
-            <span v-if="tile.month" class="mt-1 text-2xl leading-none font-semibold" data-test="tile-month">
-              {{ tile.month }}
-            </span>
-            <span v-else class="mt-1 text-lg leading-none font-medium" data-test="tile-year">{{ tile.small }}</span>
-          </template>
-          <EventGlyph
-            :name="kindGlyph(event.facts.kind)"
-            :size="tile ? 20 : 44"
-            :class="tile ? 'mt-3 opacity-70' : 'opacity-60'"
-          />
+      <slot name="fallback" :event="event" :tracking="tracking" :tile="tile" :kind-key="event.facts.kind">
+        <div
+          class="grid size-full place-items-center bg-gradient-to-br from-primary/30 via-primary-soft to-muted text-primary-soft-foreground"
+          data-test="event-date-tile"
+        >
+          <div class="-mt-34 flex flex-col items-center">
+            <template v-if="tile">
+              <span class="text-6xl leading-none font-semibold tabular-nums" data-test="tile-day">{{ tile.big }}</span>
+              <span v-if="tile.month" class="mt-1 text-2xl leading-none font-semibold" data-test="tile-month">
+                {{ tile.month }}
+              </span>
+              <span v-else class="mt-1 text-lg leading-none font-medium" data-test="tile-year">{{ tile.small }}</span>
+            </template>
+            <EventGlyph
+              :name="kindGlyph(event.facts.kind)"
+              :size="tile ? 20 : 44"
+              :class="tile ? 'mt-3 opacity-70' : 'opacity-60'"
+            />
+          </div>
         </div>
-      </div>
+      </slot>
     </template>
 
-    <template v-if="hasPills" #topStart>
-      <div class="flex max-w-[10.5rem] flex-wrap items-center gap-1.5" data-test="event-pills">
-        <Badge v-if="kind" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-kind">
-          {{ lower(kind) }}
-        </Badge>
-        <Badge v-if="stageLabel" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-stage">
-          {{ lower(stageLabel) }}
-        </Badge>
-        <Badge v-if="statusPill" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-status">
-          {{ lower(statusPill) }}
-        </Badge>
-        <Badge v-if="online" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-online">
-          {{ lower(EventsLabels.attendance('online', locale)) }}
-        </Badge>
-        <Badge v-if="removed" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-removed">
-          {{ lower(eventsText('sourceStateGone', locale)) }}
-        </Badge>
-      </div>
-    </template>
-
-    <template v-if="highPriority || quick.length" #topEnd>
-      <span
-        v-if="highPriority"
-        role="img"
-        :aria-label="eventsText('highPriority', locale)"
-        :title="eventsText('highPriority', locale)"
-        class="inline-flex size-8 items-center justify-center rounded-full border border-white/20 bg-black/35 text-white backdrop-blur-md"
-        data-test="event-priority"
+    <template v-if="hasPills || slots.pills" #topStart>
+      <slot
+        name="pills"
+        :event="event"
+        :tracking="tracking"
+        :kind="kind"
+        :stage="stageLabel"
+        :status="statusPill"
+        :online="online"
+        :removed="removed"
       >
-        <EventGlyph name="flag" :size="15" />
-      </span>
-      <DropdownMenu v-if="quick.length" placement="bottom-end">
-        <DropdownMenuTrigger as-child>
-          <Button
-            variant="glass-surface"
-            tone="neutral"
-            size="sm"
-            shape="circle"
-            :aria-label="eventsText('stage', locale)"
-            :is-disabled="trackPending"
-            data-test="event-stage-menu"
-          >
-            <EventGlyph name="more" :size="18" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent v-bind="{ 'aria-label': eventsText('stage', locale) }">
-          <MenuItem
-            v-for="item in quick"
-            :key="item"
-            :data-stage="item"
-            data-test="event-quick-stage"
-            @select="emit('track', event.id, item)"
-          >
-            {{ EventsLabels.stage(item, stages, locale) }}
-          </MenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        <div class="flex max-w-[10.5rem] flex-wrap items-center gap-1.5" data-test="event-pills">
+          <Badge v-if="kind" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-kind">
+            {{ lower(kind) }}
+          </Badge>
+          <Badge v-if="stageLabel" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-stage">
+            {{ lower(stageLabel) }}
+          </Badge>
+          <Badge v-if="statusPill" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-status">
+            {{ lower(statusPill) }}
+          </Badge>
+          <Badge v-if="online" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-online">
+            {{ lower(EventsLabels.attendance('online', locale)) }}
+          </Badge>
+          <Badge v-if="removed" size="sm" :variant="BadgeVariant.Glass" is-shrinkable data-test="event-removed">
+            {{ lower(eventsText('sourceStateGone', locale)) }}
+          </Badge>
+        </div>
+      </slot>
+    </template>
+
+    <template v-if="highPriority || quick.length || slots.actions" #topEnd>
+      <slot
+        name="actions"
+        :event="event"
+        :tracking="tracking"
+        :high-priority="highPriority"
+        :quick-stages="quick"
+        :pending="trackPending"
+        :track="track"
+      >
+        <span
+          v-if="highPriority"
+          role="img"
+          :aria-label="eventsText('highPriority', locale)"
+          :title="eventsText('highPriority', locale)"
+          class="inline-flex size-8 items-center justify-center rounded-full border border-white/20 bg-black/35 text-white backdrop-blur-md"
+          data-test="event-priority"
+        >
+          <EventGlyph name="flag" :size="15" />
+        </span>
+        <DropdownMenu v-if="quick.length" placement="bottom-end">
+          <DropdownMenuTrigger as-child>
+            <Button
+              variant="glass-surface"
+              tone="neutral"
+              size="sm"
+              shape="circle"
+              :aria-label="eventsText('stage', locale)"
+              :is-disabled="trackPending"
+              data-test="event-stage-menu"
+            >
+              <EventGlyph name="more" :size="18" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent v-bind="{ 'aria-label': eventsText('stage', locale) }">
+            <MenuItem
+              v-for="item in quick"
+              :key="item"
+              :data-stage="item"
+              data-test="event-quick-stage"
+              @select="emit('track', event.id, item)"
+            >
+              {{ EventsLabels.stage(item, stages, locale) }}
+            </MenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </slot>
     </template>
 
     <h3 :id="titleId" class="line-clamp-2 break-words text-[15px] leading-snug font-semibold" data-test="event-title">
-      <CardLink as-child>
-        <a
-          v-if="href"
-          :href="href"
-          class="underline-offset-4 hover:underline focus-visible:underline"
-          @click="follow"
-          v-text="title"
-        ></a>
-        <button
-          v-else
-          type="button"
-          class="text-start underline-offset-4 hover:underline focus-visible:underline"
-          @click="emit('open', event.id)"
-        >
-          {{ title }}
-        </button>
-      </CardLink>
+      <slot name="title" :event="event" :tracking="tracking" :title="title" :href="href" :open="open" :follow="follow">
+        <CardLink as-child>
+          <a
+            v-if="href"
+            :href="href"
+            class="underline-offset-4 hover:underline focus-visible:underline"
+            @click="follow"
+            v-text="title"
+          ></a>
+          <button
+            v-else
+            type="button"
+            class="text-start underline-offset-4 hover:underline focus-visible:underline"
+            @click="emit('open', event.id)"
+          >
+            {{ title }}
+          </button>
+        </CardLink>
+      </slot>
     </h3>
-    <p class="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[13px] leading-5 text-white/75">
-      <span class="truncate" data-test="event-dates">{{ dates }}</span>
-      <span
-        v-if="finished || ongoing"
-        class="shrink-0 before:me-1.5 before:content-['·']"
-        :class="ongoing ? 'text-emerald-200' : 'opacity-60'"
-        :data-test="finished ? 'event-finished' : 'event-ongoing'"
-      >
-        {{ eventsText(finished ? 'finished' : 'ongoing', locale) }}
-      </span>
-      <span v-if="city" class="min-w-0 truncate before:me-1.5 before:content-['·']" data-test="event-city">
-        {{ city }}
-      </span>
-    </p>
-    <p
-      v-if="deadline"
-      class="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[13px] leading-5"
-      :class="deadline.tone === 'urgent' ? 'text-red-300' : 'text-white/75'"
-      :data-tone="deadline.tone"
-      data-test="event-deadline"
+    <slot
+      name="meta"
+      :event="event"
+      :tracking="tracking"
+      :dates="dates"
+      :city="city"
+      :finished="finished"
+      :ongoing="ongoing"
     >
-      <span class="truncate">{{ deadline.label }}</span>
-      <span v-if="deadline.left" class="shrink-0 before:me-1.5 before:content-['·']">{{ deadline.left }}</span>
-    </p>
-    <p v-else-if="sources.length" class="truncate text-[13px] leading-5 text-white/60" data-test="event-sources">
-      {{ sources.map(lower).join(' · ') }}
-    </p>
+      <p class="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[13px] leading-5 text-white/75">
+        <span class="truncate" data-test="event-dates">{{ dates }}</span>
+        <span
+          v-if="finished || ongoing"
+          class="shrink-0 before:me-1.5 before:content-['·']"
+          :class="ongoing ? 'text-emerald-200' : 'opacity-60'"
+          :data-test="finished ? 'event-finished' : 'event-ongoing'"
+        >
+          {{ eventsText(finished ? 'finished' : 'ongoing', locale) }}
+        </span>
+        <span v-if="city" class="min-w-0 truncate before:me-1.5 before:content-['·']" data-test="event-city">
+          {{ city }}
+        </span>
+      </p>
+    </slot>
+    <slot name="detail" :event="event" :tracking="tracking" :deadline="deadline" :sources="sources">
+      <p
+        v-if="deadline"
+        class="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[13px] leading-5"
+        :class="deadline.tone === 'urgent' ? 'text-red-300' : 'text-white/75'"
+        :data-tone="deadline.tone"
+        data-test="event-deadline"
+      >
+        <span class="truncate">{{ deadline.label }}</span>
+        <span v-if="deadline.left" class="shrink-0 before:me-1.5 before:content-['·']">{{ deadline.left }}</span>
+      </p>
+      <p v-else-if="sources.length" class="truncate text-[13px] leading-5 text-white/60" data-test="event-sources">
+        {{ sources.map(lower).join(' · ') }}
+      </p>
+    </slot>
   </MediaCard>
 </template>

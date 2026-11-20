@@ -54,6 +54,13 @@ export {
   ticketOffer,
 } from './facts/EventFactsText';
 export { regionOfCountry, regionQuery, type EventRegion } from './facts/EventRegions';
+export {
+  addEventDays,
+  eventDateRange,
+  EventDatePresetValues,
+  type EventDatePreset,
+  type EventDateRange,
+} from './facts/EventDatePresets';
 export { attributedSource, listingRemoved, sourceLabel } from './facts/EventSources';
 export { shownFieldValue, type TrackingShownField } from './facts/TrackingFields';
 export type { EventProposalOptions } from './facts/EventProposalOptions';
@@ -70,8 +77,19 @@ export {
 } from './text/EventsLocale';
 export { EventsMessages, eventsText, type EventsMessageKey } from './text/EventsMessages';
 export { EventsLabels, eventsFailureMessage, type EventsFailureContext } from './text/EventsLabels';
-export { default as EventCard } from './presentation/EventCard.vue';
 export { default as EventMediaCard } from './presentation/EventMediaCard.vue';
+export {
+  EventCardZones,
+  type EventCardActionsSlot,
+  type EventCardDetailSlot,
+  type EventCardFallbackSlot,
+  type EventCardMediaSlot,
+  type EventCardMetaSlot,
+  type EventCardPillsSlot,
+  type EventCardSlotBase,
+  type EventCardTitleSlot,
+  type EventCardZone,
+} from './presentation/EventMediaCardSlots';
 export { default as EventsFeed } from './presentation/EventsFeed.vue';
 export { default as EventsDeadlines } from './presentation/EventsDeadlines.vue';
 export { default as EventDetail } from './presentation/EventDetail.vue';

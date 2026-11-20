@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
+import { h } from 'vue';
 import type { CatalogKindModel, EventFacts, EventModel, TrackingModel, WorkflowStageModel } from '../src/contracts';
 import { EventMediaCard } from '../src/kit';
 import { eventModel, sourceModel } from './Fixtures';
@@ -418,5 +419,154 @@ describe('event media card', () => {
     const wrapper = render(build(), { ...triage, trackPending: true });
 
     expect(wrapper.get('[data-test="event-stage-menu"]').attributes('disabled')).toBeDefined();
+  });
+});
+
+describe('event media card zone slots', () => {
+  const renderWith = (slots: Record<string, (scope: never) => unknown>, event = build(), props = {}) => {
+    const wrapper = mount(EventMediaCard, {
+      props: { event, today: '2026-11-10', kinds, ...props },
+      slots: slots as never,
+      attachTo: document.body,
+    });
+    wrappers.push(wrapper);
+    return wrapper;
+  };
+
+  it('media replaces the image with the image, event and tracking in scope', () => {
+    const wrapper = renderWith(
+      {
+        media: (scope: { image: { url: string } | null; event: { id: string }; tracking: unknown }) =>
+          h('div', { 'data-test': 'custom-media' }, `${scope.event.id}|${scope.image?.url}|${scope.tracking}`),
+      },
+      build({ images: [poster] }),
+    );
+
+    expect(wrapper.find('[data-test="event-image"]').exists()).toBe(false);
+    expect(wrapper.get('[data-test="custom-media"]').text()).toBe(`fashion|${poster.url}|null`);
+  });
+
+  it('fallback replaces the date tile with the tile in scope', () => {
+    const wrapper = renderWith({
+      fallback: (scope: { tile: { big: string; month: string } | null }) =>
+        h('div', { 'data-test': 'custom-fallback' }, `${scope.tile?.big} ${scope.tile?.month}`),
+    });
+
+    expect(wrapper.find('[data-test="event-date-tile"]').exists()).toBe(false);
+    expect(wrapper.get('[data-test="custom-fallback"]').text()).toBe('12 Dec');
+  });
+
+  it('pills replaces the pills with the labels in scope, and shows for an event with none', () => {
+    const wrapper = renderWith(
+      {
+        pills: (scope: { kind: string; stage: string; status: string; online: boolean; removed: boolean }) =>
+          h(
+            'div',
+            { 'data-test': 'custom-pills' },
+            JSON.stringify(scope, ['kind', 'stage', 'status', 'online', 'removed']),
+          ),
+      },
+      build({ status: 'cancelled', attendance: 'online' }),
+      { tracking: tracking('shortlisted'), stages },
+    );
+
+    expect(wrapper.find('[data-test="event-pills"]').exists()).toBe(false);
+    expect(JSON.parse(wrapper.get('[data-test="custom-pills"]').text())).toEqual({
+      kind: 'Runway Show',
+      stage: 'Shortlisted',
+      status: 'Cancelled',
+      online: true,
+      removed: false,
+    });
+    const bare = renderWith({ pills: () => h('div', { 'data-test': 'bare-pills' }, 'x') }, build({ kind: '' }));
+    expect(bare.find('[data-test="bare-pills"]').exists()).toBe(true);
+  });
+
+  it('actions replaces the mark and menu, gets the quick stages and a track function that emits track', async () => {
+    const wrapper = renderWith(
+      {
+        actions: (scope: { quickStages: readonly string[]; highPriority: boolean; track: (stage: string) => void }) =>
+          h(
+            'button',
+            { type: 'button', 'data-test': 'custom-action', onClick: () => scope.track('skipped') },
+            `${scope.quickStages.join(',')}|${scope.highPriority}`,
+          ),
+      },
+      build(),
+      triage,
+    );
+
+    expect(wrapper.find('[data-test="event-stage-menu"]').exists()).toBe(false);
+    expect(wrapper.get('[data-test="custom-action"]').text()).toBe('shortlisted,skipped|false');
+
+    await wrapper.get('[data-test="custom-action"]').trigger('click');
+
+    expect(wrapper.emitted('track')).toEqual([['fashion', 'skipped']]);
+  });
+
+  it('title replaces the heading content with the title, href, open and follow in scope', async () => {
+    const wrapper = renderWith(
+      {
+        title: (scope: { title: string; href?: string; open: () => void }) =>
+          h(
+            'button',
+            { type: 'button', 'data-test': 'custom-title', onClick: scope.open },
+            `${scope.title}@${scope.href}`,
+          ),
+      },
+      build(),
+      { href: '/events/fashion' },
+    );
+
+    expect(wrapper.find('h3 a').exists()).toBe(false);
+    expect(wrapper.get('h3 [data-test="custom-title"]').text()).toBe('Fashion Week@/events/fashion');
+
+    await wrapper.get('[data-test="custom-title"]').trigger('click');
+
+    expect(wrapper.emitted('open')).toEqual([['fashion']]);
+  });
+
+  it('meta replaces the dates and city line with the dates, city and state in scope', () => {
+    const wrapper = renderWith({
+      meta: (scope: { dates: string; city: string; finished: boolean; ongoing: boolean }) =>
+        h('p', { 'data-test': 'custom-meta' }, `${scope.dates}|${scope.city}|${scope.finished}|${scope.ongoing}`),
+    });
+
+    expect(wrapper.find('[data-test="event-dates"]').exists()).toBe(false);
+    expect(wrapper.get('[data-test="custom-meta"]').text()).toBe('12–14 Dec 2026|Tashkent|false|false');
+  });
+
+  it('detail replaces the deadline-or-sources line with the deadline and sources in scope', () => {
+    const event = build(
+      { deadlines: [{ kind: 'application', at: { value: '2026-11-15', precision: 'day', certainty: 'announced' } }] },
+      { sources: [sourceModel('a', { name: 'Afisha' })] },
+    );
+    const wrapper = renderWith(
+      {
+        detail: (scope: {
+          deadline: { label: string; left: string; tone: string } | null;
+          sources: readonly string[];
+        }) =>
+          h(
+            'p',
+            { 'data-test': 'custom-detail' },
+            `${scope.deadline?.label}|${scope.deadline?.left}|${scope.deadline?.tone}|${scope.sources.join(',')}`,
+          ),
+      },
+      event,
+    );
+
+    expect(wrapper.find('[data-test="event-deadline"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="event-sources"]').exists()).toBe(false);
+    expect(wrapper.get('[data-test="custom-detail"]').text()).toBe('apply by 15 Nov|5d|urgent|Afisha');
+  });
+
+  it('keeps every other zone when one slot is given', () => {
+    const wrapper = renderWith({ detail: () => h('p', 'x') }, build({ images: [poster] }));
+
+    expect(wrapper.find('[data-test="event-image"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="event-kind"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="event-title"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="event-dates"]').exists()).toBe(true);
   });
 });

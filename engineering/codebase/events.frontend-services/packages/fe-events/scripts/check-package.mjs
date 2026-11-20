@@ -86,7 +86,6 @@ const requiredNames = {
     'downloadEventsCalendar',
     'eventsText',
     'EventsFeed',
-    'EventCard',
     'EventMediaCard',
     'EventsDeadlines',
     'EventDetail',

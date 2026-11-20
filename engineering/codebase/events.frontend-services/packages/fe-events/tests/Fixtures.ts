@@ -1,5 +1,12 @@
 import { vi } from 'vitest';
-import type { EventFacts, EventModel, EventSourceModel, ObservationModel } from '../src/contracts';
+import type {
+  EventFacts,
+  EventModel,
+  EventSourceModel,
+  ObservationModel,
+  TrackingFacetCount,
+  TrackingFacetsModel,
+} from '../src/contracts';
 import { createEventsClient } from '../src/kit';
 
 export const serviceUrl = 'https://events.example.test';
@@ -87,3 +94,65 @@ export function fakeService(...responders: ((request: Request) => Response | Pro
 
 /** Wraps `data` in the contract's envelope. */
 export const envelope = (data: unknown, init?: ResponseInit) => Response.json({ data }, init);
+
+/** Builds one facet entry: `value`, how many events it lists and, for a source, its name as stored. */
+export const facetCount = (value: string, count: number, label?: string): TrackingFacetCount => ({
+  value,
+  count,
+  ...(label ? { label } : {}),
+});
+
+/** Builds the facets answer for `total` events, each facet overridable. */
+export function facetsModel(total: number, overrides: Partial<TrackingFacetsModel> = {}): TrackingFacetsModel {
+  return {
+    total,
+    countries: [facetCount('UZ', 1), facetCount('KZ', 1)],
+    cities: [facetCount('tashkent', 1), facetCount('almaty', 1)],
+    kinds: [facetCount('runway', 2), facetCount('exhibition', 0)],
+    stages: [
+      facetCount('candidate', 2),
+      facetCount('shortlisted', 1),
+      facetCount('skipped', 2),
+      facetCount('rejected', 0),
+    ],
+    priorities: [facetCount('high', 1), facetCount('normal', 1), facetCount('low', 0)],
+    sources: [facetCount('afisha', 1, 'Afisha'), facetCount('curated', 1)],
+    openDeadline: { before: '2026-12-10', count: 1 },
+    ...overrides,
+  };
+}
+
+/**
+ * Replaces `IntersectionObserver` with one that reports nothing until `fire()` says the sentinel scrolled into view;
+ * `fire()` reports to every observer still watching an element. Undo it with `vi.unstubAllGlobals()`.
+ */
+export function stubIntersectionObserver() {
+  const live = new Set<{ callback: IntersectionObserverCallback; targets: Element[] }>();
+  class FakeObserver {
+    private readonly record: { callback: IntersectionObserverCallback; targets: Element[] };
+    constructor(callback: IntersectionObserverCallback) {
+      this.record = { callback, targets: [] };
+      live.add(this.record);
+    }
+    observe(target: Element) {
+      this.record.targets.push(target);
+    }
+    unobserve() {}
+    disconnect() {
+      live.delete(this.record);
+    }
+    takeRecords() {
+      return [];
+    }
+  }
+  vi.stubGlobal('IntersectionObserver', FakeObserver);
+  return {
+    watching: () => [...live].filter((record) => record.targets.length > 0).length,
+    fire() {
+      for (const record of [...live]) {
+        const entries = record.targets.map((target) => ({ isIntersecting: true, target }) as IntersectionObserverEntry);
+        if (entries.length) record.callback(entries, record as unknown as IntersectionObserver);
+      }
+    },
+  };
+}

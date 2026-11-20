@@ -6,7 +6,9 @@ import {
   trackingSummaryQueryParams,
 } from '../src/contracts';
 import {
+  addEventDays,
   createEventCalendar,
+  eventDateRange,
   eventTitleLanguage,
   formatEventDates,
   formatEventWhen,
@@ -210,5 +212,49 @@ describe("one event's calendar (PG17)", () => {
         'en',
       ),
     ).toBeNull();
+  });
+});
+
+describe('date presets (UI05)', () => {
+  it('turns each preset into the days the lists take, counted from today', () => {
+    expect(eventDateRange('upcoming', '2026-11-10')).toEqual({ from: '2026-11-10', includeUndated: true });
+    expect(eventDateRange('thisMonth', '2026-11-10')).toEqual({
+      from: '2026-11-01',
+      to: '2026-11-30',
+      includeUndated: false,
+    });
+    expect(eventDateRange('thisMonth', '2028-02-10')).toEqual({
+      from: '2028-02-01',
+      to: '2028-02-29',
+      includeUndated: false,
+    });
+    expect(eventDateRange('next3Months', '2026-11-10')).toEqual({
+      from: '2026-11-10',
+      to: '2027-02-10',
+      includeUndated: false,
+    });
+    expect(eventDateRange('next3Months', '2026-11-30')).toEqual({
+      from: '2026-11-30',
+      to: '2027-02-28',
+      includeUndated: false,
+    });
+    expect(eventDateRange('thisYear', '2026-11-10')).toEqual({
+      from: '2026-01-01',
+      to: '2026-12-31',
+      includeUndated: false,
+    });
+    expect(eventDateRange('past', '2026-11-10')).toEqual({ to: '2026-11-09', includeUndated: false });
+    expect(eventDateRange('past', '2026-03-01')).toEqual({ to: '2026-02-28', includeUndated: false });
+  });
+
+  it('takes the picked range for custom, and reads as upcoming until one is picked', () => {
+    expect(eventDateRange('custom', '2026-11-10', { from: '2026-12-01', to: '2026-12-31' })).toEqual({
+      from: '2026-12-01',
+      to: '2026-12-31',
+      includeUndated: false,
+    });
+    expect(eventDateRange('custom', '2026-11-10', null)).toEqual({ from: '2026-11-10', includeUndated: true });
+    expect(addEventDays('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addEventDays('2026-11-10', 30)).toBe('2026-12-10');
   });
 });
