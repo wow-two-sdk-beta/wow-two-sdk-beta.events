@@ -65,9 +65,14 @@ export interface EventOffer {
   readonly url?: string | null;
 }
 
-/** Mirrors `EventImage`: a curated image reference, never bytes. */
+/**
+ * Mirrors `EventImage`: an image reference, never bytes. A sourced image keeps its source `url`, the external link that
+ * credits the source.
+ */
 export interface EventImage {
   readonly url: string;
+  /** The Files file id (a GUID) of SCFD's copy of the image, when SCFD holds one; read it through the consumer's own Files access. */
+  readonly fileRef?: string | null;
   readonly sourceUrl?: string | null;
   readonly captureId?: string | null;
   readonly attribution?: string | null;

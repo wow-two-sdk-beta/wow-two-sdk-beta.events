@@ -141,6 +141,15 @@ describe('event media card', () => {
     expect(wrapper.find('[data-dot]').exists()).toBe(false);
   });
 
+  it('shows an image that names its Files copy at its source url, the credit link', () => {
+    const copied = { url: 'https://source.example.test/poster.jpg', fileRef: '0193a5c2-4a4e-7a3b-8f19-5c1d2e3f4a5b' };
+    const wrapper = render(
+      build({ images: [copied, { url: 'https://source.example.test/second.jpg', fileRef: null }] }),
+    );
+
+    expect(wrapper.get('img').attributes('src')).toBe('https://source.example.test/poster.jpg');
+  });
+
   it('names an image without attribution by the title', () => {
     const wrapper = render(build({ images: [{ url: 'https://cdn.example.test/plain.jpg' }] }));
 

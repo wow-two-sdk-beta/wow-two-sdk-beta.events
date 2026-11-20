@@ -3,14 +3,18 @@ using AwesomeAssertions;
 using WoW.Two.Sdk.Beta.Be.Events;
 using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
 using WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
+using WoW.Two.Sdk.Beta.Be.Events.Module.Shared;
 
 namespace Events.Tests.Unit.Intake;
 
-/// <summary>Reading SCFD's <c>wow2.event.v1</c> projection: honest facts, evidence kept, sourced media and text never
-/// becoming facts.</summary>
+/// <summary>Reading SCFD's <c>wow2.event.v1</c> projection: honest facts, evidence kept, sourced media becoming
+/// <c>facts.images</c> with the source URL as the credit link, sourced text staying evidence.</summary>
 public sealed class ScfdEventMapperTests
 {
     private static readonly string[] Kinds = ["runway", "expo"];
+
+    /// <summary>The kinds sourced facts may carry: the catalog's, plus the unknown kind a source falls back to.</summary>
+    private static readonly string[] SourcedKinds = [.. Kinds, "other"];
 
     [Fact]
     public void TryMap_ShouldReadEachPrecision_AtItsOwnGrain()
@@ -53,7 +57,7 @@ public sealed class ScfdEventMapperTests
         {
             Venue = "Дворец творчества молодёжи", Address = "Ташкент, просп. Мустакиллик, 2", Latitude = 41.3153, Longitude = 69.2727,
         });
-        facts.Images.Should().BeEmpty("sourced media stays evidence (events-integration #50)");
+        facts.Images.Should().BeEmpty("the record carries no media");
     }
 
     [Fact]
@@ -194,7 +198,7 @@ public sealed class ScfdEventMapperTests
     }
 
     [Fact]
-    public void TryMap_ShouldKeepSourcedMediaAndText_AsEvidenceOnly()
+    public void TryMap_ShouldKeepSourcedText_AsEvidenceOnly()
     {
         var facts = Map("""
             {"schema":"wow2.event.v1","title":"Show","description":"Long sourced text",
@@ -202,9 +206,71 @@ public sealed class ScfdEventMapperTests
              "sourceTags":["#fashion"]}
             """);
 
-        facts.Images.Should().BeEmpty();
         facts.Summary.Should().BeEmpty();
         facts.Tags.Should().BeEmpty();
+    }
+
+    /// <summary>Each image of <c>media[]</c> becomes one image in order: its source URL stays the credit link, and its
+    /// <c>fileRef</c> names SCFD's Files copy when the item has one, else none.</summary>
+    [Fact]
+    public void TryMap_ShouldMapMediaToImages_WithAndWithoutAFileRef()
+    {
+        var copy = Guid.NewGuid();
+        var facts = Map($$"""
+            {"schema":"wow2.event.v1","title":"Show",
+             "media":[{"kind":"image","url":"https://cdn.example/a.jpg","fileRef":"{{copy:D}}"},
+                      {"kind":"image","url":"https://cdn.example/b.jpg","fileRef":null},
+                      {"kind":"image","url":"https://cdn.example/c.jpg"}]}
+            """);
+
+        facts.Images.Should().Equal(
+            new EventImage { Url = "https://cdn.example/a.jpg", FileRef = copy.ToString("D") },
+            new EventImage { Url = "https://cdn.example/b.jpg" },
+            new EventImage { Url = "https://cdn.example/c.jpg" });
+        EventFactsValidator.Validate(facts, SourcedKinds, out _).Should().BeNull("the shared validator accepts them");
+    }
+
+    /// <summary>An item of another kind, one with no safe https URL, and a <c>fileRef</c> that is no file id never reach the
+    /// facts; the record still maps.</summary>
+    [Fact]
+    public void TryMap_ShouldDropUnsafeMedia_AndANonGuidFileRef()
+    {
+        var facts = Map("""
+            {"schema":"wow2.event.v1","title":"Show",
+             "media":[{"kind":"video","url":"https://cdn.example/clip.mp4"},
+                      {"kind":"image","url":"http://cdn.example/plain.jpg"},
+                      {"kind":"image","url":"javascript:alert(1)"},
+                      {"kind":"image","url":"https://user:secret@cdn.example/a.jpg"},
+                      {"kind":"image","url":""},
+                      {"kind":"image"},
+                      "https://cdn.example/bare.jpg",
+                      {"kind":"image","url":"https://cdn.example/kept.jpg","fileRef":"files://stored/poster"}]}
+            """);
+
+        facts.Images.Should().Equal(new EventImage { Url = "https://cdn.example/kept.jpg" });
+    }
+
+    [Fact]
+    public void TryMap_ShouldCapTheImages_AtWhatTheValidatorAllows()
+    {
+        var items = string.Join(',', Enumerable.Range(0, EventsConstants.MaxListLength + 5).Select(index => $$"""{"kind":"image","url":"https://cdn.example/{{index}}.jpg"}"""));
+
+        var facts = Map($$"""{"schema":"wow2.event.v1","title":"Show","media":[{{items}}]}""");
+
+        facts.Images.Should().HaveCount(EventsConstants.MaxListLength);
+        facts.Images[0].Url.Should().Be("https://cdn.example/0.jpg", "the order is the source's");
+        EventFactsValidator.Validate(facts, SourcedKinds, out _).Should().BeNull();
+    }
+
+    [Fact]
+    public void Validate_ShouldRejectAFileRef_ThatIsNoFileId()
+    {
+        var facts = Map("""{"schema":"wow2.event.v1","title":"Show"}""") with
+        {
+            Images = [new EventImage { Url = "https://cdn.example/a.jpg", FileRef = "files://stored/poster" }],
+        };
+
+        EventFactsValidator.Validate(facts, SourcedKinds, out _)!.Message.Should().StartWith("facts.images:");
     }
 
     [Fact]

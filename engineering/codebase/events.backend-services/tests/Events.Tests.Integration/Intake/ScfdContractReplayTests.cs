@@ -15,7 +15,8 @@ namespace Events.Tests.Integration.Intake;
 /// <summary>The contract replay with SCFD (the services sweep): harvest's golden pages pulled in order through the real
 /// feed and the real intake over PostgreSQL, each pull sending the cursor the page before it served. One automatic
 /// source with the <c>payload</c> classifier takes every page: new, changed, empty, lifecycle, classification, the
-/// Afisha place, the purge, the application deadline, the unmatched post and the estimated date.</summary>
+/// Afisha place, the purge, the application deadline, the unmatched post, the estimated date, the English title and the
+/// copied image.</summary>
 public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixture<IntakeFixture>
 {
     [Fact]
@@ -55,7 +56,7 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
         var db = read.ServiceProvider.GetRequiredService<EventsDbContext>();
         var cursor = await db.IntakeCursors.AsNoTracking().SingleAsync(row => row.SourceName == source.Name);
         cursor.Cursor.Should().Be(served[^1].Next);
-        cursor.Received.Should().Be(26);
+        cursor.Received.Should().Be(27);
         cursor.Quarantined.Should().Be(0);
 
         var events = read.ServiceProvider.GetRequiredService<ICatalogEventsBroker>();
@@ -68,8 +69,8 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
         var runway = published.Single(item => SourceTitle(item) != "Tashkent Fashion Week");
         runway.Facts.Kind.Should().Be("runway");
         runway.ReviewedBy.Should().Be("classifier:model:contract@1");
-        candidates.Should().HaveCount(10,
-            "the two designer-show posts, three undecided or irrelevant classifications, the two Afisha places, the craft fair, the unmatched market and the textile expo wait for a person");
+        candidates.Should().HaveCount(11,
+            "the two designer-show posts, three undecided or irrelevant classifications, the two Afisha places, the craft fair, the unmatched market, the textile expo and the autumn show wait for a person");
 
         // 01, 03, 05: one event per post through its revisions, the gone listing, the merge and the unmerge.
         var shows = candidates.Where(item => SourceTitle(item).StartsWith("Показ коллекций молодых дизайнеров", StringComparison.Ordinal)).ToList();
@@ -118,6 +119,12 @@ public sealed class ScfdContractReplayTests(IntakeFixture fixture) : IClassFixtu
         {
             ["en"] = "Textile and Sewing Equipment Exhibition", ["ru-Cyrl"] = "Международная выставка текстиля и швейного оборудования",
         });
+
+        // 13: both images of the post reach the event in order with their source URLs, the copied one with its file id.
+        var autumn = candidates.Single(item => SourceTitle(item) == "Показ мод: осенняя коллекция дизайнеров");
+        autumn.Facts.Images.Select(image => image.Url).Should().Equal(
+            "https://afisha.example.test/media/autumn-collection-1.jpg", "https://afisha.example.test/media/autumn-collection-2.jpg");
+        autumn.Facts.Images.Select(image => image.FileRef is not null).Should().Equal(true, false);
 
         // 08: the purge clears every delivered payload of the post, and keeps its rows.
         var purged = served[0].Records.Single().PostId;

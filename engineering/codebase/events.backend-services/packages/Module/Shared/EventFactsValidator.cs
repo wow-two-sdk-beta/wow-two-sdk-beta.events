@@ -117,6 +117,8 @@ internal static partial class EventFactsValidator
         var images = facts.Images ?? [];
         if (images.Count > EventsConstants.MaxListLength || images.Any(image => !IsUrl(image.Url) || string.IsNullOrWhiteSpace(image.Url)))
             return EventsErrors.Invalid("facts.images", $"at most {EventsConstants.MaxListLength}, each with an http(s) URL");
+        if (images.Any(image => image.FileRef is not null && !Guid.TryParseExact(image.FileRef, "D", out _)))
+            return EventsErrors.Invalid("facts.images", "each fileRef a Files file id (a GUID)");
 
         var languages = (facts.Languages ?? []).Select(language => language.Trim()).Where(language => language.Length > 0).Distinct().ToList();
         if (languages.Any(language => !LocalePattern().IsMatch(language)))

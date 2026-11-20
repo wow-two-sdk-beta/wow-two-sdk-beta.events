@@ -18,9 +18,10 @@ events for ocharo and not post them anywhere else".
 
 - a catalog fed by SCFD stays private to its owner organization; Events refuses to make it `shared` or `public`, and
   intake applies nothing into a catalog that is not private.
-- sourced facts and captures serve internal tracking and review; nothing sourced is republished.
-- sourced images and text stay review evidence, never content: intake leaves `images` empty, and only a curator adds
-  images to an event.
+- sourced facts, images and captures serve internal tracking and review only; every item credits its source by the
+  external link.
+- intake maps a sourced event's images into `images`, each keeping its source URL as the credit link and SCFD's Files
+  copy as `fileRef` when SCFD holds one; the sourced text stays review evidence.
 - calendar export and agent reads stay inside the owner organization; anonymous or token feed links are not built.
 - `shared` and `public` visibility, and Form 3's shared catalog, apply only to catalogs with no sourced records.
 
@@ -70,7 +71,7 @@ events for ocharo and not post them anywhere else".
 | `deadlines` | kind (`application` · `registration` · `early-bird` · `submission` · `payment` · `other`), `at` (When), label, url |
 | `offers` | kind (`ticket` · `exhibitor` · `sponsorship` · `submission` · `other`), name, price min/max/currency (null when unknown, never 0), free, terms, url |
 | `website`, `ticketUrl`, `onlineUrl` | http(s), ≤ 2,048 |
-| `images` | curated references: url, attribution (#31: no bytes copied in P1; sourced images stay evidence, #50) |
+| `images` | references, at most 50: `url` (http(s); a sourced image keeps its source URL, the credit link), `fileRef` (the Files file id, a GUID, of SCFD's copy when it holds one), source link, capture, attribution (#31: Events copies no bytes) |
 | `sources` | every source identity that reported it: kind (`scfd` · `import` · `manual`), id, url, first and last seen, and `matchedBy` (the rule that attached a source to an event another source started, `rule:title-date-city`; none for the first); for SCFD also its name (the subscription's source name, else its group, else the intake source's), its listing's state (`live` · `suspect` · `gone` · `unmatched`) and when the source posted it |
 | `review` | `candidate` · `published` · `rejected` · `archived`; consumers see `published` |
 | `revision` | optimistic concurrency; `createdAt`, `updatedAt`, `publishedAt` |
@@ -139,6 +140,10 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - a sourced event's website is the first `site` content link on a host of its own: SCFD marks every in-page link
   `site`, so a link on a host of the post's own links (the aggregator, with `www.` and subdomains), a social, messenger
   or map host reads as no website, and the event keeps none; a published event re-maps after the next poll.
+- a sourced event's `media[]` items of kind `image` become `images`, in the source's order, at most 50: each keeps its
+  source `url` (https, no credentials; the credit link) and `fileRef` when SCFD sent the Files file id of its copy, a
+  GUID (any other `fileRef` is dropped); an item of another kind or with no safe https URL is left out. A copy SCFD makes
+  after the post was pulled arrives with the post's next event; a consumer reads the copy through its own Files access.
 - a sourced place names a known Uzbek city in one Latin spelling (`Ташкент` and `Toshkent` read `Tashkent`), the
   spelling the catalog's own events use, so city filters and groups never split one city in two; a city the table does
   not know passes through as written, and the source's spelling stays in the observation's raw payload.

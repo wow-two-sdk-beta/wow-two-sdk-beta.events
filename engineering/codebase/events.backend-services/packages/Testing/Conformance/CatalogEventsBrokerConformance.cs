@@ -206,6 +206,29 @@ public abstract class CatalogEventsBrokerConformance : EventsConformance
         Error(taken).Type.Should().Be(AppErrorType.Conflict);
     }
 
+    /// <summary>An image keeps its source URL and the Files id of SCFD's copy through a write and a read, in order; a
+    /// <c>fileRef</c> that is no file id is invalid.</summary>
+    [Fact]
+    public async Task CreateAsync_ShouldKeepEachImagesSourceUrlAndFileRef_AndFailValidation_WhenAFileRefIsNoFileId()
+    {
+        var owner = NewMember();
+        var catalog = await CreateCatalogAsync(owner);
+        var copy = Guid.NewGuid().ToString("D");
+        var images = new[]
+        {
+            new EventImage { Url = "https://source.example/poster.jpg", FileRef = copy },
+            new EventImage { Url = "https://source.example/second.jpg" },
+        };
+
+        var created = await CreateEventAsync(owner, catalog.Slug, Facts("Show with images") with { Images = images });
+        var read = Value(await As(owner).Events.GetAsync(catalog.Slug, created.Id));
+        var invalid = await As(owner).Events.CreateAsync(catalog.Slug,
+            new EventSpec { Facts = Facts("Show with a bad ref") with { Images = [new EventImage { Url = "https://source.example/a.jpg", FileRef = "not-a-file-id" }] } });
+
+        read.Facts.Images.Should().Equal(images);
+        Error(invalid).Type.Should().Be(AppErrorType.Validation);
+    }
+
     /// <summary>Facts without a title are invalid.</summary>
     [Fact]
     public async Task CreateAsync_ShouldFailValidation_WhenTheTitleIsEmpty()

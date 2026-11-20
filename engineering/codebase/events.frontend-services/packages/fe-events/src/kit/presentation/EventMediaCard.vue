@@ -34,15 +34,15 @@ import type {
 } from './EventMediaCardSlots';
 
 /**
- * Shows one event as an image-first card, the look of the SCFD Posts tab. The curated image (`facts.images[0]`) fills
+ * Shows one event as an image-first card, the look of the SCFD Posts tab. The image (`facts.images[0]`) fills
  * the card; with none, or a failed one, a date tile shows the start's day and month on the brand gradient with the
  * kind's icon (an undated event shows the icon alone). Lower-case glass pills at the top start give the kind, the
  * stage when the event is tracked, cancelled, postponed or online when the facts say so, and removed. At the top end, a
  * menu holds the quick stages for an event at the default stage, and a mark shows a high priority. The text panel holds
  * the title (two lines), one line with the dates and the city, then the next open deadline in its tone, or else the
  * source names. The whole card opens the event; it is dimmed when cancelled, removed or past. Organizer, scope, cost,
- * the review state and the title's language tag stay on the event's page. Sourced media never reaches it — only
- * `facts.images`.
+ * the review state and the title's language tag stay on the event's page. Its image is `facts.images[0]` at its `url`;
+ * a consumer that serves the Files copy named by `fileRef` fills the `media` slot.
  *
  * Each zone takes a slot whose default is the content above, so a consumer swaps one zone and keeps the rest: `media`
  * (replaces the image), `fallback` (the tile shown with no media), `pills` (top start), `actions` (top end), `title`

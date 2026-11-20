@@ -52,7 +52,7 @@ function describe(key: keyof EventFacts, facts: EventFacts, locale: EventsLocale
     case 'status':
       return EventsLabels.status(facts.status ?? 'scheduled', locale);
     case 'images':
-      // Sourced images stay links in text: evidence, never content.
+      // A review change lists the images as their source links, in text.
       return (facts.images ?? []).map((image) => image.url).join('\n');
     default:
       return typeof value === 'string' ? value : JSON.stringify(value);

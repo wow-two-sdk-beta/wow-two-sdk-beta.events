@@ -9,8 +9,9 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Module.Intake;
 
 /// <summary>Reads SCFD's <c>wow2.event.v1</c> projection: its facts, honestly (what the source does not state stays
 /// unknown), and its evidence (links, capture, mapping stamp).</summary>
-/// <remarks>Sourced media and text stay evidence only: no image and no description becomes a fact, so nothing sourced
-/// is republished (events-integration #50).</remarks>
+/// <remarks>Sourced media become <c>facts.images</c>: each image keeps its source URL, the external link that credits the
+/// source, and SCFD's copy in Files (<c>fileRef</c>) when it holds one. The description and tags stay evidence only,
+/// as before (events-integration #50).</remarks>
 internal static partial class ScfdEventMapper
 {
     private const int MaxMappingVersionLength = 64;
@@ -180,10 +181,41 @@ internal static partial class ScfdEventMapper
             Offers = Offers(data),
             Website = Website(data, contentLinks),
             TicketUrl = Url(contentLinks.FirstOrDefault(link => IsLinkKind(link, "ticket", 0)), "url"),
+            Images = Images(data),
             Languages = locale is null ? [] : [locale],
         };
         return true;
     }
+
+    /// <summary>Reads the payload's images (<c>media[]</c> items of kind <c>image</c>) in their order, at most
+    /// <see cref="EventsConstants.MaxListLength"/>. Each keeps its source <c>url</c>, the credit link, and its
+    /// <c>fileRef</c> when that is a Files file id (a GUID); an item with no safe https URL, or of another kind, is left
+    /// out rather than failing the record.</summary>
+    private static List<EventImage> Images(JsonElement data)
+    {
+        var images = new List<EventImage>();
+        if (!data.TryGetProperty("media", out var media) || media.ValueKind != JsonValueKind.Array)
+            return images;
+
+        foreach (var item in media.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object))
+        {
+            if (!string.Equals(String(item, "kind"), "image", StringComparison.OrdinalIgnoreCase) || SafeHttpsUrl(item, "url") is not { } url)
+                continue;
+
+            images.Add(new EventImage { Url = url, FileRef = Guid.TryParse(String(item, "fileRef")?.Trim(), out var file) ? file.ToString("D") : null });
+            if (images.Count == EventsConstants.MaxListLength)
+                break;
+        }
+
+        return images;
+    }
+
+    /// <summary>Reads a URL that is https, has a host, carries no credentials and fits the URL limit; none otherwise.</summary>
+    private static string? SafeHttpsUrl(JsonElement element, string name) =>
+        Url(element, name) is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps && uri.UserInfo.Length == 0 && uri.Host.Length > 0
+            ? url
+            : null;
 
     /// <summary>Reads SCFD's machine titles (<c>titles[]</c>, each <c>{ text, language, machine: true }</c>): the language as
     /// a lowercase tag and the text fitted to the title limit, the first per language. A title not marked

@@ -6,9 +6,9 @@ export interface EventCardSlotBase {
   readonly tracking: TrackingModel | null;
 }
 
-/** `media`: the zone behind the card. The curated image is the default; with no image the `fallback` zone shows. */
+/** `media`: the zone behind the card. The image is the default; with no image the `fallback` zone shows. */
 export interface EventCardMediaSlot extends EventCardSlotBase {
-  /** The curated image the card would show (`facts.images[0]`, http or https only); null with none or after a failed load. */
+  /** The image the card would show (`facts.images[0]`, http or https only); null with none or after a failed load. */
   readonly image: { readonly url: string; readonly alt: string } | null;
 }
 

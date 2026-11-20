@@ -164,7 +164,7 @@ public sealed class IntakeTests(IntakeFixture fixture) : IClassFixture<IntakeFix
         candidate.Facts.Organizer!.Name.Should().Be("Mstar");
         candidate.Facts.Website.Should().Be("https://mstar.uz/event");
         candidate.Facts.Offers.Should().ContainSingle().Which.Kind.Should().Be(OfferKind.Ticket);
-        candidate.Facts.Images.Should().BeEmpty();
+        candidate.Facts.Images.Should().Equal(new EventImage { Url = "https://cdn.example/poster.jpg" });
         candidate.Facts.Summary.Should().BeEmpty();
         candidate.Sources.Should().ContainSingle().Which.Should().BeEquivalentTo(new { Kind = EventSourceKind.Scfd, Id = $"scfd/{post:D}" });
 
@@ -231,7 +231,7 @@ public sealed class IntakeTests(IntakeFixture fixture) : IClassFixture<IntakeFix
     public async Task Intake_ShouldApplyNothing_WhenTheCatalogIsNotPrivate()
     {
         var (slug, source) = await SourceAsync(CatalogVisibility.Public);
-        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Would be republished"), ScfdRecords.Raw("pipeline.run", null));
+        fixture.Feed.Append(source, ScfdRecords.Post(Guid.NewGuid(), 1, "Would land in a shared catalog"), ScfdRecords.Raw("pipeline.run", null));
 
         await fixture.PollAsync(source);
 

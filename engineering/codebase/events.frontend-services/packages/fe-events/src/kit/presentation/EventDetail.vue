@@ -36,8 +36,8 @@ import TrackingForm from './TrackingForm.vue';
 /**
  * Shows one event with every reviewed fact: curated images, dates as precisely as known, place and scope, deadlines,
  * offers, links and each source by name with its listing state — and, when `trackable`, the organization's chosen
- * tracking fields and its tracking form. Offers the event's own calendar file when its dates are exact. Sourced media
- * never reaches it.
+ * tracking fields and its tracking form. Offers the event's own calendar file when its dates are exact. Its images are
+ * `facts.images`, each at its `url`.
  */
 defineOptions({ name: 'EventDetail' });
 

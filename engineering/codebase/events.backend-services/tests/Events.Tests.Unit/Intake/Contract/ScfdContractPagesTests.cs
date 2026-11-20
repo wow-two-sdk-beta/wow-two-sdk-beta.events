@@ -119,7 +119,8 @@ public sealed partial class ScfdContractPagesTests
         facts.Website.Should().BeNull("SCFD marks the aggregator's own venue page `site`, and it is no website of the event");
         facts.TicketUrl.Should().Be("https://afisha.example.test/events/designers-show/tickets");
         facts.Languages.Should().Equal("ru-Cyrl");
-        facts.Images.Should().BeEmpty("sourced media stays evidence (events-integration #50)");
+        facts.Images.Should().Equal([new EventImage { Url = "https://afisha.example.test/media/designers-show.jpg" }],
+            "the image keeps its source URL, the credit link; SCFD copied none, so it names no file");
         facts.Summary.Should().BeEmpty("sourced text stays evidence");
         facts.Deadlines.Should().BeEmpty("the page states none");
         facts.TimeZone.Should().BeNull("the mapper alone knows no source's zone");
@@ -215,6 +216,20 @@ public sealed partial class ScfdContractPagesTests
         ScfdEventMapper.Links(records[0].Data).Single().SourceFields.Should().BeNull("the first revision carries no machine title");
         ScfdEventMapper.Links(records[1].Data).Single().SourceFields!.Value.GetProperty("machineTitles")
             .EnumerateArray().Select(item => item.GetString()).Should().Equal("en");
+    }
+
+    /// <summary>The copied-image page: one post with two images, the first already copied into Files. Its facts carry both
+    /// images in order with their source URLs as the credit links, and the file id on the first alone.</summary>
+    [Fact]
+    public async Task ImageCopiedPage_ShouldMapBothImages_AndTheFileRefOfTheCopiedOne()
+    {
+        var record = (await ReadAsync("13-image-copied.json")).Records.Single();
+
+        record.Type.Should().Be("post.new");
+        ScfdEventMapper.TryMap(record.Data!.Value, Kinds, out var facts, out var reason).Should().BeTrue(reason);
+        facts.Images.Should().Equal(
+            new EventImage { Url = "https://afisha.example.test/media/autumn-collection-1.jpg", FileRef = "00000000-0000-7000-8000-000000000075" },
+            new EventImage { Url = "https://afisha.example.test/media/autumn-collection-2.jpg" });
     }
 
     /// <summary>The unmatched page (harvest E03): a post delivered as new, then once as <c>post.unmatched</c> at its next

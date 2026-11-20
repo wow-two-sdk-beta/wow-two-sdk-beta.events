@@ -16,7 +16,9 @@ SCFD's golden pages of the pull wire Events reads, copied unchanged from harvest
   purge, the application deadline (`09-deadline.json`), the unmatched post (`10-unmatched.json`) and the estimated date
   (`11-estimated.json`: an undated post, an `estimated` month read as approximate, then the stated day read as announced;
   every other page's stated dates keep their precision as announced) and the English title (`12-english-title.json`:
-  SCFD's machine `en` title maps beside the source's `ru-Cyrl`, recorded as machine-made on the title's link).
+  SCFD's machine `en` title maps beside the source's `ru-Cyrl`, recorded as machine-made on the title's link) and the copied
+  image (`13-image-copied.json`: both images map in order with their source URLs as the credit links, the copied one with
+  its Files id as `fileRef`; every other page's image names no file).
 - `ScfdContractReplayTests` (integration) pulls the pages in order through the real intake over PostgreSQL, sending each
   page's `next` as the following cursor.
 - Events' own expectations live in the tests; the numeric enum wire harvest no longer serves keeps a hand-made fixture
