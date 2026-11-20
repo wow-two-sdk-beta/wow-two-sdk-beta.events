@@ -11,6 +11,7 @@ import type {
 } from '../src/contracts';
 import { EventMediaCard } from '../src/kit';
 import { eventModel, sourceModel } from './Fixtures';
+import { desktop, phone, utilitiesAt } from './Viewport';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -725,5 +726,31 @@ describe('event media card zone slots', () => {
     expect(wrapper.find('[data-test="event-kind"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="event-title"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="event-dates"]').exists()).toBe(true);
+  });
+});
+
+describe('the dates and city line (events review #14)', () => {
+  const longCity = 'Kranj (also Tržič, Škofja Loka, Jesenice, Bled, Radovljica, Naklo)';
+
+  it('keeps the dates whole and gives the city what is left, at 390 px and at 1440 px', () => {
+    const wrapper = render(
+      build({
+        starts: { value: '2027-05-29', precision: 'day', certainty: 'announced' },
+        ends: { value: '2027-08-14', precision: 'day', certainty: 'announced' },
+        place: { city: longCity, country: 'SI' },
+      }),
+    );
+
+    expect(wrapper.get('[data-test="event-dates"]').text()).toBe('29 May – 14 Aug 2027');
+    expect(wrapper.get('[data-test="event-city"]').text()).toBe(longCity);
+    for (const width of [phone, desktop]) {
+      // The dates never shrink below their text (up to the whole line), so the city is the one that is cut.
+      expect(utilitiesAt(wrapper.get('[data-test="event-dates"]').element, width)).toEqual(
+        expect.arrayContaining(['shrink-0', 'max-w-full', 'truncate']),
+      );
+      const city = utilitiesAt(wrapper.get('[data-test="event-city"]').element, width);
+      expect(city).toEqual(expect.arrayContaining(['min-w-0', 'truncate']));
+      expect(city).not.toContain('shrink-0');
+    }
   });
 });

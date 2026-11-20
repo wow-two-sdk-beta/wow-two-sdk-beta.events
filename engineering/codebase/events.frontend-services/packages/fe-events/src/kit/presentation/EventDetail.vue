@@ -17,10 +17,12 @@ import {
   localIsoDate,
 } from '../dates/EventDates';
 import {
+  distinctEventImages,
   eventTitle,
   eventTitleLanguage,
   formatEventPlace,
   formatOfferPrice,
+  languageName,
   safeHttpUrl,
 } from '../facts/EventFactsText';
 import { regionOfCountry, type EventRegion } from '../facts/EventRegions';
@@ -112,7 +114,7 @@ const day = computed(() => props.today ?? localIsoDate());
 const failedImages = shallowRef<readonly string[]>([]);
 const images = computed(() => {
   const current = event.value;
-  return (facts.value?.images ?? []).flatMap((image, index) => {
+  return distinctEventImages(facts.value?.images).flatMap(({ image, index }) => {
     const source = [current ? props.imageSrc?.(current, image, index) : null, safeHttpUrl(image.url)].find(
       (candidate): candidate is string => Boolean(candidate) && !failedImages.value.includes(`${index} ${candidate}`),
     );
@@ -126,6 +128,14 @@ const links = computed(() =>
     { key: 'joinOnline' as const, url: safeHttpUrl(facts.value?.onlineUrl) },
   ].filter((link): link is { key: 'website' | 'tickets' | 'joinOnline'; url: string } => link.url !== null),
 );
+/** The languages as names (`Russian`), each once: `ru` and `ru-Cyrl` are one language to a reader, and `und` is none. */
+const languages = computed(() => [
+  ...new Set(
+    (facts.value?.languages ?? [])
+      .map((tag) => languageName(tag, props.locale))
+      .filter((name): name is string => name !== null),
+  ),
+]);
 const summary = computed(() => pickText(facts.value?.summary, props.locale));
 const place = computed(() => (facts.value ? formatEventPlace(facts.value, props.locale) : ''));
 const address = computed(() => facts.value?.place?.address ?? '');
@@ -271,12 +281,20 @@ watch([() => props.catalog, () => props.eventId, () => props.client, () => props
 
       <p v-if="summary" class="whitespace-pre-line">{{ summary }}</p>
 
-      <dl class="grid gap-4 sm:grid-cols-2">
+      <!-- Two columns, not two halves of the page: WHEN and WHERE stay a reading distance apart on a wide screen. -->
+      <dl class="grid max-w-3xl gap-x-10 gap-y-4 sm:grid-cols-2">
         <div>
           <dt class="text-xs font-medium uppercase text-muted-foreground">{{ eventsText('when', locale) }}</dt>
           <dd class="font-medium" data-test="event-dates">{{ dates }}</dd>
           <dd v-if="calendarFile">
-            <Button size="sm" variant="ghost" data-test="event-calendar" @click="downloadCalendar">
+            <!-- A link-shaped button with no padding or border of its own: its text starts where the labels above it do. -->
+            <Button
+              size="sm"
+              variant="link"
+              class="min-h-10 border-0 sm:min-h-8"
+              data-test="event-calendar"
+              @click="downloadCalendar"
+            >
               {{ eventsText('downloadCalendar', locale) }}
             </Button>
             <span v-if="calendarFailed" class="text-sm text-destructive" role="alert">
@@ -293,9 +311,9 @@ watch([() => props.catalog, () => props.eventId, () => props.client, () => props
             <template v-if="facts.audience"> · {{ EventsLabels.audience(facts.audience, locale) }}</template>
           </dd>
         </div>
-        <div v-if="facts.languages?.length">
+        <div v-if="languages.length">
           <dt class="text-xs font-medium uppercase text-muted-foreground">{{ eventsText('languages', locale) }}</dt>
-          <dd>{{ facts.languages.join(', ') }}</dd>
+          <dd data-test="event-languages">{{ languages.join(', ') }}</dd>
         </div>
         <div v-for="field in fields" :key="field.key" :data-test="`event-field-${field.key}`">
           <dt class="text-xs font-medium uppercase text-muted-foreground">{{ field.label }}</dt>

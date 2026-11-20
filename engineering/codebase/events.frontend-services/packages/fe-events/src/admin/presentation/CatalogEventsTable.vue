@@ -205,9 +205,7 @@ const reviewVariant = (state: EventReviewState) =>
               <td class="py-2 pr-3">{{ EventsLabels.kind(item.facts.kind, kinds, locale) }}</td>
               <td class="space-x-1 py-2 pr-3">
                 <Badge :variant="reviewVariant(item.review)">
-                  {{
-                    EventsLabels.review(item.review, locale)
-                  }}
+                  {{ EventsLabels.review(item.review, locale) }}
                 </Badge>
                 <Badge v-if="item.pendingChanges" :variant="BadgeVariant.Info">
                   {{ eventsText('pendingChanges', locale, { count: item.pendingChanges }) }}

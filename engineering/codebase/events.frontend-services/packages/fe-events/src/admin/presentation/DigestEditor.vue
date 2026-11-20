@@ -34,6 +34,11 @@ import { EventsLabels } from '../../kit/text/EventsLabels';
 import type { EventsLocale } from '../../kit/text/EventsLocale';
 import { eventsText, type EventsMessageKey } from '../../kit/text/EventsMessages';
 import {
+  eventCheckboxClass,
+  eventCheckRowClass,
+  eventFieldClass as inputClass,
+} from '../../kit/presentation/EventFormStyles';
+import {
   defaultDigestSpec,
   digestDraft,
   digestLanguageOf,
@@ -254,7 +259,6 @@ const channelKey = (channel: string): EventsMessageKey | null =>
       ? 'channelLog'
       : null;
 const languageName: Readonly<Record<string, string>> = { 'uz-Latn': 'O‘zbekcha', ru: 'Русский', en: 'English' };
-const inputClass = 'rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground';
 const checked = (event: Event) => (event.target as HTMLInputElement).checked;
 const valueOf = (event: Event) => (event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
 
@@ -283,7 +287,8 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
     </header>
 
     <form class="grid gap-4" novalidate @submit.prevent="submit">
-      <fieldset class="grid gap-4 sm:grid-cols-2" :disabled="busy">
+      <!-- items-end: the checkbox row, as tall as a field, sits level with the fields beside it, not centered on their labels. -->
+      <fieldset class="grid gap-4 sm:grid-cols-2 sm:items-end" :disabled="busy">
         <label class="flex flex-col gap-1 text-sm">
           <span class="font-medium">{{ eventsText('digestName', locale) }}</span>
           <input
@@ -302,18 +307,29 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
             </option>
           </select>
         </label>
-        <label class="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="enabled" :checked="draft.enabled" @change="set('enabled', checked($event))" />
+        <label :class="eventCheckRowClass">
+          <input
+            type="checkbox"
+            name="enabled"
+            :class="eventCheckboxClass"
+            :checked="draft.enabled"
+            @change="set('enabled', checked($event))"
+          />
           <span>{{ eventsText('digestEnabled', locale) }}</span>
         </label>
       </fieldset>
 
       <fieldset class="grid gap-3" :disabled="busy">
         <legend class="mb-1 text-sm font-medium">{{ eventsText('digestSchedule', locale) }}</legend>
-        <div class="flex flex-wrap gap-3 text-sm" role="group" :aria-label="eventsText('digestDays', locale)">
-          <label v-for="day in DigestDayValues" :key="day" class="flex items-center gap-1">
+        <div
+          class="flex flex-wrap items-center gap-x-4 text-sm"
+          role="group"
+          :aria-label="eventsText('digestDays', locale)"
+        >
+          <label v-for="day in DigestDayValues" :key="day" :class="eventCheckRowClass">
             <input
               type="checkbox"
+              :class="eventCheckboxClass"
               :name="`day-${day}`"
               :checked="draft.days.includes(day)"
               @change="set('days', toggle(draft.days, day, checked($event)))"
@@ -348,10 +364,11 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
       <fieldset class="grid gap-3" :disabled="busy">
         <legend class="mb-1 text-sm font-medium">{{ eventsText('digestSelection', locale) }}</legend>
         <p class="text-xs text-muted-foreground">{{ eventsText('digestSelectionHint', locale) }}</p>
-        <div class="grid gap-3 sm:grid-cols-3">
-          <label class="flex items-center gap-2 text-sm">
+        <div class="grid gap-3 sm:grid-cols-3 sm:items-end">
+          <label :class="eventCheckRowClass">
             <input
               type="checkbox"
+              :class="eventCheckboxClass"
               name="newSinceLastRun"
               :checked="draft.newSinceLastRun"
               @change="set('newSinceLastRun', checked($event))"
@@ -381,11 +398,16 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
             />
           </label>
         </div>
-        <div class="flex flex-wrap gap-3 text-sm" role="group" :aria-label="eventsText('digestStatuses', locale)">
+        <div
+          class="flex flex-wrap items-center gap-x-4 text-sm"
+          role="group"
+          :aria-label="eventsText('digestStatuses', locale)"
+        >
           <span class="text-muted-foreground">{{ eventsText('digestStatuses', locale) }}:</span>
-          <label v-for="status in EventStatusValues" :key="status" class="flex items-center gap-1">
+          <label v-for="status in EventStatusValues" :key="status" :class="eventCheckRowClass">
             <input
               type="checkbox"
+              :class="eventCheckboxClass"
               :name="`status-${status}`"
               :checked="draft.statuses.includes(status)"
               @change="set('statuses', toggle<EventStatus>(draft.statuses, status, checked($event)))"
@@ -403,9 +425,10 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
             <input :class="inputClass" name="cities" :value="draft.cities" @input="set('cities', valueOf($event))" />
           </label>
         </div>
-        <label class="flex items-center gap-2 text-sm">
+        <label :class="eventCheckRowClass">
           <input
             type="checkbox"
+            :class="eventCheckboxClass"
             name="trackedOnly"
             :checked="draft.trackedOnly"
             @change="set('trackedOnly', checked($event))"
@@ -414,15 +437,16 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
         </label>
         <template v-if="stageOptions.length > 0">
           <div
-            class="flex flex-wrap gap-3 text-sm"
+            class="flex flex-wrap items-center gap-x-4 text-sm"
             role="group"
             :aria-label="eventsText('digestStages', locale)"
             data-test="digest-stages"
           >
             <span class="text-muted-foreground">{{ eventsText('digestStages', locale) }}:</span>
-            <label v-for="stage in stageOptions" :key="stage.key" class="flex items-center gap-1">
+            <label v-for="stage in stageOptions" :key="stage.key" :class="eventCheckRowClass">
               <input
                 type="checkbox"
+                :class="eventCheckboxClass"
                 :name="`stage-${stage.key}`"
                 :checked="draft.stages.includes(stage.key)"
                 @change="setStage('stages', stage.key, checked($event))"
@@ -431,15 +455,16 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
             </label>
           </div>
           <div
-            class="flex flex-wrap gap-3 text-sm"
+            class="flex flex-wrap items-center gap-x-4 text-sm"
             role="group"
             :aria-label="eventsText('digestExcludeStages', locale)"
             data-test="digest-exclude-stages"
           >
             <span class="text-muted-foreground">{{ eventsText('digestExcludeStages', locale) }}:</span>
-            <label v-for="stage in stageOptions" :key="stage.key" class="flex items-center gap-1">
+            <label v-for="stage in stageOptions" :key="stage.key" :class="eventCheckRowClass">
               <input
                 type="checkbox"
+                :class="eventCheckboxClass"
                 :name="`exclude-stage-${stage.key}`"
                 :checked="draft.excludeStages.includes(stage.key)"
                 @change="setStage('excludeStages', stage.key, checked($event))"
@@ -508,11 +533,10 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
       <FailureNotice v-if="failure" :failure="failure" :locale="locale" context="admin" />
       <p v-if="savedNotice" class="text-sm text-success" role="status">{{ eventsText('saved', locale) }}</p>
 
-      <div class="flex flex-wrap gap-2">
-        <Button type="submit" :is-loading="save.pending.value" data-test="digest-save">
-          {{
-            eventsText('digestSave', locale)
-          }}
+      <!-- A phone gets a grid: Save and Delete across the whole width, Preview and Send now side by side. -->
+      <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <Button type="submit" class="col-span-2 sm:col-auto" :is-loading="save.pending.value" data-test="digest-save">
+          {{ eventsText('digestSave', locale) }}
         </Button>
         <template v-if="digest">
           <Button
@@ -537,6 +561,7 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
             type="button"
             variant="ghost"
             tone="danger"
+            class="col-span-2 sm:col-auto sm:ms-auto"
             :is-loading="remove.pending.value"
             data-test="digest-delete"
             @click="deleteDigest"

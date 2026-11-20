@@ -93,7 +93,9 @@ watch(
           <Badge :variant="source.enabled ? BadgeVariant.Success : BadgeVariant.Neutral">
             {{ source.enabled ? eventsText('enabled', locale) : eventsText('disabled', locale) }}
           </Badge>
-          <span class="text-xs text-muted-foreground">{{ source.catalog }} · {{ eventsText('subscription', locale) }} {{ source.subscriptionId }}</span>
+          <span class="text-xs text-muted-foreground"
+            >{{ source.catalog }} · {{ eventsText('subscription', locale) }} {{ source.subscriptionId }}</span
+          >
         </div>
         <dl class="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
           <div>

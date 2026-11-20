@@ -13,6 +13,9 @@ export default [
     languageOptions: { globals: globals.browser, parserOptions: { parser: tseslint.parser } },
     rules: {
       'vue/max-attributes-per-line': 'off',
+      // Layout rules Prettier owns: it breaks a long inline element's closing bracket and indents its text itself.
+      'vue/html-closing-bracket-newline': 'off',
+      'vue/html-indent': 'off',
       'vue/singleline-html-element-content-newline': 'off',
       // Prettier writes void elements self-closed; keep the two formatters in agreement.
       'vue/html-self-closing': ['warn', { html: { void: 'always', normal: 'never', component: 'always' } }],

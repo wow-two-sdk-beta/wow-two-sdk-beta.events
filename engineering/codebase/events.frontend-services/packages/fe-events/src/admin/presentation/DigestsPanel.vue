@@ -2,7 +2,7 @@
 import { Button, RefreshButton } from '@wow-two-beta/fe/presentation/actions';
 import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
-import { onMounted, shallowRef, useTemplateRef, watch } from 'vue';
+import { computed, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import { DigestChannelConstants, type DigestModel, type DigestSpec, type WorkflowModel } from '../../contracts';
 import type { EventsClient } from '../../kit/client/CreateEventsClient';
 import { useEventsRequest } from '../../kit/hooks/UseEventsRequest';
@@ -47,6 +47,14 @@ const list = useEventsRequest((signal) => props.client.listDigests(props.catalog
 const selected = shallowRef<string | null>(null);
 const creating = shallowRef(false);
 const history = useTemplateRef<InstanceType<typeof DigestRunHistory>>('history');
+/**
+ * Whether the list of digests shows. One digest that is open already is the editor's own header (its name and next run),
+ * so the list would say it twice; it comes back with a second digest, or while a new one is being written, to go back.
+ */
+const showList = computed(() => {
+  const count = list.value.value?.length ?? 0;
+  return count > 1 || (creating.value && count > 0);
+});
 
 async function load() {
   const digests = await list.run();
@@ -96,8 +104,8 @@ watch([() => props.catalog, () => props.client], () => {
     <header class="flex flex-wrap items-center justify-between gap-2">
       <h2 id="digests-title" class="text-lg font-semibold">{{ eventsText('digests', locale) }}</h2>
       <div class="flex gap-2">
-        <RefreshButton size="sm" :is-refreshing="list.pending.value" @click="load" />
-        <Button size="sm" data-test="digest-new" @click="startNew">{{ eventsText('digestNew', locale) }}</Button>
+        <RefreshButton size="md" :is-refreshing="list.pending.value" @click="load" />
+        <Button size="md" data-test="digest-new" @click="startNew">{{ eventsText('digestNew', locale) }}</Button>
       </div>
     </header>
 
@@ -116,22 +124,24 @@ watch([() => props.catalog, () => props.client], () => {
       <p v-if="!list.value.value?.length" class="text-sm text-muted-foreground">
         {{ eventsText('digestNone', locale) }}
       </p>
-      <ul v-else class="divide-y divide-border rounded-md border border-border" data-test="digest-list">
+      <ul v-else-if="showList" class="divide-y divide-border rounded-md border border-border" data-test="digest-list">
         <li v-for="digest in list.value.value" :key="digest.id">
           <button
             type="button"
-            class="flex w-full flex-wrap items-center gap-2 px-3 py-2 text-left text-sm"
+            class="flex min-h-10 w-full flex-wrap items-center gap-2 px-3 py-2 text-left text-sm"
             :class="{ 'bg-muted/40 font-semibold': digest.id === selected }"
             data-test="digest-item"
             @click="choose(digest)"
           >
             <span>{{ digest.name }}</span>
             <Badge v-if="!digest.enabled" :variant="BadgeVariant.Neutral">
-              {{
-                eventsText('digestOff', locale)
-              }}
+              {{ eventsText('digestOff', locale) }}
             </Badge>
-            <span v-if="digest.enabled && digest.nextRunAtUtc" class="ml-auto text-muted-foreground">
+            <!-- The open digest's next run is in the editor right below; the other rows keep theirs. -->
+            <span
+              v-if="digest.enabled && digest.nextRunAtUtc && digest.id !== selected"
+              class="ml-auto text-muted-foreground"
+            >
               {{ eventsText('digestNextRun', locale) }}:
               {{ formatInZone(digest.nextRunAtUtc, digest.schedule.timeZone, locale) }}
             </span>

@@ -252,7 +252,9 @@ describe('console routes', () => {
     const wrapper = await renderAt('/digests?catalog=ocharo');
     await flushPromises();
 
-    expect(wrapper.get('[data-test="digest-item"]').text()).toContain('Ocharo weekly');
+    // One digest is the editor's own header: no list row repeats its name and next run.
+    expect(wrapper.find('[data-test="digest-list"]').exists()).toBe(false);
+    expect(wrapper.get('[data-test="digest-editor"] h2').text()).toBe('Ocharo weekly');
     expect(wrapper.get('[data-test="digest-next-run"]').text()).toContain('09:00 (Asia/Tashkent)');
     expect(wrapper.find('select[name="channel"]').exists()).toBe(true);
   });

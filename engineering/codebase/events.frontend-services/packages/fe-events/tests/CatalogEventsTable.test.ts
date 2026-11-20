@@ -19,10 +19,14 @@ async function render(...responders: Parameters<typeof fakeService>) {
 
 describe('catalog events table', () => {
   it('shows who auto-accepted an event and why', async () => {
-    const event = eventModel('e1', {}, {
-      reviewedBy: 'classifier:ocharo-fashion-v1',
-      reviewReason: 'passed SCFD filter ocharo-fashion-v1',
-    });
+    const event = eventModel(
+      'e1',
+      {},
+      {
+        reviewedBy: 'classifier:ocharo-fashion-v1',
+        reviewReason: 'passed SCFD filter ocharo-fashion-v1',
+      },
+    );
     const { wrapper } = await render(() => envelope({ items: [event], nextCursor: null }));
 
     const note = wrapper.get('[data-test="review-attribution"]').text();
@@ -31,7 +35,11 @@ describe('catalog events table', () => {
   });
 
   it('shows the reason a candidate was held', async () => {
-    const event = eventModel('e2', {}, { review: 'candidate', reviewReason: 'held: irrelevant (0.92): not a fashion event' });
+    const event = eventModel(
+      'e2',
+      {},
+      { review: 'candidate', reviewReason: 'held: irrelevant (0.92): not a fashion event' },
+    );
     const { wrapper } = await render(() => envelope({ items: [event], nextCursor: null }));
 
     expect(wrapper.get('[data-test="review-attribution"]').text()).toContain('not a fashion event');
@@ -47,7 +55,9 @@ describe('catalog events table', () => {
       () => envelope({ items: [{ ...event, review: 'candidate', revision: 5 }], nextCursor: null }),
     );
 
-    const button = [...wrapper.element.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Return to review');
+    const button = [...wrapper.element.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Return to review',
+    );
     button?.click();
     await flushPromises();
 

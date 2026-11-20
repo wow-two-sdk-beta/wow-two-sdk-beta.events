@@ -14,7 +14,7 @@ import {
   type FacetSelection,
 } from '@wow-two-beta/fe/presentation/forms';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, MenuItem } from '@wow-two-beta/fe/presentation/nav';
-import { computed, onMounted, onScopeDispose, shallowRef, watch } from 'vue';
+import { computed, nextTick, onMounted, onScopeDispose, shallowRef, useTemplateRef, watch } from 'vue';
 import {
   EventsConstants,
   type CatalogKindModel,
@@ -52,6 +52,7 @@ import {
   type EventCardTitleSlot,
 } from './EventMediaCardSlots';
 import EventProposalForm from './EventProposalForm.vue';
+import { feedFacetBarClass, feedPillClass, feedSortClass } from './EventsFeedStyles';
 import EventsDeadlines from './EventsDeadlines.vue';
 import FailureNotice from './FailureNotice.vue';
 
@@ -192,6 +193,7 @@ const trackNotice = shallowRef(false);
 const calendarFailure = shallowRef<EventsFailure | null>(null);
 const calendarPending = shallowRef(false);
 const downloadFailed = shallowRef(false);
+const proposalSection = useTemplateRef<HTMLElement>('proposalForm');
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 const workflowRequest = useEventsRequest((signal) => props.client.getWorkflow(signal));
@@ -649,6 +651,19 @@ async function track(eventId: string, next: string) {
   await reload();
 }
 
+/** Opens the proposal form and brings it to the reader: on a phone it lands below the fold, where the tap looks dead. */
+async function openProposal() {
+  proposing.value = true;
+  proposedTitle.value = null;
+  await nextTick();
+  const form = proposalSection.value;
+  if (!form) return;
+  const calm = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  form.scrollIntoView?.({ block: 'start', behavior: calm ? 'auto' : 'smooth' });
+  // The button the reader tapped has left the toolbar, so focus goes to the form's first field, without a second scroll.
+  form.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+}
+
 function proposed(event: EventModel, written: TrackingModel | null = null) {
   proposing.value = false;
   proposedTitle.value = eventTitle(event.facts, props.locale);
@@ -681,6 +696,7 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
       :remove-label="eventsText('removeFilter', locale, { facet: '{facet}', value: '{value}' })"
       :remove-toggle-label="eventsText('removeToggleFilter', locale, { facet: '{facet}' })"
       :match-label="eventsText('matchOf', locale, { matched: '{matched}', total: '{total}' })"
+      :class="feedFacetBarClass"
       data-test="events-toolbar"
       @update:model-value="select"
     >
@@ -691,34 +707,22 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
           data-test="custom-range"
           @update:model-value="pickRange"
         />
-        <label v-if="tracking" class="flex items-center">
+        <label v-if="tracking" class="flex items-center max-sm:min-w-40 max-sm:grow">
           <span class="sr-only">{{ eventsText('sort', locale) }}</span>
-          <select
-            v-model="sort"
-            name="sort"
-            class="min-h-9 rounded-full border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-          >
+          <select v-model="sort" name="sort" :class="feedSortClass">
             <option v-for="option in sortOptions" :key="option.value" :value="option.value">
               {{ eventsText(option.key, locale) }}
             </option>
           </select>
         </label>
-        <Button
-          v-if="canPropose && !proposing"
-          size="sm"
-          variant="outline"
-          @click="
-            proposing = true;
-            proposedTitle = null;
-          "
-        >
+        <Button v-if="canPropose && !proposing" size="md" variant="outline" class="max-sm:grow" @click="openProposal">
           {{ eventsText('proposeEvent', locale) }}
         </Button>
         <DropdownMenu placement="bottom-end">
           <DropdownMenuTrigger as-child>
             <Button
               variant="ghost"
-              size="sm"
+              size="md"
               shape="circle"
               :aria-label="eventsText('moreActions', locale)"
               :is-disabled="calendarPending"
@@ -728,7 +732,7 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent v-bind="{ 'aria-label': eventsText('moreActions', locale) }">
-            <MenuItem data-test="download-calendar" @select="downloadCalendar">
+            <MenuItem class="max-sm:min-h-10" data-test="download-calendar" @select="downloadCalendar">
               {{ eventsText('downloadCalendar', locale) }}
             </MenuItem>
           </DropdownMenuContent>
@@ -741,8 +745,10 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
         v-for="pill in pills"
         :key="pill.key"
         type="button"
-        class="rounded-full border px-3 py-1 text-sm"
-        :class="expanded === pill.key ? 'border-brand bg-brand text-brand-foreground' : 'border-border bg-background'"
+        :class="[
+          feedPillClass,
+          expanded === pill.key ? 'border-brand bg-brand text-brand-foreground' : 'border-border bg-background',
+        ]"
         :aria-expanded="expanded === pill.key"
         :data-pill="pill.key"
         @click="togglePill(pill.key)"
@@ -776,7 +782,8 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
     </p>
     <section
       v-if="proposing"
-      class="rounded-lg border border-border p-4"
+      ref="proposalForm"
+      class="scroll-mt-20 rounded-lg border border-border p-4"
       :aria-label="eventsText('proposeEvent', locale)"
     >
       <h3 class="mb-3 font-semibold">{{ eventsText('proposeEvent', locale) }}</h3>

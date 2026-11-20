@@ -45,11 +45,13 @@ export {
 } from './calendar/EventCalendar';
 export {
   countryName,
+  distinctEventImages,
   eventTitle,
   eventTitleLanguage,
   formatAmount,
   formatEventPlace,
   formatOfferPrice,
+  languageName,
   safeHttpUrl,
   ticketOffer,
 } from './facts/EventFactsText';

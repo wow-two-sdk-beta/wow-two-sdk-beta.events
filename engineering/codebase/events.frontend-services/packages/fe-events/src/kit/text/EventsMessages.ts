@@ -204,6 +204,7 @@ export const EventsMessages = {
   ends: entry('Ends', 'Окончание', 'Tugashi'),
   date: entry('Date', 'Дата', 'Sana'),
   precision: entry('Precision', 'Точность', 'Aniqlik'),
+  dateHintUnknown: entry('Pick a precision first', 'Сначала выберите точность', 'Avval aniqlikni tanlang'),
   certainty: entry('Certainty', 'Достоверность', 'Ishonchlilik'),
   when: entry('When', 'Когда', 'Qachon'),
   where: entry('Where', 'Где', 'Qayerda'),

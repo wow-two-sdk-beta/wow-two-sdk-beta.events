@@ -341,6 +341,7 @@ const track = (next: string) => emit('track', props.event.id, next);
               tone="neutral"
               size="sm"
               shape="circle"
+              class="max-sm:size-10"
               :aria-label="eventsText('stage', locale)"
               :is-disabled="trackPending"
               data-test="event-stage-menu"
@@ -352,6 +353,7 @@ const track = (next: string) => emit('track', props.event.id, next);
             <MenuItem
               v-for="item in quick"
               :key="item"
+              class="max-sm:min-h-10"
               :data-stage="item"
               data-test="event-quick-stage"
               @select="emit('track', event.id, item)"
@@ -394,7 +396,8 @@ const track = (next: string) => emit('track', props.event.id, next);
       :ongoing="ongoing"
     >
       <p class="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[13px] leading-5 text-white/75">
-        <span class="truncate" data-test="event-dates">{{ dates }}</span>
+        <!-- The dates keep their width up to the whole line; the city takes what is left and is the one that is cut. -->
+        <span class="max-w-full shrink-0 truncate" data-test="event-dates">{{ dates }}</span>
         <span
           v-if="finished || ongoing"
           class="shrink-0 before:me-1.5 before:content-['·']"

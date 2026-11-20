@@ -8,6 +8,7 @@ import { regionOfCountry, type EventRegion } from '../facts/EventRegions';
 import { EventsLabels } from '../text/EventsLabels';
 import { pickText, type EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
+import { eventFieldClass, eventLabelClass } from './EventFormStyles';
 import WhenField from './WhenField.vue';
 
 /**
@@ -59,7 +60,6 @@ const preferred = computed(() => [
 ]);
 const country = computed(() => draft.value.country.trim().toUpperCase() || null);
 
-const inputClass = 'rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground';
 const asStatus = (value: string) => value as EventStatus;
 
 /** Replaces one field, so the parent's draft changes only through the model. */
@@ -71,7 +71,7 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
 <template>
   <div class="grid gap-4">
     <label class="flex flex-col gap-1 text-sm">
-      <span class="font-medium">{{ eventsText('title', locale) }}</span>
+      <span :class="eventLabelClass">{{ eventsText('title', locale) }}</span>
       <TextInput
         :model-value="draft.title"
         name="title"
@@ -81,14 +81,15 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
         @update:model-value="set('title', $event)"
       />
     </label>
-    <div class="grid gap-4 sm:grid-cols-2">
+    <!-- Kind alone takes the full row, like the title; beside the status it shares the row. -->
+    <div class="grid gap-4" :class="{ 'sm:grid-cols-2': withStatus }">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="font-medium">{{ eventsText('kind', locale) }}</span>
+        <span :class="eventLabelClass">{{ eventsText('kind', locale) }}</span>
         <select
           v-if="kinds?.length"
           :value="draft.kind"
           name="kind"
-          :class="inputClass"
+          :class="eventFieldClass"
           :disabled="disabled"
           @change="set('kind', ($event.target as HTMLSelectElement).value)"
         >
@@ -107,10 +108,10 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
         />
       </label>
       <label v-if="withStatus" class="flex flex-col gap-1 text-sm">
-        <span class="font-medium">{{ eventsText('status', locale) }}</span>
+        <span :class="eventLabelClass">{{ eventsText('status', locale) }}</span>
         <select
           name="status"
-          :class="inputClass"
+          :class="eventFieldClass"
           :value="draft.status"
           :disabled="disabled"
           @change="set('status', asStatus(($event.target as HTMLSelectElement).value))"
@@ -139,7 +140,7 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
     />
     <div class="grid gap-4 sm:grid-cols-3">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="font-medium">{{ eventsText('venue', locale) }}</span>
+        <span :class="eventLabelClass">{{ eventsText('venue', locale) }}</span>
         <TextInput
           :model-value="draft.venue"
           name="venue"
@@ -149,7 +150,7 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
         />
       </label>
       <label class="flex flex-col gap-1 text-sm">
-        <span class="font-medium">{{ eventsText('city', locale) }}</span>
+        <span :class="eventLabelClass">{{ eventsText('city', locale) }}</span>
         <TextInput
           :model-value="draft.city"
           name="city"
@@ -159,7 +160,7 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
         />
       </label>
       <div class="flex flex-col gap-1 text-sm">
-        <span class="font-medium">{{ eventsText('country', locale) }}</span>
+        <span :class="eventLabelClass">{{ eventsText('country', locale) }}</span>
         <CountryPicker
           :model-value="country"
           name="country"
@@ -177,11 +178,11 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
       </div>
     </div>
     <label v-if="withDeadline" class="flex flex-col gap-1 text-sm sm:max-w-xs">
-      <span class="font-medium">{{ eventsText('applicationDeadline', locale) }}</span>
+      <span :class="eventLabelClass">{{ eventsText('applicationDeadline', locale) }}</span>
       <input
         name="applicationDeadline"
         type="date"
-        :class="inputClass"
+        :class="eventFieldClass"
         :value="draft.applicationDeadline"
         :disabled="disabled"
         @input="set('applicationDeadline', ($event.target as HTMLInputElement).value)"
@@ -189,7 +190,7 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
     </label>
     <div class="grid gap-4 sm:grid-cols-2">
       <label class="flex flex-col gap-1 text-sm">
-        <span class="font-medium">{{ eventsText('organizer', locale) }}</span>
+        <span :class="eventLabelClass">{{ eventsText('organizer', locale) }}</span>
         <TextInput
           :model-value="draft.organizer"
           name="organizer"
@@ -199,12 +200,12 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
         />
       </label>
       <label class="flex flex-col gap-1 text-sm">
-        <span class="font-medium">{{ eventsText('website', locale) }}</span>
+        <span :class="eventLabelClass">{{ eventsText('website', locale) }}</span>
         <input
           name="website"
           type="url"
           autocomplete="off"
-          :class="inputClass"
+          :class="eventFieldClass"
           :value="draft.website"
           :disabled="disabled"
           @input="set('website', ($event.target as HTMLInputElement).value)"
@@ -212,12 +213,12 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
       </label>
     </div>
     <label v-if="withFoundAt" class="flex flex-col gap-1 text-sm">
-      <span class="font-medium">{{ eventsText('foundAt', locale) }}</span>
+      <span :class="eventLabelClass">{{ eventsText('foundAt', locale) }}</span>
       <input
         name="foundAt"
         type="url"
         autocomplete="off"
-        :class="inputClass"
+        :class="eventFieldClass"
         :value="draft.foundAt"
         :disabled="disabled"
         @input="set('foundAt', ($event.target as HTMLInputElement).value)"

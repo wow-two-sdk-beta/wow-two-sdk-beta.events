@@ -3,14 +3,17 @@ import { CountryPicker } from '@wow-two-beta/fe/presentation/forms';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EventImage, EventModel, TrackingModel, WorkflowModel } from '../src/contracts';
 import {
+  distinctEventImages,
   eventFactsDraft,
   EventDetail,
   EventFactsFields,
   EventProposalForm,
   EventsDeadlines,
+  languageName,
   TrackingForm,
 } from '../src/kit';
 import { envelope, eventModel, fakeService } from './Fixtures';
+import { columnsAt, desktop, heightAt, maxWidthAt, phone, utilitiesAt } from './Viewport';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -359,5 +362,217 @@ describe('event facts country (CountryPicker)', () => {
 
     expect(withRegions.getComponent(CountryPicker).props('preferred')).toEqual(['UZ', 'KZ', 'RU']);
     expect(without.getComponent(CountryPicker).props('preferred')).toBeUndefined();
+  });
+});
+
+/** The event page at the two widths of the dev review (390 px and 1440 px): rows 19 to 23 of the Events app review. */
+describe('event detail on a phone and a desktop (events review #19-#23)', () => {
+  const photo = { url: 'https://cdn.example.test/hall.jpg', fileRef: 'f-hall', attribution: 'Credit' };
+  const poster = { url: 'https://cdn.example.test/poster.jpg' };
+  const detail = eventModel('e5', {
+    title: { en: 'Bigger than Life' },
+    starts: { value: '2026-10-01', precision: 'day', certainty: 'announced' },
+    ends: { value: '2026-12-01', precision: 'day', certainty: 'announced' },
+    place: { venue: 'NBU Gallery', city: 'Tashkent', country: 'UZ' },
+    attendance: 'offline',
+    languages: ['ru-Cyrl'],
+    // The same photo again: its address with a fragment, and its stored file under another address.
+    images: [
+      photo,
+      poster,
+      { url: 'https://cdn.example.test/hall.jpg#again' },
+      { url: 'https://cdn.example.test/hall-2.jpg', fileRef: 'F-HALL' },
+    ],
+  });
+
+  async function show(facts = detail, props: Record<string, unknown> = {}) {
+    const service = fakeService(() => envelope(facts));
+    const wrapper = mount(EventDetail, {
+      props: { client: service.client, catalog: 'ocharo', eventId: facts.id, today: '2026-11-10', ...props },
+    });
+    wrappers.push(wrapper);
+    await flushPromises();
+    return wrapper;
+  }
+
+  /** The text under the Languages heading, null when the page has none. */
+  const languagesOf = (wrapper: Awaited<ReturnType<typeof show>>) =>
+    wrapper
+      .findAll('dt')
+      .find((heading) => heading.text() === 'Languages' || heading.text() === 'Языки')
+      ?.element.nextElementSibling?.textContent?.trim() ?? null;
+
+  it('#19, #20: Download calendar is a padding-free link-shaped button, level with the labels, 40 px high on a phone', async () => {
+    const button = (await show()).get('[data-test="event-calendar"]').element;
+
+    // `p-0` (the link variant's `p-0!`) leaves no left padding, so its text starts where WHEN and the dates above do.
+    for (const width of [phone, desktop]) expect(utilitiesAt(button, width)).toContain('p-0');
+    expect(heightAt(button, phone)).toBeGreaterThanOrEqual(40);
+    expect(heightAt(button, desktop)).toBe(32);
+  });
+
+  it('#21: shows a repeated photo once, whatever its fragment or the address of its stored copy', async () => {
+    const wrapper = await show();
+
+    expect(wrapper.findAll('[data-test="event-image"]').map((image) => image.attributes('src'))).toEqual([
+      photo.url,
+      poster.url,
+    ]);
+    expect(distinctEventImages(detail.facts.images).map((item) => item.index)).toEqual([0, 1]);
+  });
+
+  it('#21: the source link is no identity, and two different photos both stay', () => {
+    const shared = 'https://listing.example.test/event/1';
+
+    expect(
+      distinctEventImages([
+        { url: 'https://cdn.example.test/a.jpg', sourceUrl: shared },
+        { url: 'https://cdn.example.test/b.jpg', sourceUrl: shared },
+        { url: 'javascript:alert(1)' },
+        { url: 'javascript:alert(1)' },
+      ]).map((item) => item.index),
+    ).toEqual([0, 1, 2]);
+    expect(distinctEventImages(undefined)).toEqual([]);
+  });
+
+  it('#22: names the languages in words, once each, and leaves the unknown one out', async () => {
+    const english = await show();
+    expect(languagesOf(english)).toBe('Russian');
+    expect(english.text()).not.toContain('ru-Cyrl');
+
+    const russian = await show(detail, { locale: 'ru' });
+    expect(languagesOf(russian)).toBe('Русский');
+
+    const several = await show(eventModel('e6', { languages: ['uz-Latn', 'ru', 'ru-Cyrl', 'und', 'uz-Cyrl'] }));
+    expect(languagesOf(several)).toBe('Uzbek, Russian, Uzbek (Cyrillic)');
+
+    const unknown = await show(eventModel('e7', { languages: ['und'] }));
+    expect(languagesOf(unknown)).toBeNull();
+  });
+
+  it('#22: languageName reads a tag as a name, and keeps a tag the browser cannot name', () => {
+    expect(languageName('ru-Cyrl', 'en')).toBe('Russian');
+    expect(languageName('ru-Cyrl', 'ru')).toBe('Русский');
+    expect(languageName('uz-Latn', 'en')).toBe('Uzbek');
+    expect(languageName('uz-Cyrl', 'en')).toBe('Uzbek (Cyrillic)');
+    expect(languageName('und', 'en')).toBeNull();
+    expect(languageName('  ', 'en')).toBeNull();
+    expect(languageName(null, 'en')).toBeNull();
+    expect(languageName('not a tag!', 'en')).toBe('not a tag!');
+  });
+
+  it('#23: WHEN and WHERE share a column pair no wider than 768 px on a desktop, and stack on a phone', async () => {
+    const grid = (await show()).get('dl').element;
+
+    expect(columnsAt(grid, phone)).toBe(1);
+    expect(columnsAt(grid, desktop)).toBe(2);
+    // Two equal halves of a 1440 px page put the columns about 1150 px apart; the cap keeps them a reading distance apart.
+    expect(maxWidthAt(grid, desktop)).toBe(768);
+  });
+});
+
+/** The add-event form at the two widths of the dev review: rows 30 and 31 of the Events app review. */
+describe('proposal form on a phone and a desktop (events review #30, #31)', () => {
+  const kinds = [{ key: 'runway', label: { en: 'Runway show' } }];
+  const regions = [{ key: 'local', label: { en: 'Local' }, countries: ['UZ'] }];
+
+  function open(props: Record<string, unknown> = {}) {
+    const wrapper = mount(EventProposalForm, {
+      props: {
+        client: fakeService(() => envelope({})).client,
+        catalog: 'ocharo',
+        kinds,
+        regions,
+        withDeadline: true,
+        withFoundAt: true,
+        privateCatalog: true,
+        ...props,
+      },
+    });
+    wrappers.push(wrapper);
+    return wrapper;
+  }
+
+  it('#30: names every field in one label style, the date’s three parts included', () => {
+    const wrapper = open();
+    const names = [
+      'Title',
+      'Kind',
+      'Starts',
+      'Ends',
+      'Precision',
+      'Date',
+      'Certainty',
+      'Venue',
+      'City',
+      'Country',
+      'Application deadline',
+      'Organizer',
+      'Website',
+      'Where it was found',
+    ];
+    const labels = wrapper
+      .findAll('legend, label > span, div > span')
+      .filter((element) => names.includes(element.text()));
+
+    expect(new Set(labels.map((label) => label.text()))).toEqual(new Set(names));
+    for (const label of labels) {
+      expect(utilitiesAt(label.element, desktop)).toEqual(expect.arrayContaining(['text-sm', 'font-medium']));
+      expect(utilitiesAt(label.element, desktop)).not.toContain('text-xs');
+      expect(utilitiesAt(label.element, desktop)).not.toContain('text-muted-foreground');
+    }
+  });
+
+  it('#30: the date box carries a hint while the precision is "not announced", and the format once it is set', async () => {
+    const wrapper = open();
+    const starts = wrapper.get<HTMLInputElement>('input[name="starts-value"]');
+
+    expect(starts.element.disabled).toBe(true);
+    expect(starts.attributes('placeholder')).toBe('Pick a precision first');
+    expect(wrapper.get('input[name="ends-value"]').attributes('placeholder')).toBe('Pick a precision first');
+
+    await wrapper.get('select[name="starts-precision"]').setValue('day');
+    expect(wrapper.get<HTMLInputElement>('input[name="starts-value"]').element.disabled).toBe(false);
+    expect(wrapper.get('input[name="starts-value"]').attributes('placeholder')).toBe('2026-03-14');
+  });
+
+  it('#30: Kind takes the full row like the title, and shares it only beside a status', () => {
+    const alone = open();
+    const beside = mount(EventFactsFields, {
+      props: { modelValue: eventFactsDraft(undefined, 'en'), kinds, withStatus: true },
+    });
+    wrappers.push(beside);
+
+    const rowOf = (wrapper: ReturnType<typeof mount>) =>
+      wrapper.get('select[name="kind"]').element.closest('div.grid')!;
+    expect(columnsAt(rowOf(alone), desktop)).toBe(1);
+    expect(columnsAt(rowOf(alone), phone)).toBe(1);
+    expect(columnsAt(rowOf(beside), desktop)).toBe(2);
+    expect(columnsAt(rowOf(beside), phone)).toBe(1);
+  });
+
+  it('#31: every field is at least 40 px high on a phone, native ones and the fe sdk’s alike', () => {
+    const wrapper = open();
+    const fields = wrapper.findAll('input, select').filter((field) => field.attributes('type') !== 'hidden');
+
+    expect(fields.map((field) => field.attributes('name'))).toEqual(
+      expect.arrayContaining([
+        'title',
+        'kind',
+        'starts-precision',
+        'starts-value',
+        'starts-certainty',
+        'ends-value',
+        'venue',
+        'city',
+        'applicationDeadline',
+        'organizer',
+        'website',
+        'foundAt',
+      ]),
+    );
+    for (const field of fields) {
+      expect(heightAt(field.element, phone), field.attributes('name')).toBeGreaterThanOrEqual(40);
+    }
   });
 });

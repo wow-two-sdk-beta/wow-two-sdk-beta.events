@@ -10,12 +10,13 @@ import { useEventsRequest } from '../../kit/hooks/UseEventsRequest';
 import FailureNotice from '../../kit/presentation/FailureNotice.vue';
 import type { EventsLocale } from '../../kit/text/EventsLocale';
 import { eventsText, type EventsMessageKey } from '../../kit/text/EventsMessages';
+import { countedRecipientStatuses, recipientStatusKeys } from '../digests/RecipientStatus';
 import { TelegramText } from '../digests/TelegramText';
 import DigestRecipients from './DigestRecipients.vue';
 
 /**
- * Lists a digest's runs, newest first: when each ran, what started it, how many events went out and what each recipient
- * got (`sent`, `not_linked`, `muted`, `failed`); a run opens to its messages and notes.
+ * Lists a digest's runs, newest first: when each ran, what started it, how many events went out and how many recipients
+ * were reached, had no Telegram link, had it muted or failed; a run opens to its messages and notes.
  */
 defineOptions({ name: 'DigestRunHistory' });
 
@@ -56,6 +57,11 @@ const statusVariants: Readonly<Record<DigestRunStatus, BadgeVariant>> = {
 };
 const count = (run: DigestRunModel, status: string) =>
   (run.recipients ?? []).filter((item) => item.status === status).length;
+/** Writes a run's recipient tally in plain words: "Delivered 1 · No Telegram link 0 · Muted 0 · Failed 0". */
+const tally = (run: DigestRunModel) =>
+  countedRecipientStatuses
+    .map((status) => `${eventsText(recipientStatusKeys[status], props.locale)} ${count(run, status)}`)
+    .join(' · ');
 
 defineExpose({ reload: () => load() });
 onMounted(() => load());
@@ -66,7 +72,7 @@ watch([() => props.catalog, () => props.digestId, () => props.client], () => loa
   <section class="space-y-3" aria-labelledby="digest-runs-title" data-test="digest-runs">
     <header class="flex items-center justify-between gap-2">
       <h3 id="digest-runs-title" class="text-sm font-semibold">{{ eventsText('digestRuns', locale) }}</h3>
-      <RefreshButton size="sm" :is-refreshing="request.pending.value" @click="load()" />
+      <RefreshButton size="md" :is-refreshing="request.pending.value" @click="load()" />
     </header>
     <div v-if="request.pending.value && runs.length === 0" class="space-y-2" aria-hidden="true">
       <SkeletonState v-for="index in 2" :key="index" class="h-10 w-full" />
@@ -90,7 +96,7 @@ watch([() => props.catalog, () => props.digestId, () => props.client], () => loa
       >
         <button
           type="button"
-          class="flex w-full flex-wrap items-center gap-2 text-left text-sm"
+          class="flex min-h-10 w-full flex-wrap items-center gap-2 text-left text-sm"
           :aria-expanded="open === run.id"
           @click="open = open === run.id ? null : run.id"
         >
@@ -104,11 +110,7 @@ watch([() => props.catalog, () => props.digestId, () => props.client], () => loa
           <span class="text-muted-foreground">
             {{ eventsText('digestMatched', locale, { selected: run.selected, matched: run.matched }) }}
           </span>
-          <span class="ml-auto font-mono text-xs text-muted-foreground" data-test="digest-run-counts">
-            sent {{ count(run, 'sent') }} · not_linked {{ count(run, 'not_linked') }} · muted
-            {{ count(run, 'muted') }} · failed
-            {{ count(run, 'failed') }}
-          </span>
+          <span class="ml-auto text-xs text-muted-foreground" data-test="digest-run-counts">{{ tally(run) }}</span>
         </button>
         <div v-if="open === run.id" class="mt-3 space-y-3">
           <DigestRecipients :recipients="run.recipients ?? []" :locale="locale" />
@@ -119,7 +121,7 @@ watch([() => props.catalog, () => props.digestId, () => props.client], () => loa
         </div>
       </li>
     </ol>
-    <Button v-if="next" size="sm" variant="outline" :is-loading="request.pending.value" @click="load(true)">
+    <Button v-if="next" size="md" variant="outline" :is-loading="request.pending.value" @click="load(true)">
       {{ eventsText('digestLoadMore', locale) }}
     </Button>
   </section>

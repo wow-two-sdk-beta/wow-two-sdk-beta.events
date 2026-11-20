@@ -275,9 +275,7 @@ function openMerge() {
         <p v-else class="text-sm text-muted-foreground">{{ eventsText('noChangedFields', locale) }}</p>
         <div class="flex flex-wrap gap-2">
           <Button size="sm" :is-disabled="pending" @click="apply(observation)">
-            {{
-              eventsText('apply', locale)
-            }}
+            {{ eventsText('apply', locale) }}
           </Button>
           <Button
             v-if="observation.proposed"

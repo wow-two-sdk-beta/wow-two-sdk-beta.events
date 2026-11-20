@@ -1,4 +1,4 @@
-import type { EventFacts, EventOffer } from '../../contracts';
+import type { EventFacts, EventImage, EventOffer } from '../../contracts';
 import { pickText, textLanguageTag, type EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
 
@@ -22,6 +22,49 @@ export function countryName(code: string | null | undefined, locale: EventsLocal
   } catch {
     return code;
   }
+}
+
+/**
+ * Names a language in `locale` from its tag, so a reader sees `Russian` and never `ru-Cyrl`: the script is named only
+ * where the language has more than one in use (`uz-Cyrl` is `Uzbek (Cyrillic)`, `uz-Latn` just `Uzbek`). Null for a
+ * blank tag and for `und`, the unknown language; the tag itself where the browser has no name for it.
+ */
+export function languageName(tag: string | null | undefined, locale: EventsLocale): string | null {
+  const text = tag?.trim();
+  if (!text || text.toLowerCase() === 'und') return null;
+  try {
+    const name = new Intl.DisplayNames([locale], { type: 'language' }).of(new Intl.Locale(text).minimize().toString());
+    return name ? name.charAt(0).toLocaleUpperCase(locale) + name.slice(1) : text;
+  } catch {
+    return text;
+  }
+}
+
+/** The address an image is known by: normalized, with no fragment; the trimmed text when it is no http(s) address. */
+function imageAddress(url: string): string {
+  const href = safeHttpUrl(url);
+  if (!href) return url.trim();
+  const address = new URL(href);
+  address.hash = '';
+  return address.href;
+}
+
+/**
+ * Lists an event's images once each, in order, with the index each has in `facts.images`: a later image that repeats an
+ * earlier one's stored file (`fileRef`) or address (`url`) is the same photo again and drops out. The source link
+ * (`sourceUrl`) is no identity, as every image of one listing shares it.
+ */
+export function distinctEventImages(
+  images: readonly EventImage[] | undefined,
+): readonly { readonly image: EventImage; readonly index: number }[] {
+  const seen = new Set<string>();
+  return (images ?? []).flatMap((image, index) => {
+    const file = image.fileRef?.trim().toLowerCase();
+    const keys = [...(file ? [`file ${file}`] : []), `url ${imageAddress(image.url)}`];
+    const repeated = keys.some((key) => seen.has(key));
+    for (const key of keys) seen.add(key);
+    return repeated ? [] : [{ image, index }];
+  });
 }
 
 /** Writes where an event happens: `Venue · Tashkent · Uzbekistan`, whichever parts are known. */

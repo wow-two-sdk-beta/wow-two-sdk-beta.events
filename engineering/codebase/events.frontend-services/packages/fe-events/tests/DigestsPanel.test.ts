@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DigestsPanel, TelegramText } from '../src/admin';
 import type { DigestModel, DigestRunModel, WorkflowModel } from '../src/contracts';
 import { envelope, fakeService } from './Fixtures';
+import { desktop, heightAt, phone, utilitiesAt } from './Viewport';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -99,12 +100,11 @@ async function render(service = serve(), props: Record<string, unknown> = {}) {
 }
 
 describe('digests panel', () => {
-  it('lists the digests with the next run in the schedule’s own zone, and opens the first', async () => {
+  it('opens the first digest, with its next run in the schedule’s own zone', async () => {
     const { wrapper } = await render();
 
-    expect(wrapper.get('[data-test="digest-item"]').text()).toContain('Ocharo weekly');
+    expect(wrapper.get('[data-test="digest-editor"] h2').text()).toBe('Ocharo weekly');
     expect(wrapper.get('[data-test="digest-next-run"]').text()).toContain('Mon, Nov 23, 2026, 09:00 (Asia/Tashkent)');
-    expect(wrapper.get('[data-test="digest-item"]').text()).toContain('Mon, Nov 23, 2026, 09:00 (Asia/Tashkent)');
     expect((wrapper.get('input[name="times"]').element as HTMLInputElement).value).toBe('09:00');
     expect((wrapper.get('textarea[name="recipients"]').element as HTMLTextAreaElement).value).toBe(
       `${linked}\n${unlinked} ru`,
@@ -115,7 +115,9 @@ describe('digests panel', () => {
     const { wrapper } = await render();
 
     const runRow = wrapper.get('[data-test="digest-run"]');
-    expect(runRow.get('[data-test="digest-run-counts"]').text()).toContain('not_linked 1');
+    expect(runRow.get('[data-test="digest-run-counts"]').text()).toBe(
+      'Delivered 1 · No Telegram link 1 · Muted 0 · Failed 0',
+    );
     await runRow.get('button').trigger('click');
     const statuses = wrapper
       .findAll('[data-test="digest-runs"] [data-test="digest-recipient"]')
@@ -303,5 +305,110 @@ describe('telegram text', () => {
     expect(wrapper.find('a').exists()).toBe(false);
     expect(wrapper.find('script').exists()).toBe(false);
     expect(wrapper.text()).toContain('<tag>');
+  });
+});
+
+/** The Telegram delivery panel at the two widths of the dev review: rows 26 to 29 of the Events app review. */
+describe('digests panel on a phone and a desktop (events review #26-#29)', () => {
+  const second: DigestModel = { ...digest, id: 'd2', name: 'Ocharo monthly', nextRunAtUtc: '2026-12-01T04:00:00Z' };
+
+  it('#28: shows a lone digest once: the editor carries its name and next run, with no list row repeating them', async () => {
+    const { wrapper } = await render();
+
+    expect(wrapper.find('[data-test="digest-list"]').exists()).toBe(false);
+    expect(wrapper.text().split('Ocharo weekly').length - 1).toBe(1);
+    expect(wrapper.text().split('Mon, Nov 23, 2026, 09:00').length - 1).toBe(1);
+  });
+
+  it('#28: lists the digests from the second one on, and does not repeat the open one’s next run in its row', async () => {
+    const { wrapper } = await render(serve([digest, second]));
+
+    const rows = wrapper.findAll('[data-test="digest-item"]');
+    expect(rows.map((row) => row.text())).toEqual([
+      'Ocharo weekly',
+      expect.stringContaining('Next run: Tue, Dec 1, 2026, 09:00 (Asia/Tashkent)'),
+    ]);
+    expect(wrapper.get('[data-test="digest-next-run"]').text()).toContain('Mon, Nov 23, 2026, 09:00');
+    expect(wrapper.text().split('Mon, Nov 23, 2026, 09:00').length - 1).toBe(1);
+  });
+
+  it('#28: keeps the list while a new digest is written, to go back to the first', async () => {
+    const { wrapper } = await render();
+
+    await wrapper.get('[data-test="digest-new"]').trigger('click');
+    expect(wrapper.findAll('[data-test="digest-item"]')).toHaveLength(1);
+  });
+
+  it('#28: says every recipient status in words, in the counts and in the recipient list, never as a raw code', async () => {
+    const { wrapper } = await render();
+
+    const run = wrapper.get('[data-test="digest-run"]');
+    await run.get('button').trigger('click');
+    const history = wrapper.get('[data-test="digest-runs"]');
+    const recipients = history.findAll('[data-test="digest-recipient"]');
+
+    expect(recipients.map((item) => item.find('span.inline-flex').text())).toEqual(['Delivered', 'No Telegram link']);
+    expect(history.text()).not.toMatch(/not_linked|\bsent\b|\bmuted\b/);
+    expect(history.find('code').exists()).toBe(false);
+    // The raw word stays a data attribute, for tests and tooling, and is never shown.
+    expect(recipients.map((item) => item.attributes('data-status'))).toEqual(['sent', 'not_linked']);
+  });
+
+  it('#26: every checkbox is 20 px and sits in a row that is a 40 px tap target', async () => {
+    const { wrapper } = await render(serve(), { workflow });
+
+    const boxes = wrapper.findAll('input[type="checkbox"]');
+    expect(boxes.length).toBeGreaterThanOrEqual(20);
+    for (const box of boxes) {
+      expect(utilitiesAt(box.element, phone), box.attributes('name')).toContain('size-5');
+      const row = box.element.closest('label')!;
+      expect(heightAt(row, phone), box.attributes('name')).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  it('#26: Refresh, New digest and every text field are at least 40 px high on a phone', async () => {
+    const { wrapper } = await render();
+
+    const buttons = wrapper.findAll(
+      '[data-test="digests-panel"] > header button, [data-test="digest-runs"] header button',
+    );
+    expect(buttons.map((button) => button.text())).toEqual(['Refresh', 'New digest', 'Refresh']);
+    for (const button of buttons) expect(heightAt(button.element, phone)).toBeGreaterThanOrEqual(40);
+    const fields = wrapper.findAll(
+      '[data-test="digest-editor"] input:not([type="checkbox"]), [data-test="digest-editor"] select, [data-test="digest-editor"] textarea',
+    );
+    expect(fields.length).toBeGreaterThan(8);
+    for (const field of fields)
+      expect(heightAt(field.element, phone), field.attributes('name')).toBeGreaterThanOrEqual(40);
+    expect(heightAt(wrapper.get('[data-test="digest-run"] button').element, phone)).toBeGreaterThanOrEqual(40);
+  });
+
+  it('#27: on a phone Save and Delete take the whole width of the actions, on a desktop Delete sits apart at the end', async () => {
+    const { wrapper } = await render();
+
+    const actions = wrapper.get('[data-test="digest-save"]').element.parentElement!;
+    expect(utilitiesAt(actions, phone)).toEqual(expect.arrayContaining(['grid', 'grid-cols-2']));
+    expect(utilitiesAt(actions, desktop)).toEqual(expect.arrayContaining(['flex', 'flex-wrap']));
+    const remove = wrapper.get('[data-test="digest-delete"]').element;
+    const save = wrapper.get('[data-test="digest-save"]').element;
+    for (const button of [remove, save]) {
+      expect(utilitiesAt(button, phone)).toContain('col-span-2');
+      expect(utilitiesAt(button, desktop)).not.toContain('col-span-2');
+    }
+    expect(utilitiesAt(remove, desktop)).toContain('ms-auto');
+    expect(utilitiesAt(remove, phone)).not.toContain('ms-auto');
+    expect(utilitiesAt(wrapper.get('[data-test="digest-preview"]').element, phone)).not.toContain('col-span-2');
+  });
+
+  it('#29: the "Runs on its schedule" and "New since the last digest" rows sit level with the inputs beside them', async () => {
+    const { wrapper } = await render();
+
+    const rowOf = (name: string) => wrapper.get(`input[name="${name}"]`).element.closest('fieldset, div.grid')!;
+    for (const name of ['enabled', 'newSinceLastRun']) {
+      expect(utilitiesAt(rowOf(name), desktop), name).toContain('items-end');
+      expect(heightAt(wrapper.get(`input[name="${name}"]`).element.closest('label')!, desktop), name).toBe(40);
+    }
+    // One column on a phone, where nothing sits beside anything.
+    expect(utilitiesAt(rowOf('enabled'), phone)).not.toContain('items-end');
   });
 });

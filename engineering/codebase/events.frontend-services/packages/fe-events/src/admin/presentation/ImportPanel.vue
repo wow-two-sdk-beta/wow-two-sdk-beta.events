@@ -114,13 +114,7 @@ function runImport() {
     <h2 id="import-title" class="text-lg font-semibold">{{ eventsText('imports', locale) }}</h2>
     <label class="block space-y-1 text-sm">
       <span class="text-muted-foreground">{{ eventsText('importFile', locale) }}</span>
-      <input
-        type="file"
-        accept="application/json"
-        class="block text-sm"
-        data-test="import-file"
-        @change="onFile"
-      />
+      <input type="file" accept="application/json" class="block text-sm" data-test="import-file" @change="onFile" />
     </label>
     <p v-if="fileError" class="text-sm text-destructive" role="alert" data-test="import-file-error">
       {{ eventsText(fileError, locale) }}
@@ -136,7 +130,14 @@ function runImport() {
       </div>
     </dl>
     <div class="flex gap-2">
-      <Button size="sm" variant="outline" :is-loading="pending" :is-disabled="!bundle" data-test="import-dry-run" @click="run(true)">
+      <Button
+        size="sm"
+        variant="outline"
+        :is-loading="pending"
+        :is-disabled="!bundle"
+        data-test="import-dry-run"
+        @click="run(true)"
+      >
         {{ eventsText('dryRun', locale) }}
       </Button>
       <Button size="sm" :is-disabled="!dryRunOk || pending" data-test="import-run" @click="runImport">

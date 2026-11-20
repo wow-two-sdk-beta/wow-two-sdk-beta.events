@@ -10,8 +10,12 @@ import {
 import { EventsLabels } from '../text/EventsLabels';
 import type { EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
+import { eventFieldClass, eventLabelClass } from './EventFormStyles';
 
-/** Edits one honest date: how much is known, the value in that shape, and how sure it is. */
+/**
+ * Edits one honest date: how much is known, the value in that shape, and how sure it is. The date box always carries a
+ * hint: the shape the precision asks for, or — while the precision is "not announced" and the box is off — what to do.
+ */
 defineOptions({ name: 'WhenField' });
 
 const props = withDefaults(
@@ -28,14 +32,16 @@ const props = withDefaults(
 
 const emit = defineEmits<{ 'update:modelValue': [value: EventWhen] }>();
 
-const placeholders: Record<DatePrecision, string> = {
-  unknown: '',
+const shapes: Record<Exclude<DatePrecision, 'unknown'>, string> = {
   year: '2026',
   month: '2026-03',
   day: '2026-03-14',
   minute: '2026-03-14T19:00',
 };
-const placeholder = computed(() => placeholders[props.modelValue.precision]);
+const placeholder = computed(() => {
+  const precision = props.modelValue.precision;
+  return precision === 'unknown' ? eventsText('dateHintUnknown', props.locale) : shapes[precision];
+});
 
 function update(change: Partial<EventWhen>) {
   const next = { ...props.modelValue, ...change };
@@ -47,12 +53,12 @@ const asCertainty = (value: string) => value as DateCertainty;
 
 <template>
   <fieldset class="grid gap-2 sm:grid-cols-3" :disabled="disabled">
-    <legend class="mb-1 text-sm font-medium">{{ label }}</legend>
-    <label class="flex flex-col gap-1 text-xs text-muted-foreground">
-      {{ eventsText('precision', locale) }}
+    <legend class="mb-1" :class="eventLabelClass">{{ label }}</legend>
+    <label class="flex flex-col gap-1">
+      <span :class="eventLabelClass">{{ eventsText('precision', locale) }}</span>
       <select
         :name="`${name}-precision`"
-        class="rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+        :class="eventFieldClass"
         :value="modelValue.precision"
         @change="update({ precision: asPrecision(($event.target as HTMLSelectElement).value) })"
       >
@@ -61,11 +67,11 @@ const asCertainty = (value: string) => value as DateCertainty;
         </option>
       </select>
     </label>
-    <label class="flex flex-col gap-1 text-xs text-muted-foreground">
-      {{ eventsText('date', locale) }}
+    <label class="flex flex-col gap-1">
+      <span :class="eventLabelClass">{{ eventsText('date', locale) }}</span>
       <input
         :name="`${name}-value`"
-        class="rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+        :class="eventFieldClass"
         :value="modelValue.value ?? ''"
         :placeholder="placeholder"
         :disabled="disabled || modelValue.precision === 'unknown'"
@@ -73,11 +79,11 @@ const asCertainty = (value: string) => value as DateCertainty;
         @input="update({ value: ($event.target as HTMLInputElement).value })"
       />
     </label>
-    <label class="flex flex-col gap-1 text-xs text-muted-foreground">
-      {{ eventsText('certainty', locale) }}
+    <label class="flex flex-col gap-1">
+      <span :class="eventLabelClass">{{ eventsText('certainty', locale) }}</span>
       <select
         :name="`${name}-certainty`"
-        class="rounded-md border border-border bg-background px-2 py-2 text-sm text-foreground"
+        :class="eventFieldClass"
         :value="modelValue.certainty"
         @change="update({ certainty: asCertainty(($event.target as HTMLSelectElement).value) })"
       >

@@ -11,6 +11,7 @@ import type {
 } from '../src/contracts';
 import { EventMediaCard, EventsFeed, type EventRegion } from '../src/kit';
 import { envelope, eventModel, facetCount, facetsModel, fakeService, stubIntersectionObserver } from './Fixtures';
+import { desktop, heightAt, phone, rulesAt, utilitiesAt } from './Viewport';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -685,5 +686,137 @@ describe('attention pills', () => {
 
     await wrapper.get('[data-test="strip-close"]').trigger('click');
     expect(wrapper.find('[data-test="past-strip"]').exists()).toBe(false);
+  });
+});
+
+/**
+ * The feed's toolbar and its proposal form at the two widths of the dev review (390 px and 1440 px): rows 12, 13, 15 and
+ * 16 of the Events app review. happy-dom does no layout, so `Viewport` reads the classes a browser would apply.
+ */
+describe('feed toolbar on a phone and a desktop (events review #12, #13, #15, #16)', () => {
+  const phoneFeed = {
+    ...ocharo,
+    canPropose: true,
+    attention: [{ key: 'past', label: '1 past to close', count: 1 }],
+  };
+
+  /** Mounts the feed in the document, so focus and scrolling can be read. */
+  async function attached(props: Record<string, unknown> = phoneFeed) {
+    const service = fakeService(router());
+    const wrapper = mount(EventsFeed, {
+      props: { client: service.client, catalog: 'ocharo', today: '2026-11-10', tracking: true, ...props },
+      attachTo: document.body,
+    });
+    wrappers.push(wrapper);
+    await flushPromises();
+    return wrapper;
+  }
+  const propose = (wrapper: Mounted) =>
+    wrapper.findAll('button').find((button) => button.text() === 'Propose an event')!;
+  const proposalForm = (wrapper: Mounted) => wrapper.find('section[aria-label="Propose an event"]');
+  const overflow = (wrapper: Mounted) => wrapper.get('[data-test="feed-overflow"]');
+  const sort = (wrapper: Mounted) => wrapper.get('select[name="sort"]');
+  const attentionPill = (wrapper: Mounted) => wrapper.get('[data-pill="past"]');
+
+  it('#12: every control of the toolbar and the attention pill is at least 40 px high on a phone', async () => {
+    const wrapper = await attached();
+
+    for (const control of [sort(wrapper), propose(wrapper), overflow(wrapper), attentionPill(wrapper)]) {
+      expect(heightAt(control.element, phone)).toBeGreaterThanOrEqual(40);
+    }
+    // The pill keeps its smaller desktop height; the toolbar's controls are 40 px at both widths (#16).
+    expect(heightAt(attentionPill(wrapper).element, desktop)).toBe(32);
+  });
+
+  it('#12: the card menu button and the menu items reach 40 px on a phone, and stay as they were on a desktop', async () => {
+    const wrapper = await attached();
+
+    const trigger = wrapper.get('[data-test="event-stage-menu"]');
+    expect(heightAt(trigger.element, phone)).toBe(40);
+    expect(heightAt(trigger.element, desktop)).toBe(32);
+    await trigger.trigger('click');
+    await flushPromises();
+    const items = [...document.querySelectorAll('[data-test="event-quick-stage"]')];
+    expect(items).toHaveLength(2);
+    for (const item of items) {
+      expect(heightAt(item, phone)).toBeGreaterThanOrEqual(40);
+      expect(heightAt(item, desktop)).toBe(0);
+    }
+  });
+
+  it('#12: the overflow menu’s calendar item reaches 40 px on a phone', async () => {
+    const wrapper = await attached();
+
+    await overflow(wrapper).trigger('click');
+    await flushPromises();
+    const item = document.querySelector('[data-test="download-calendar"]')!;
+    expect(heightAt(item, phone)).toBeGreaterThanOrEqual(40);
+  });
+
+  it('#16: search, Filters, sort, Propose an event and the overflow button are one height at 1440 px', async () => {
+    const wrapper = await attached();
+
+    const search = wrapper.get('[data-facet-search] input');
+    const filters = wrapper.findAll('[data-facet-end] button').find((button) => button.text().startsWith('Filters'))!;
+    const heights = [search, filters, sort(wrapper), propose(wrapper), overflow(wrapper)].map((control) =>
+      heightAt(control.element, desktop),
+    );
+    expect(heights).toEqual([40, 40, 40, 40, 40]);
+  });
+
+  it('#15: on a phone the chip groups scroll sideways in rows of their own and the end controls fill the width', async () => {
+    const wrapper = await attached();
+    const root = wrapper.get('[data-test="events-toolbar"]').element;
+
+    // A column of full-width groups, each one row that scrolls: no wrapping into a row per chip.
+    expect(utilitiesAt(root, phone, '[data-facet-inline]')).toEqual(
+      expect.arrayContaining(['w-full', 'flex-col', 'flex-nowrap', 'overflow-visible']),
+    );
+    expect(utilitiesAt(root, phone, '[data-facet-inline]>*')).toEqual(
+      expect.arrayContaining(['flex-nowrap', 'overflow-x-auto', 'min-w-0']),
+    );
+    expect(utilitiesAt(root, phone, '[data-facet-inline]>*>*')).toContain('shrink-0');
+    // The end controls start at the left over the whole width; the sort and Propose grow to close their rows.
+    expect(utilitiesAt(root, phone, '[data-facet-end]')).toEqual(expect.arrayContaining(['w-full', 'justify-start']));
+    for (const control of [sort(wrapper).element.parentElement!, propose(wrapper).element]) {
+      expect(utilitiesAt(control, phone)).toContain('grow');
+      expect(utilitiesAt(control, desktop)).not.toContain('grow');
+    }
+    expect(utilitiesAt(overflow(wrapper).element, phone)).not.toContain('grow');
+  });
+
+  it('#15: from sm up the bar keeps its own layout, and "Clear all" is as tall as the other controls at both widths', async () => {
+    const wrapper = await attached();
+    const root = wrapper.get('[data-test="events-toolbar"]').element;
+
+    expect(rulesAt(root, desktop).filter((rule) => rule.selector !== null)).toEqual([
+      { selector: '[data-facet-clear-all]', utility: 'min-h-10' },
+    ]);
+    expect(utilitiesAt(root, phone, '[data-facet-clear-all]')).toEqual(['min-h-10']);
+  });
+
+  it('#13: opening the proposal form scrolls it into view and moves focus to its first field', async () => {
+    const scrolled = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element, ...args: unknown[]) {
+      scrolled(this, ...args);
+    } as typeof Element.prototype.scrollIntoView;
+    try {
+      const wrapper = await attached();
+      expect(proposalForm(wrapper).exists()).toBe(false);
+
+      await propose(wrapper).trigger('click');
+      await flushPromises();
+
+      const form = proposalForm(wrapper).element;
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(scrolled.mock.calls[0]![0]).toBe(form);
+      expect(scrolled.mock.calls[0]![1]).toMatchObject({ block: 'start' });
+      expect(document.activeElement).toBe(form.querySelector('input[name="title"]'));
+      // The section clears a sticky header when it scrolls to the top.
+      expect(form.classList.contains('scroll-mt-20')).toBe(true);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
 });

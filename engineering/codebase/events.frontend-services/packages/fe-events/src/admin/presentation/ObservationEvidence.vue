@@ -115,9 +115,11 @@ const facts = computed(() =>
         </a>
         <span v-else-if="link.url">{{ link.url }}</span>
         <span v-if="link.sourceId" class="text-muted-foreground">
-          · {{ eventsText('sourceId', locale) }} {{ link.sourceId }}</span>
+          · {{ eventsText('sourceId', locale) }} {{ link.sourceId }}</span
+        >
         <span v-if="link.captureId" class="text-muted-foreground">
-          · {{ eventsText('capture', locale) }} {{ link.captureId }}</span>
+          · {{ eventsText('capture', locale) }} {{ link.captureId }}</span
+        >
         <span v-if="link.capturedAtUtc" class="text-muted-foreground">
           · {{ eventsText('captured', locale) }} {{ formatTimestamp(link.capturedAtUtc, locale) }}
         </span>
