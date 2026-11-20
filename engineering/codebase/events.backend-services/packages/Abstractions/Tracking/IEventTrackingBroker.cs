@@ -62,4 +62,13 @@ public interface IEventTrackingBroker
     /// <returns>The summary, with at most five deadlines.</returns>
     Task<Result<TrackingSummaryModel>> GetSummaryAsync(string catalog, TrackingSummaryQuery query, CancellationToken cancellationToken = default) =>
         GetSummaryAsync(catalog, query.Today, cancellationToken);
+
+    /// <summary>Counts what each filter chip of a tracking list would list, for the list's own query: each facet counted
+    /// without its own selection, and the whole query's total beside them.</summary>
+    /// <remarks>The cursor, the limit and the sort of the query play no part. The calls and checks are the list's.</remarks>
+    /// <param name="catalog">The catalog's slug.</param>
+    /// <param name="query">The filters, as <see cref="ListAsync"/> takes them.</param>
+    /// <param name="cancellationToken">The token that cancels the call.</param>
+    /// <returns>The counts; the list's errors for a query it would refuse.</returns>
+    Task<Result<TrackingFacetsModel>> GetFacetsAsync(string catalog, TrackingQuery query, CancellationToken cancellationToken = default);
 }

@@ -301,6 +301,145 @@ public abstract class EventTrackingBrokerConformance : EventsConformance
         listed.Event.Sources.Should().BeEquivalentTo(read.Sources, options => options.WithStrictOrdering());
     }
 
+    /// <summary>UI04: the city and kind lists list an event in any value without case, the single city and status the
+    /// tracking list used to drop filter now, and <c>curated</c> lists the events no intake source reported — every event a
+    /// curator creates — while a source's name lists none of them.</summary>
+    [Fact]
+    public async Task ListAsync_ShouldFilterByCitiesKindsStatusAndSource()
+    {
+        var owner = NewMember();
+        var catalog = (await CreateCatalogAsync(owner)).Slug;
+        var tashkent = await CreateEventAsync(owner, catalog, Placed("Tashkent", "exhibition"));
+        var samarkand = await CreateEventAsync(owner, catalog, Placed("Samarkand", "fair"));
+        var bukhara = await CreateEventAsync(owner, catalog, Placed("Bukhara", "exhibition") with { Status = EventStatus.Cancelled });
+
+        async Task<IEnumerable<Guid>> List(TrackingQuery query) =>
+            Value(await As(owner).Tracking.ListAsync(catalog, query)).Items.Select(item => item.Event.Id);
+
+        (await List(new TrackingQuery { Cities = ["tashkent"] })).Should().BeEquivalentTo([tashkent.Id]);
+        (await List(new TrackingQuery { Cities = ["Tashkent", "SAMARKAND"] })).Should().BeEquivalentTo([tashkent.Id, samarkand.Id]);
+        (await List(new TrackingQuery { City = "bukhara", Cities = ["tashkent"] })).Should().BeEquivalentTo([tashkent.Id, bukhara.Id]);
+        (await List(new TrackingQuery { Kinds = ["exhibition"] })).Should().BeEquivalentTo([tashkent.Id, bukhara.Id]);
+        (await List(new TrackingQuery { Kind = "fair", Kinds = ["exhibition"] })).Should().BeEquivalentTo([tashkent.Id, samarkand.Id, bukhara.Id]);
+        (await List(new TrackingQuery { Kinds = ["exhibition"], Cities = ["tashkent"] })).Should().BeEquivalentTo([tashkent.Id]);
+        (await List(new TrackingQuery { Status = EventStatus.Cancelled })).Should().BeEquivalentTo([bukhara.Id]);
+        (await List(new TrackingQuery { Sources = [EventsConstants.CuratedSource] })).Should().BeEquivalentTo([tashkent.Id, samarkand.Id, bukhara.Id]);
+        (await List(new TrackingQuery { Sources = ["afisha"] })).Should().BeEmpty();
+        (await List(new TrackingQuery { Sources = ["afisha", "CURATED"], Cities = ["samarkand"] })).Should().BeEquivalentTo([samarkand.Id]);
+        (await List(new TrackingQuery { PublishedSince = DateTimeOffset.UtcNow.AddHours(-1) })).Should().BeEquivalentTo([tashkent.Id, samarkand.Id, bukhara.Id]);
+        (await List(new TrackingQuery { PublishedSince = DateTimeOffset.UtcNow.AddHours(1) })).Should().BeEmpty();
+    }
+
+    /// <summary>UI04: sort <c>added</c> lists the newest published first, and a keyset cursor pages it with no repeat when an
+    /// event is published between two pages; a cursor holds for the sort it came from and fails 400 under another.</summary>
+    [Fact]
+    public async Task ListAsync_ShouldOrderByNewestPublished_AndRefuseACursorOfAnotherSort()
+    {
+        var owner = NewMember();
+        var catalog = (await CreateCatalogAsync(owner)).Slug;
+        var first = await CreateEventAsync(owner, catalog, Facts(starts: "2027-03-01"));
+        await Task.Delay(20);
+        var second = await CreateEventAsync(owner, catalog, Facts(starts: "2027-01-01"));
+        await Task.Delay(20);
+        var third = await CreateEventAsync(owner, catalog, Facts(starts: "2027-02-01"));
+
+        var newest = Value(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { Sort = TrackingSort.Added, Limit = 2 }));
+        newest.Items.Select(item => item.Event.Id).Should().Equal(third.Id, second.Id);
+        newest.NextCursor.Should().NotBeNull();
+
+        await Task.Delay(20);
+        var latecomer = await CreateEventAsync(owner, catalog, Facts(starts: "2027-04-01"));
+        var rest = Value(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { Sort = TrackingSort.Added, Limit = 2, Cursor = newest.NextCursor }));
+        rest.Items.Select(item => item.Event.Id).Should().Equal(first.Id);
+        rest.NextCursor.Should().BeNull();
+
+        Value(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { Sort = TrackingSort.Added })).Items.Select(item => item.Event.Id)
+            .Should().Equal(latecomer.Id, third.Id, second.Id, first.Id);
+        Value(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { Limit = 2 })).Items.Select(item => item.Event.Id)
+            .Should().Equal(second.Id, third.Id);
+        Error(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { Sort = TrackingSort.Starts, Cursor = newest.NextCursor })).Type
+            .Should().Be(AppErrorType.Validation);
+        Error(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { Sort = TrackingSort.Deadline, Cursor = newest.NextCursor })).Type
+            .Should().Be(AppErrorType.Validation);
+    }
+
+    /// <summary>UI04: sort <c>deadline</c> lists the nearest open deadline first, and the events with none, or only a passed
+    /// one, last.</summary>
+    [Fact]
+    public async Task ListAsync_ShouldOrderByNearestOpenDeadline_WithoutOneLast()
+    {
+        var owner = NewMember();
+        var catalog = (await CreateCatalogAsync(owner)).Slug;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var later = await CreateEventAsync(owner, catalog, WithDeadline(today.AddDays(30)));
+        var none = await CreateEventAsync(owner, catalog, Facts(starts: "2027-02-01"));
+        var sooner = await CreateEventAsync(owner, catalog, WithDeadline(today.AddDays(5)));
+        var passed = await CreateEventAsync(owner, catalog, WithDeadline(today.AddDays(-5)));
+
+        var ordered = Value(await As(owner).Tracking.ListAsync(catalog, new TrackingQuery { Sort = TrackingSort.Deadline })).Items.Select(item => item.Event.Id).ToList();
+
+        ordered.Take(2).Should().Equal(sooner.Id, later.Id);
+        ordered.Skip(2).Should().BeEquivalentTo([none.Id, passed.Id]);
+    }
+
+    /// <summary>UI04: each facet counts without its own selection and the total counts the whole query — countries, cities,
+    /// kinds, stages (an untracked event under the default stage), priorities, sources with <c>curated</c>, and the open
+    /// deadlines inside the window.</summary>
+    [Fact]
+    public async Task GetFacetsAsync_ShouldCountEachFacetWithoutItsOwnSelection()
+    {
+        var owner = NewMember();
+        var catalog = (await CreateCatalogAsync(owner)).Slug;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var tashkent = await CreateEventAsync(owner, catalog, Placed("Tashkent", "exhibition") with { Deadlines = [Deadline(today.AddDays(10))] });
+        await CreateEventAsync(owner, catalog, Placed("Samarkand", "fair") with { Deadlines = [Deadline(today.AddDays(90))] });
+        var almaty = await CreateEventAsync(owner, catalog, Placed("Almaty", "fair", "KZ"));
+        Value(await As(owner).Tracking.PutAsync(catalog, tashkent.Id, new TrackingSpec { Stage = "planning", Priority = TrackingPriority.High }));
+        Value(await As(owner).Tracking.PutAsync(catalog, almaty.Id, new TrackingSpec { Stage = "going" }));
+
+        var all = Value(await As(owner).Tracking.GetFacetsAsync(catalog, new TrackingQuery()));
+
+        all.Total.Should().Be(3);
+        Counts(all.Countries).Should().Equal(("UZ", 2), ("KZ", 1));
+        Counts(all.Cities).Should().BeEquivalentTo([("tashkent", 1), ("samarkand", 1), ("almaty", 1)]);
+        Counts(all.Kinds).Should().Equal(("fair", 2), ("exhibition", 1));
+        Counts(all.Stages).Should().Equal(("interested", 1), ("planning", 1), ("going", 1), ("attended", 0), ("skipped", 0));
+        Counts(all.Priorities).Should().Equal(("high", 1), ("normal", 1), ("low", 0));
+        Counts(all.Sources).Should().Equal((EventsConstants.CuratedSource, 3));
+        all.Sources.Single().Label.Should().BeNull();
+        all.OpenDeadline.Count.Should().Be(1, "only Tashkent's deadline falls inside the default 30-day window");
+        all.OpenDeadline.Before.Should().BeAfter(today.AddDays(28)).And.BeBefore(today.AddDays(32));
+
+        var narrowed = Value(await As(owner).Tracking.GetFacetsAsync(catalog, new TrackingQuery { Kinds = ["fair"], Cities = ["samarkand"], DeadlineBefore = today.AddDays(120) }));
+
+        narrowed.Total.Should().Be(1);
+        Counts(narrowed.Kinds).Should().Equal(("fair", 1));
+    }
+
+    /// <summary>UI04: the facets read as the list does: another organization's private catalog is 404, a caller with no
+    /// organization 403, and a query the list refuses is 400.</summary>
+    [Fact]
+    public async Task GetFacetsAsync_ShouldFailAsTheListDoes()
+    {
+        var (owner, catalog, _) = await EventAsync();
+
+        Error(await As(NewMember()).Tracking.GetFacetsAsync(catalog, new TrackingQuery())).Type.Should().Be(AppErrorType.NotFound);
+        Error(await As(EventsActor.Service()).Tracking.GetFacetsAsync(catalog, new TrackingQuery())).Type.Should().Be(AppErrorType.Forbidden);
+        Error(await As(owner).Tracking.GetFacetsAsync(catalog, new TrackingQuery { Stages = ["going"], ExcludeStages = ["going"] })).Type.Should().Be(AppErrorType.Validation);
+        Error(await As(owner).Tracking.GetFacetsAsync(catalog, new TrackingQuery { Countries = ["UZB"] })).Type.Should().Be(AppErrorType.Validation);
+    }
+
+    private static (string Value, int Count)[] Counts(IReadOnlyList<TrackingFacetCount> counts) => counts.Select(item => (item.Value, item.Count)).ToArray();
+
+    /// <summary>Builds facts placed in a city and a country, of a kind, with a title of its own.</summary>
+    private static EventFacts Placed(string city, string kind, string country = "UZ") =>
+        Facts(starts: "2027-03-01") with { Kind = kind, Place = new EventPlace { City = city, Country = country } };
+
+    private static EventDeadline Deadline(DateOnly day) =>
+        new() { Kind = DeadlineKind.Application, At = new EventWhen { Value = day.ToString("yyyy-MM-dd"), Precision = DatePrecision.Day } };
+
+    private static EventFacts WithDeadline(DateOnly day) => Facts(starts: "2027-03-01") with { Deadlines = [Deadline(day)] };
+
     /// <summary>Creates an owner, a private catalog and one published event in it.</summary>
     private async Task<(EventsActor Owner, string Catalog, EventModel Event)> EventAsync()
     {

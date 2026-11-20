@@ -13,6 +13,8 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Module.Tracking;
 /// <param name="Countries">More ISO-2 countries to list, with <paramref name="Country"/>; uppercase.</param>
 /// <param name="ExcludeCountries">The ISO-2 countries to leave out; uppercase.</param>
 /// <param name="IncludeUnknownCountry">Whether an event with no country matches a country filter.</param>
+/// <param name="Kinds">More kinds to list, with <paramref name="Kind"/>.</param>
+/// <param name="Cities">More cities to list, with <paramref name="City"/>, matched without case.</param>
 internal sealed record EventListFilter(
     DateOnly? From,
     DateOnly? To,
@@ -24,4 +26,6 @@ internal sealed record EventListFilter(
     bool IncludeUndated,
     IReadOnlyList<string>? Countries = null,
     IReadOnlyList<string>? ExcludeCountries = null,
-    bool IncludeUnknownCountry = false);
+    bool IncludeUnknownCountry = false,
+    IReadOnlyList<string>? Kinds = null,
+    IReadOnlyList<string>? Cities = null);

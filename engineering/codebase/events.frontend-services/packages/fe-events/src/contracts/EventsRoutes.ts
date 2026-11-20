@@ -49,6 +49,7 @@ export const EventsRoutes = {
     `${catalog(slug)}/${EventsRouteConstants.observations}/${segment(id)}/dismiss`,
   tracking: (slug: string) => `${catalog(slug)}/${EventsRouteConstants.tracking}`,
   trackingSummary: (slug: string) => `${catalog(slug)}/${EventsRouteConstants.tracking}/summary`,
+  trackingFacets: (slug: string) => `${catalog(slug)}/${EventsRouteConstants.tracking}/facets`,
   trackedEvent: (slug: string, eventId: string) =>
     `${catalog(slug)}/${EventsRouteConstants.tracking}/${segment(eventId)}`,
   trackingHistory: (slug: string, eventId: string) =>
@@ -92,27 +93,47 @@ export function digestRunQueryParams(query: DigestRunQuery = {}): EventsQueryPar
   return { cursor: query.cursor, limit: query.limit };
 }
 
-/** Maps a `TrackingQuery` to its query parameters. */
-export function trackingQueryParams(query: TrackingQuery = {}): EventsQueryParams {
+/** Maps the filters of a `TrackingQuery`, which the list and its facets both take; lists repeat their key. */
+function trackingFilterParams(query: TrackingQuery): EventsQueryParams {
+  const list = (values: readonly string[] | undefined) => (values?.length ? values : undefined);
   return {
     trackedOnly: query.trackedOnly,
     stage: query.stage,
-    stages: query.stages?.length ? query.stages : undefined,
-    excludeStages: query.excludeStages?.length ? query.excludeStages : undefined,
+    stages: list(query.stages),
+    excludeStages: list(query.excludeStages),
     priority: query.priority,
     from: query.from,
     to: query.to,
     kind: query.kind,
+    kinds: list(query.kinds),
+    city: query.city,
+    cities: list(query.cities),
+    status: query.status,
+    sources: list(query.sources),
+    publishedSince: query.publishedSince,
     country: query.country,
-    countries: query.countries?.length ? query.countries : undefined,
-    excludeCountries: query.excludeCountries?.length ? query.excludeCountries : undefined,
+    countries: list(query.countries),
+    excludeCountries: list(query.excludeCountries),
     includeUnknownCountry: query.includeUnknownCountry || undefined,
     text: query.text,
     deadlineBefore: query.deadlineBefore,
     includeUndated: query.includeUndated,
+  };
+}
+
+/** Maps a `TrackingQuery` to its query parameters; the default sort (`starts`) is left out. */
+export function trackingQueryParams(query: TrackingQuery = {}): EventsQueryParams {
+  return {
+    ...trackingFilterParams(query),
+    sort: query.sort === 'starts' ? undefined : query.sort,
     cursor: query.cursor,
     limit: query.limit,
   };
+}
+
+/** Maps a `TrackingQuery` to the facets' query parameters: the list's filters, with no sort, cursor or limit. */
+export function trackingFacetsQueryParams(query: TrackingQuery = {}): EventsQueryParams {
+  return trackingFilterParams(query);
 }
 
 /** Maps a `TrackingSummaryQuery` to its query parameters (`today`, repeated `deadlineKinds`). */

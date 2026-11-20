@@ -37,8 +37,9 @@ internal static class EventListQuery
             events = events.Where(row => row.StartsMin == null || row.EndsMax >= from);
         if (filter.To is { } to)
             events = events.Where(row => row.StartsMin == null || row.StartsMin <= to);
-        if (Normalize(filter.Kind) is { } kind)
-            events = events.Where(row => row.Kind == kind);
+        var kinds = Normalized(filter.Kinds, filter.Kind);
+        if (kinds.Length > 0)
+            events = events.Where(row => kinds.Contains(row.Kind));
         // Country lists (E21): an event matches a listed country and no left-out one; one with no country matches only
         // when the filter lets unknown countries in.
         var listed = (filter.Countries ?? []).Append(filter.Country)
@@ -53,8 +54,9 @@ internal static class EventListQuery
                 ? events.Where(row => row.Country == null || !excluded.Contains(row.Country))
                 : events.Where(row => row.Country != null && !excluded.Contains(row.Country));
 
-        if (Normalize(filter.City) is { } city)
-            events = events.Where(row => row.City == city);
+        var cities = Normalized(filter.Cities, filter.City);
+        if (cities.Length > 0)
+            events = events.Where(row => row.City != null && cities.Contains(row.City));
         if (filter.Status is { } status)
             events = events.Where(row => row.Status == status);
         if (filter.DeadlineBefore is { } before)
@@ -63,6 +65,12 @@ internal static class EventListQuery
 
         return events;
     }
+
+    /// <summary>Gathers the values of a list filter and its single value: trimmed, lowercased, distinct, blanks dropped.</summary>
+    /// <param name="values">The list.</param>
+    /// <param name="single">The single value beside it.</param>
+    public static string[] Normalized(IReadOnlyList<string>? values, string? single) =>
+        (values ?? []).Append(single).Select(Normalize).OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
 
     /// <summary>Reads a search as a country code: two ASCII letters, uppercased; none for any other text.</summary>
     /// <param name="text">The normalized search.</param>

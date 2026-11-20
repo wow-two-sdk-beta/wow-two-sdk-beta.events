@@ -34,6 +34,10 @@ internal sealed class EventsApiQuery
     public EventsApiQuery Add(string name, DateOnly? value) =>
         value is { } day ? Add(name, day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) : this;
 
+    /// <summary>Adds an instant, as ISO 8601 in UTC.</summary>
+    public EventsApiQuery Add(string name, DateTimeOffset? value) =>
+        value is { } instant ? Add(name, instant.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'", CultureInfo.InvariantCulture)) : this;
+
     /// <summary>Adds a flag.</summary>
     public EventsApiQuery Add(string name, bool? value) =>
         value is { } flag ? Add(name, flag ? "true" : "false") : this;

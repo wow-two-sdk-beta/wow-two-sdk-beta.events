@@ -27,6 +27,17 @@ public sealed class TrackingController(IEventTrackingBroker tracking, TimeProvid
     public async Task<IActionResult> List(string catalog, [FromQuery] TrackingQueryParameters parameters, CancellationToken ct) =>
         parameters.TryMap(out var query) is { } error ? Invalid(error) : Answer(await tracking.ListAsync(catalog, query, ct));
 
+    /// <summary>Counts what each filter chip of the list would list, for the list's own query.</summary>
+    /// <param name="catalog">The catalog's slug.</param>
+    /// <param name="parameters">The list's filters; the cursor, limit and sort play no part.</param>
+    /// <param name="ct">The token that cancels the request.</param>
+    /// <returns>The total and the counts per facet value, each facet counted without its own selection.</returns>
+    [HttpGet("facets")]
+    [Authorize(Policy = EventsScopeConstants.Read)]
+    [ProducesResponseType<ApiResponse<TrackingFacetsModel>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Facets(string catalog, [FromQuery] TrackingQueryParameters parameters, CancellationToken ct) =>
+        parameters.TryMap(out var query) is { } error ? Invalid(error) : Answer(await tracking.GetFacetsAsync(catalog, query, ct));
+
     /// <summary>Summarizes the organization's tracking: counts per stage, the nearest open deadlines.</summary>
     /// <param name="catalog">The catalog's slug.</param>
     /// <param name="today">The first day a deadline may fall on, <c>yyyy-MM-dd</c>; the UTC day when absent.</param>

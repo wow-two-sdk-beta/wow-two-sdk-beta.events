@@ -1,7 +1,11 @@
+using WoW.Two.Sdk.Beta.Be.Events.CatalogEvents;
+
 namespace WoW.Two.Sdk.Beta.Be.Events.Tracking;
 
-/// <summary>Filters and pages a catalog's published events joined with the caller organization's tracking.</summary>
-/// <remarks>The event filters work as in <c>EventQuery</c>; the order is the same.</remarks>
+/// <summary>Filters, orders and pages a catalog's published events joined with the caller organization's tracking.</summary>
+/// <remarks>The event filters work as in <c>EventQuery</c>; the order is <see cref="Sort"/>. A list filter matches an event
+/// that is in any of its values, and the single value beside it (<see cref="Kind"/>, <see cref="City"/>) adds to the
+/// list; different filters all have to match.</remarks>
 public sealed record TrackingQuery
 {
     /// <summary>Gets whether only tracked events are listed.</summary>
@@ -30,8 +34,31 @@ public sealed record TrackingQuery
     /// <summary>Gets the last day to list.</summary>
     public DateOnly? To { get; init; }
 
-    /// <summary>Gets the kind to list.</summary>
+    /// <summary>Gets the kind to list; with <see cref="Kinds"/>, an event of either matches.</summary>
     public string? Kind { get; init; }
+
+    /// <summary>Gets the kinds to list: an event matches when its kind is one of them (and <see cref="Kind"/>), at most
+    /// <see cref="EventsConstants.MaxListLength"/>.</summary>
+    public IReadOnlyList<string> Kinds { get; init; } = [];
+
+    /// <summary>Gets the city to list, matched without case; with <see cref="Cities"/>, an event in either matches.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the cities to list, matched without case: an event matches when its city is one of them (and
+    /// <see cref="City"/>), at most <see cref="EventsConstants.MaxListLength"/>.</summary>
+    public IReadOnlyList<string> Cities { get; init; } = [];
+
+    /// <summary>Gets the status to list.</summary>
+    public EventStatus? Status { get; init; }
+
+    /// <summary>Gets the source names to list, matched without case against the name each source of an event is stored
+    /// under (<c>Afisha</c>): an event matches when any of its sources is one of them. The reserved value
+    /// <see cref="EventsConstants.CuratedSource"/> matches the events no intake source reported — imports and curators'
+    /// own entries. At most <see cref="EventsConstants.MaxListLength"/>.</summary>
+    public IReadOnlyList<string> Sources { get; init; } = [];
+
+    /// <summary>Gets the first instant an event may have been published at: lists the events published on or after it.</summary>
+    public DateTimeOffset? PublishedSince { get; init; }
 
     /// <summary>Gets the ISO-2 country to list; with <see cref="Countries"/>, an event in either matches.</summary>
     public string? Country { get; init; }
@@ -56,7 +83,11 @@ public sealed record TrackingQuery
     /// <summary>Gets whether events with no known start are listed too.</summary>
     public bool IncludeUndated { get; init; } = true;
 
-    /// <summary>Gets the cursor a previous page returned.</summary>
+    /// <summary>Gets how the list is ordered; <see cref="TrackingSort.Starts"/> when not set.</summary>
+    public TrackingSort Sort { get; init; } = TrackingSort.Starts;
+
+    /// <summary>Gets the cursor a previous page returned; it holds for the sort it came from, and a list under another sort
+    /// refuses it with <see cref="EventsErrors.CursorInvalid"/>.</summary>
     public string? Cursor { get; init; }
 
     /// <summary>Gets the page size, at most <see cref="EventsConstants.MaxPageSize"/>.</summary>

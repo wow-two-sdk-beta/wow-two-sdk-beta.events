@@ -9,7 +9,8 @@ The Events test kit:
   `EventDigestsBrokerConformance` (through the `log` channel)
 - the contract's rules they prove: owner versus another organization (a private catalog's reads answer 404, never
   403), published events only for a reader outside the owner, revision conflicts, review state rules, import id-map
-  stability and dry runs, tracking shared inside an organization and invisible outside it
+  stability and dry runs, tracking shared inside an organization and invisible outside it, the tracking list's
+  city, kind and source filters, its sorts with their keyset cursors and the facets' counts
 - `TestPrincipal`: a settable `ICurrentPrincipal` — `ActAsMember`, `ActAsService`, `ActAs(EventsActor)`, `ActAsAnonymous`
 
 ```bash

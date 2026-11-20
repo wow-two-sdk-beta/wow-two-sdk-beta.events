@@ -41,7 +41,8 @@ internal static class CatalogSeed
 
     /// <summary>Inserts an event with its filter columns and deadline rows, written as the module writes them.</summary>
     public static async Task<CatalogEventEntity> EventAsync(
-        ModuleFixture fixture, CatalogEntity catalog, EventFacts facts, EventReviewState review = EventReviewState.Published)
+        ModuleFixture fixture, CatalogEntity catalog, EventFacts facts, EventReviewState review = EventReviewState.Published,
+        DateTimeOffset? publishedAt = null)
     {
         EventFactsValidator.Validate(facts, [], out var normalized).Should().BeNull();
         var now = fixture.Clock.GetUtcNow();
@@ -53,7 +54,7 @@ internal static class CatalogSeed
             Revision = 1,
             CreatedAt = now,
             UpdatedAt = now,
-            PublishedAt = review == EventReviewState.Published ? now : null,
+            PublishedAt = review == EventReviewState.Published ? publishedAt ?? now : null,
         };
         var deadlines = EventRows.ApplyFacts(row, normalized);
 
@@ -62,6 +63,30 @@ internal static class CatalogSeed
         db.Events.Add(row);
         await db.SaveChangesAsync();
         db.Deadlines.AddRange(deadlines);
+        await db.SaveChangesAsync();
+        return row;
+    }
+
+    /// <summary>Inserts a source identity behind an event: an SCFD post under a name, an import row or a curator's entry.</summary>
+    public static async Task<EventSourceEntity> SourceAsync(
+        ModuleFixture fixture, CatalogEntity catalog, CatalogEventEntity item, EventSourceKind kind, string? name = null, string? matchedBy = null)
+    {
+        var now = fixture.Clock.GetUtcNow();
+        var row = new EventSourceEntity
+        {
+            CatalogId = catalog.Id,
+            Kind = EventsLabels.Of(kind),
+            SourceId = $"{kind}/{Guid.NewGuid():N}",
+            EventId = item.Id,
+            FirstSeenAt = now,
+            LastSeenAt = now,
+            Name = name,
+            MatchedBy = matchedBy,
+        };
+
+        await using var scope = fixture.Scope();
+        var db = scope.ServiceProvider.GetRequiredService<EventsDbContext>();
+        db.Sources.Add(row);
         await db.SaveChangesAsync();
         return row;
     }

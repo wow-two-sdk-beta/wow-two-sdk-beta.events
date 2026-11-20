@@ -13,7 +13,7 @@ namespace WoW.Two.Sdk.Beta.Be.Events.Module.Tracking;
 /// <summary>Integrates the caller organization's tracking in process, keyed by its (issuer, organization), so another
 /// organization's tracking never answers.</summary>
 /// <remarks>
-///   - the list and the summary read the catalog's published events; one event's reads and writes also take a candidate
+///   - the list, its facets and the summary read the catalog's published events; one event's reads and writes also take a candidate
 ///     the caller's organization sees (the owner's), so a member tracks what it proposed before review; a rejected or
 ///     archived event answers <see cref="EventsErrors.EventNotFound"/>
 ///   - a write to existing tracking names its revision; a missing or stale one fails with
@@ -36,73 +36,26 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
             return Result<TrackingPage>.Fail(((Result<CatalogEntity>.Failure)found).Error);
 
         query ??= new TrackingQuery();
+        if (TrackingFilter.TryCreate(query, out var filter) is { } invalid)
+            return Result<TrackingPage>.Fail(invalid);
+
         var scope = $"tracking:{catalogRow.Slug}";
-        if (!PageCursor.TryDecode(scope, query.Cursor, out var offset))
+        if (!KeysetCursor.TryDecode(scope, TrackingOrder.Name(filter.Sort), query.Cursor, TrackingOrder.Arity(filter.Sort), out var after))
             return Result<TrackingPage>.Fail(EventsErrors.CursorInvalid());
 
-        if ((EventListQuery.CheckCountries("countries", query.Countries) ?? EventListQuery.CheckCountries("excludeCountries", query.ExcludeCountries)) is { } invalid)
-            return Result<TrackingPage>.Fail(invalid);
-        var stages = StageKeys(query.Stages, query.Stage);
-        var excluded = StageKeys(query.ExcludeStages, null);
-        if ((CheckStages("stages", stages) ?? CheckStages("excludeStages", excluded)) is { } badStages)
-            return Result<TrackingPage>.Fail(badStages);
-        if (stages.Intersect(excluded, StringComparer.Ordinal).Any())
-            return Result<TrackingPage>.Fail(EventsErrors.Invalid("excludeStages", "a stage may not be both listed and left out"));
-
         var limit = PageCursor.Limit(query.Limit);
-        var filter = new EventListFilter(
-            query.From, query.To, query.Kind, query.Country, null, null, query.DeadlineBefore, query.IncludeUndated,
-            query.Countries, query.ExcludeCountries, query.IncludeUnknownCountry);
-        var events = EventListQuery.Filter(EventListQuery.PublishedEvents(db, catalogRow.Id), db, filter, EventListQuery.Today(time));
-        var issuer = caller.Issuer;
-        var organization = caller.OrganizationId!;
-        var joined =
-            from row in events
-            join tracking in db.Tracking.AsNoTracking().Where(item => item.Issuer == issuer && item.OrganizationId == organization)
-                on row.Id equals tracking.EventId into tracked
-            from tracking in tracked.DefaultIfEmpty()
-            select new { Event = row, Tracking = tracking };
-
-        if (query.TrackedOnly || query.Priority is not null)
-            joined = joined.Where(item => item.Tracking != null);
-
-        // Stages read against the organization's workflow: an untracked event stands in its default stage (PG02), as a
-        // digest's stage selection reads it.
-        var defaultStage = stages.Length > 0 || excluded.Length > 0
+        var today = EventListQuery.Today(time);
+        var defaultStage = filter.NeedsWorkflow
             ? (await WorkflowStore.LoadAsync(db, caller, cancellationToken)).DefaultStage
             : string.Empty;
-        if (stages.Length > 0)
-            joined = stages.Contains(defaultStage, StringComparer.Ordinal)
-                ? joined.Where(item => item.Tracking == null || stages.Contains(item.Tracking.Stage))
-                : joined.Where(item => item.Tracking != null && stages.Contains(item.Tracking.Stage));
-        if (excluded.Length > 0)
-            joined = excluded.Contains(defaultStage, StringComparer.Ordinal)
-                ? joined.Where(item => item.Tracking != null && !excluded.Contains(item.Tracking.Stage))
-                : joined.Where(item => item.Tracking == null || !excluded.Contains(item.Tracking.Stage));
-        if (query.Priority is { } priority)
-        {
-            var label = EventsLabels.Of(priority);
-            joined = joined.Where(item => item.Tracking!.Priority == label);
-        }
+        var ordered = TrackingOrder.Page(filter.Rows(db, catalogRow.Id, caller, defaultStage, today), db, filter.Sort, today, after);
+        if (ordered is null)
+            return Result<TrackingPage>.Fail(EventsErrors.CursorInvalid());
 
-        if (EventListQuery.Normalize(query.Text) is { } text)
-        {
-            // A two-letter search also finds the events in that country (PG18): "UZ" or "kz".
-            joined = EventListQuery.CountryCode(text) is { } code
-                ? joined.Where(item => item.Event.Search.Contains(text) || item.Event.Country == code
-                    || (item.Tracking != null && item.Tracking.Notes.ToLower().Contains(text)))
-                : joined.Where(item => item.Event.Search.Contains(text) || (item.Tracking != null && item.Tracking.Notes.ToLower().Contains(text)));
-        }
-
-        var page = await joined
-            .OrderBy(item => item.Event.StartsMin == null).ThenBy(item => item.Event.StartsMin)
-            .ThenBy(item => item.Event.TitleSort).ThenBy(item => item.Event.Id)
-            .Skip(offset).Take(limit + 1)
-            .ToListAsync(cancellationToken);
-
+        var page = await ordered.Take(limit + 1).ToListAsync(cancellationToken);
         var items = page.Take(limit).ToList();
         var models = await EventModels.LoadAsync(db, catalogRow.Slug, items.Select(item => item.Event).ToList(), CatalogAccess.IsOwner(catalogRow, caller), cancellationToken);
-        var next = page.Count > limit ? PageCursor.Encode(scope, offset + limit) : null;
+        var next = page.Count > limit ? TrackingOrder.Encode(scope, filter.Sort, items[^1]) : null;
         return Result<TrackingPage>.Ok(new TrackingPage(
             items.Select(item => new TrackedEventModel
             {
@@ -110,6 +63,25 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
                 Tracking = item.Tracking is null ? null : TrackingRows.ToModel(item.Tracking),
             }).ToList(),
             next));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<TrackingFacetsModel>> GetFacetsAsync(string catalog, TrackingQuery query, CancellationToken cancellationToken = default)
+    {
+        var caller = callers.Current;
+        if (!caller.HasOrganization)
+            return Result<TrackingFacetsModel>.Fail(EventsErrors.OrganizationRequired());
+        var found = await CatalogAccess.FindReadableAsync(db, caller, catalog, cancellationToken);
+        if (found is not Result<CatalogEntity>.Success { Value: var catalogRow })
+            return Result<TrackingFacetsModel>.Fail(((Result<CatalogEntity>.Failure)found).Error);
+
+        query ??= new TrackingQuery();
+        if (TrackingFilter.TryCreate(query, out var filter) is { } invalid)
+            return Result<TrackingFacetsModel>.Fail(invalid);
+
+        var workflow = await WorkflowStore.LoadAsync(db, caller, cancellationToken);
+        return Result<TrackingFacetsModel>.Ok(
+            await TrackingFacets.ReadAsync(db, catalogRow, caller, filter, workflow, EventListQuery.Today(time), cancellationToken));
     }
 
     /// <inheritdoc />
@@ -304,16 +276,6 @@ internal sealed class ModuleTrackingBroker(EventsDbContext db, IEventsCallerServ
 
         return Result<TrackingSummaryModel>.Ok(new TrackingSummaryModel { ByStage = byStage, Untracked = untracked, UpcomingDeadlines = upcoming });
     }
-
-    /// <summary>Gathers stage keys: the list and the single key, trimmed and distinct.</summary>
-    private static string[] StageKeys(IReadOnlyList<string>? keys, string? single) =>
-        (keys ?? []).Append(single).Where(key => !string.IsNullOrWhiteSpace(key)).Select(key => key!.Trim()).Distinct(StringComparer.Ordinal).ToArray();
-
-    /// <summary>Checks stage keys: at most <see cref="EventsConstants.MaxListLength"/>, each of the key pattern.</summary>
-    private static AppError? CheckStages(string field, string[] keys) =>
-        keys.Length > EventsConstants.MaxListLength ? EventsErrors.Invalid(field, $"at most {EventsConstants.MaxListLength} stages")
-        : keys.Any(key => key.Length > 64 || !EventFactsValidator.KeyPattern().IsMatch(key)) ? EventsErrors.Invalid(field, "stage keys")
-        : null;
 
     /// <summary>Finds an event one tracking call may act on: a published event of a readable catalog, or a candidate the
     /// caller's organization owns.</summary>

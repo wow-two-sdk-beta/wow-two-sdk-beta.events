@@ -46,6 +46,24 @@ internal static class WireQueryMapper
         return EventsErrors.Invalid(name, "a day as yyyy-MM-dd");
     }
 
+    /// <summary>Maps an instant as ISO 8601 with an offset or <c>Z</c>, such as <c>2026-11-10T09:00:00Z</c>; an empty value is
+    /// no filter, and a value with no offset reads as UTC.</summary>
+    /// <returns>The validation error for a value that is no instant; none otherwise.</returns>
+    public static AppError? TryInstant(string name, string? value, out DateTimeOffset? parsed)
+    {
+        parsed = null;
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        if (value.Length <= 40 && value.Contains('T') && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var instant))
+        {
+            parsed = instant.ToUniversalTime();
+            return null;
+        }
+
+        return EventsErrors.Invalid(name, "an instant as yyyy-MM-ddTHH:mm:ssZ");
+    }
+
     /// <summary>Requires a revision read, which a delete or a rejection names in its query.</summary>
     /// <returns>The validation error when it is missing; none otherwise.</returns>
     public static AppError? RequireRevision(int? expectedRevision, out int revision)

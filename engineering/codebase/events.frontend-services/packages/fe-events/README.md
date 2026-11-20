@@ -27,7 +27,7 @@ to the consumer's Tailwind sources:
 
 | Export | Holds |
 |---|---|
-| `./contracts` | The TypeScript mirror of the be contract (camelCase JSON, enums as camelCase strings, localized text as `Record<locale, string>`), its constants and `EventsRoutes`, the route builders, with the query mappers |
+| `./contracts` | The TypeScript mirror of the be contract (camelCase JSON, enums as camelCase strings, localized text as `Record<locale, string>`), its constants and `EventsRoutes`, the route builders, with the query mappers (`trackingQueryParams`, `trackingFacetsQueryParams`, …) |
 | `./kit` | `createEventsClient` (every route, `{ data }` unwrapped, failures mapped by status), date helpers honest about precision and certainty (`formatEventWhen`, `formatEventSpan`, `groupEventsByMonth`, `sortEventsByDate`), `downloadEventsCalendar` and one event's `createEventCalendar`, the title, price, region and source helpers (`pickTextEntry`, `eventTitleLanguage`, `formatOfferPrice`, `regionQuery`, `listingRemoved`), and `EventsFeed`, `EventCard`, `EventMediaCard`, `EventsDeadlines`, `EventDetail`, `EventProposalForm`, `TrackingForm` |
 | `./admin` | The reviewer's and admin's screens: `ReviewQueue`, `ObservationsList`, `ObservationEvidence`, `IntakeStatusPanel`, `CatalogEventsTable`, `EventSourcesPanel` (an event's sources with the split of a joined one), `ImportPanel`, and scheduled digests: `DigestsPanel` (list, editor, run history), `DigestEditor`, `DigestRunHistory`, `DigestRecipients`, `TelegramText` |
 
@@ -45,6 +45,21 @@ to the consumer's Tailwind sources:
   `shownFields`, `hiddenFields` and offers the event's own calendar file; `TrackingForm` keeps the draft on a 409, emits
   `dirty`, and shows a schema field marked `readOnly` without offering it. Mark a stage `lost` in the workflow to keep
   its events out of the deadlines.
+- The tracking list's query (`TrackingQuery`) takes `kinds`, `cities`, `sources`, `status`, `publishedSince` and `sort`
+  beside the filters before, and the client sends a list as a repeated key (`cities=tashkent&cities=samarkand`).
+  `sources` matches the name each source of an event is stored under (`afisha` finds `Afisha`, without case); the
+  reserved `curated` (`EventsConstants.curatedSource`) matches the events no intake source reported, imports and
+  curators' entries; values OR together. `sort` is `starts` (default, not sent), `added` (newest published first) or
+  `deadline` (nearest open deadline first, none last). A `nextCursor` holds for the sort it came from: change the sort
+  and start from no cursor, since another sort answers a validation failure.
+- `client.getTrackingFacets(catalog, query)` (`GET …/tracking/facets`) answers `{ total, countries, cities, kinds,
+  stages, priorities, sources, openDeadline }` for the list's own query: each facet is counted without its own
+  selection, so a chip shows what picking it would list, and the counts come from the server because the feed scrolls
+  and never holds the whole catalog. A count is `{ value, count, label? }` (`value` is what the filter takes back; only
+  `sources` carries a `label`, the name as stored); `kinds` and `stages` list the catalog's kinds and the workflow's
+  stages in order with zeros, `priorities` all three with zeros, an untracked event counts under the default stage, and
+  `openDeadline` is `{ before, count }`: the events with an open deadline on or before `before`, the query's
+  `deadlineBefore` else 30 days ahead. The query's sort, cursor and limit are not sent.
 - `EventsFeed` takes `variant`: `list` (the default, `EventCard` rows) or `cards`, an image-first grid of `EventMediaCard`s
   (fe sdk `MediaCard`, so the peer floor is `0.0.52`) in the SCFD Posts tab's look; each month keeps its header. A card
   shows the curated `facts.images[0]`, else a date tile (the start's day and month, the kind's icon; an undated event the

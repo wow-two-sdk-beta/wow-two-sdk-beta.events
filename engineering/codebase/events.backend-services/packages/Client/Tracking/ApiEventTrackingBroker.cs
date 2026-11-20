@@ -11,6 +11,9 @@ internal sealed class ApiEventTrackingBroker(EventsApiTransport transport) : IEv
     /// <summary>Holds the summary's segment under a catalog's tracking.</summary>
     private const string Summary = "summary";
 
+    /// <summary>Holds the facets' segment under a catalog's tracking.</summary>
+    private const string Facets = "facets";
+
     /// <summary>Holds the history's segment under one event's tracking.</summary>
     private const string History = "history";
 
@@ -18,26 +21,20 @@ internal sealed class ApiEventTrackingBroker(EventsApiTransport transport) : IEv
     public Task<Result<TrackingPage>> ListAsync(string catalog, TrackingQuery query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var route = new EventsApiQuery()
-            .Add("trackedOnly", query.TrackedOnly ? true : null)
-            .Add("stage", query.Stage)
-            .Add("stages", query.Stages)
-            .Add("excludeStages", query.ExcludeStages)
-            .AddEnum("priority", query.Priority)
-            .Add("from", query.From)
-            .Add("to", query.To)
-            .Add("kind", query.Kind)
-            .Add("country", query.Country)
-            .Add("countries", query.Countries)
-            .Add("excludeCountries", query.ExcludeCountries)
-            .Add("includeUnknownCountry", query.IncludeUnknownCountry ? true : null)
-            .Add("text", query.Text)
-            .Add("deadlineBefore", query.DeadlineBefore)
-            .Add("includeUndated", query.IncludeUndated ? null : false)
+        var route = Filters(query)
+            .AddEnum<TrackingSort>("sort", query.Sort == TrackingSort.Starts ? null : query.Sort)
             .Add("cursor", query.Cursor)
             .Add("limit", query.Limit)
             .ToRoute(EventsApiRoutes.Catalog(catalog, EventsRouteConstants.Tracking));
         return transport.SendAsync<TrackingPage>(HttpMethod.Get, route, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<Result<TrackingFacetsModel>> GetFacetsAsync(string catalog, TrackingQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return transport.SendAsync<TrackingFacetsModel>(
+            HttpMethod.Get, Filters(query).ToRoute(EventsApiRoutes.Catalog(catalog, $"{EventsRouteConstants.Tracking}/{Facets}")), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -75,4 +72,28 @@ internal sealed class ApiEventTrackingBroker(EventsApiTransport transport) : IEv
                 .ToRoute(EventsApiRoutes.Catalog(catalog, $"{EventsRouteConstants.Tracking}/{Summary}")),
             cancellationToken);
     }
+
+    /// <summary>Names the filters of a tracking query, which the list and its facets take alike.</summary>
+    private static EventsApiQuery Filters(TrackingQuery query) => new EventsApiQuery()
+        .Add("trackedOnly", query.TrackedOnly ? true : null)
+        .Add("stage", query.Stage)
+        .Add("stages", query.Stages)
+        .Add("excludeStages", query.ExcludeStages)
+        .AddEnum("priority", query.Priority)
+        .Add("from", query.From)
+        .Add("to", query.To)
+        .Add("kind", query.Kind)
+        .Add("kinds", query.Kinds)
+        .Add("city", query.City)
+        .Add("cities", query.Cities)
+        .AddEnum("status", query.Status)
+        .Add("sources", query.Sources)
+        .Add("publishedSince", query.PublishedSince)
+        .Add("country", query.Country)
+        .Add("countries", query.Countries)
+        .Add("excludeCountries", query.ExcludeCountries)
+        .Add("includeUnknownCountry", query.IncludeUnknownCountry ? true : null)
+        .Add("text", query.Text)
+        .Add("deadlineBefore", query.DeadlineBefore)
+        .Add("includeUndated", query.IncludeUndated ? null : false);
 }

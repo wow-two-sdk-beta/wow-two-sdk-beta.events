@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { eventsQueryString, trackingQueryParams, trackingSummaryQueryParams } from '../src/contracts';
+import {
+  eventsQueryString,
+  trackingFacetsQueryParams,
+  trackingQueryParams,
+  trackingSummaryQueryParams,
+} from '../src/contracts';
 import {
   createEventCalendar,
   eventTitleLanguage,
@@ -129,6 +134,37 @@ describe('regions (PG03, PG04)', () => {
     expect(eventsQueryString(trackingSummaryQueryParams({ today: '2026-11-10', deadlineKinds: ['application'] }))).toBe(
       '?today=2026-11-10&deadlineKinds=application',
     );
+  });
+});
+
+describe('tracking query parameters (UI04)', () => {
+  it('writes the city, kind and source lists as repeated keys, the default sort never, and a blank list nowhere', () => {
+    expect(
+      eventsQueryString(
+        trackingQueryParams({
+          kinds: ['fair', 'exhibition'],
+          cities: ['tashkent'],
+          sources: [],
+          status: 'cancelled',
+          publishedSince: '2026-11-10T09:00:00Z',
+          sort: 'starts',
+        }),
+      ),
+    ).toBe('?kinds=fair&kinds=exhibition&cities=tashkent&status=cancelled&publishedSince=2026-11-10T09%3A00%3A00Z');
+    expect(eventsQueryString(trackingQueryParams({ sort: 'added', limit: 20 }))).toBe('?sort=added&limit=20');
+  });
+
+  it("writes the facets the list's filters only", () => {
+    const query = {
+      sources: ['curated'],
+      deadlineBefore: '2026-12-31',
+      sort: 'deadline',
+      cursor: 'c',
+      limit: 9,
+    } as const;
+
+    expect(eventsQueryString(trackingFacetsQueryParams(query))).toBe('?sources=curated&deadlineBefore=2026-12-31');
+    expect(eventsQueryString(trackingFacetsQueryParams())).toBe('');
   });
 });
 

@@ -94,6 +94,61 @@ public sealed class EventsClientWireTests : IDisposable
             "https://events.example.test/api/events/v1/catalogs/fashion/tracking/summary?today=2026-11-10&deadlineKinds=application&deadlineKinds=earlyBird");
     }
 
+    /// <summary>UI04: the city, kind and source lists go as repeated keys, the single city and the status by name, the publish
+    /// time in UTC, and the sort only when it is not the default.</summary>
+    [Fact]
+    public async Task TrackingList_ShouldSendTheUi04Filters_AndTheSortOnlyWhenNotTheDefault()
+    {
+        await service.Broker<IEventTrackingBroker>().ListAsync("fashion", new TrackingQuery
+        {
+            Kinds = ["exhibition", "fair"],
+            City = "bukhara",
+            Cities = ["tashkent", "samarkand"],
+            Status = EventStatus.MovedOnline,
+            Sources = ["afisha", "curated"],
+            PublishedSince = new DateTimeOffset(2026, 11, 10, 14, 0, 0, TimeSpan.FromHours(5)),
+            Sort = TrackingSort.Added,
+            Cursor = "next",
+            Limit = 20,
+        });
+        await service.Broker<IEventTrackingBroker>().ListAsync("fashion", new TrackingQuery { Sort = TrackingSort.Starts });
+        await service.Broker<IEventTrackingBroker>().ListAsync("fashion", new TrackingQuery { Sort = TrackingSort.Deadline });
+
+        service.Requests.Select(request => request.Url).Should().Equal(
+            "https://events.example.test/api/events/v1/catalogs/fashion/tracking?kinds=exhibition&kinds=fair&city=bukhara&cities=tashkent&cities=samarkand"
+            + "&status=movedOnline&sources=afisha&sources=curated&publishedSince=2026-11-10T09%3A00%3A00Z&sort=added&cursor=next&limit=20",
+            "https://events.example.test/api/events/v1/catalogs/fashion/tracking?limit=50",
+            "https://events.example.test/api/events/v1/catalogs/fashion/tracking?sort=deadline&limit=50");
+    }
+
+    /// <summary>UI04: the facets take the list's filters on their own route, send no cursor, limit or sort, and read the
+    /// counts as the service writes them.</summary>
+    [Fact]
+    public async Task TrackingFacets_ShouldSendTheFilters_AndReadTheCounts()
+    {
+        service.Answer(HttpStatusCode.OK, """
+            {"data":{"total":3,"countries":[{"value":"UZ","count":2}],"cities":[{"value":"tashkent","count":2}],
+             "kinds":[{"value":"fair","count":3},{"value":"conference","count":0}],"stages":[{"value":"interested","count":3}],
+             "priorities":[{"value":"high","count":1}],"sources":[{"value":"afisha","count":2,"label":"Afisha"},{"value":"curated","count":1}],
+             "openDeadline":{"before":"2026-12-10","count":1}}}
+            """);
+
+        var facets = Value(await service.Broker<IEventTrackingBroker>().GetFacetsAsync("fashion", new TrackingQuery
+        {
+            Cities = ["tashkent"],
+            Sources = ["afisha"],
+            Sort = TrackingSort.Added,
+            Cursor = "ignored",
+            Limit = 5,
+        }));
+
+        service.Requests.Single().Url.Should().Be("https://events.example.test/api/events/v1/catalogs/fashion/tracking/facets?cities=tashkent&sources=afisha");
+        facets.Total.Should().Be(3);
+        facets.Kinds.Should().Equal(new TrackingFacetCount("fair", 3), new TrackingFacetCount("conference", 0));
+        facets.Sources.Should().Equal(new TrackingFacetCount("afisha", 2, "Afisha"), new TrackingFacetCount("curated", 1));
+        facets.OpenDeadline.Should().Be(new TrackingDeadlineFacet(new DateOnly(2026, 12, 10), 1));
+    }
+
     [Fact]
     public async Task Propose_ShouldPostToTheCandidates()
     {

@@ -202,6 +202,9 @@ SCFD (Source Collection and Feed Delivery, `wow-two-sdk-beta.harvest`) collects 
 - tracking per (organization, event): stage, priority (`high` · `normal` · `low`), assignee, notes (≤ 8,000), fields,
   references (type and id pairs), revision; every stage change lands in its history with actor and time.
 - the summary counts tracking per stage and lists the nearest open deadlines.
+- the list filters by city, kind and source (by the name an intake source is stored under, `curated` for imports and manual
+  entries), orders by start, newest published or nearest open deadline, and pages by keyset; its facets read counts per
+  chip, each without its own selection, so a feed that scrolls never counts only the rows it loaded (UI04).
 
 ## Imports
 

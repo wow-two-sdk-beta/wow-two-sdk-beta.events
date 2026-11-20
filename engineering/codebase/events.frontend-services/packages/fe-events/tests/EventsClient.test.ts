@@ -16,6 +16,7 @@ describe('routes', () => {
     expect(EventsRoutes.accept('ocharo', 'e/1')).toBe('api/events/v1/catalogs/ocharo/review/e%2F1/accept');
     expect(EventsRoutes.applyChange('ocharo', 'o1')).toBe('api/events/v1/catalogs/ocharo/observations/o1/apply');
     expect(EventsRoutes.trackingSummary('ocharo')).toBe('api/events/v1/catalogs/ocharo/tracking/summary');
+    expect(EventsRoutes.trackingFacets('ocharo hq')).toBe('api/events/v1/catalogs/ocharo%20hq/tracking/facets');
     expect(EventsRoutes.calendar('ocharo')).toBe('api/events/v1/catalogs/ocharo/events.ics');
     expect(EventsRoutes.intakePoll()).toBe('api/events/v1/intake/poll');
     expect(EventsRoutes.freshness('ocharo hq')).toBe('api/events/v1/catalogs/ocharo%20hq/freshness');
@@ -164,9 +165,111 @@ describe('writes', () => {
   });
 });
 
+describe('tracking list and facets (UI04)', () => {
+  const facets = {
+    total: 3,
+    countries: [{ value: 'UZ', count: 2 }],
+    cities: [{ value: 'tashkent', count: 2 }],
+    kinds: [
+      { value: 'fair', count: 3 },
+      { value: 'conference', count: 0 },
+    ],
+    stages: [{ value: 'interested', count: 3 }],
+    priorities: [{ value: 'high', count: 1 }],
+    sources: [
+      { value: 'afisha', count: 2, label: 'Afisha' },
+      { value: 'curated', count: 1 },
+    ],
+    openDeadline: { before: '2026-12-10', count: 1 },
+  };
+
+  it('sends the new list filters as repeated keys and the sort only when it is not the default', async () => {
+    const { client, requests } = fakeService(() => envelope({ items: [], nextCursor: null }));
+
+    await client.listTracking('ocharo', {
+      kinds: ['exhibition', 'fair'],
+      city: 'bukhara',
+      cities: ['tashkent', 'samarkand'],
+      status: 'movedOnline',
+      sources: ['afisha', 'curated'],
+      publishedSince: '2026-11-10T09:00:00Z',
+      sort: 'added',
+      cursor: 'next',
+      limit: 20,
+    });
+    await client.listTracking('ocharo', { sort: 'starts', cities: [], sources: [] });
+    await client.listTracking('ocharo', { sort: 'deadline' });
+
+    expect(requests.map((request) => request.url)).toEqual([
+      `${serviceUrl}/api/events/v1/catalogs/ocharo/tracking?kinds=exhibition&kinds=fair&city=bukhara&cities=tashkent&cities=samarkand&status=movedOnline&sources=afisha&sources=curated&publishedSince=2026-11-10T09%3A00%3A00Z&sort=added&cursor=next&limit=20`,
+      `${serviceUrl}/api/events/v1/catalogs/ocharo/tracking`,
+      `${serviceUrl}/api/events/v1/catalogs/ocharo/tracking?sort=deadline`,
+    ]);
+  });
+
+  it("asks the facets with the list's filters, repeated keys and no sort, cursor or limit", async () => {
+    const { client, requests } = fakeService(() => envelope(facets));
+
+    await client.getTrackingFacets('ocharo hq', {
+      cities: ['tashkent'],
+      sources: ['afisha', 'curated'],
+      excludeStages: ['skipped'],
+      deadlineBefore: '2026-12-31',
+      sort: 'added',
+      cursor: 'ignored',
+      limit: 5,
+    });
+    await client.getTrackingFacets('ocharo');
+
+    const url = new URL(requests[0]!.url);
+    expect(requests[0]!.method).toBe('GET');
+    expect(url.origin + url.pathname).toBe(`${serviceUrl}/api/events/v1/catalogs/ocharo%20hq/tracking/facets`);
+    expect(url.search).toBe(
+      '?excludeStages=skipped&cities=tashkent&sources=afisha&sources=curated&deadlineBefore=2026-12-31',
+    );
+    expect(requests[1]!.url).toBe(`${serviceUrl}/api/events/v1/catalogs/ocharo/tracking/facets`);
+  });
+
+  it('unwraps the facets as the service writes them, a label only on a source', async () => {
+    const { client } = fakeService(() => envelope(facets));
+
+    const result = await client.getTrackingFacets('ocharo', { kinds: ['fair'] });
+
+    expect(result).toEqual({ ok: true, value: facets });
+  });
+
+  it('refuses facets with no total, a malformed count or no deadline window as a protocol failure', async () => {
+    const { client } = fakeService(
+      () => envelope({ ...facets, total: undefined }),
+      () => envelope({ ...facets, cities: [{ value: 'tashkent', count: '2' }] }),
+      () => envelope({ ...facets, openDeadline: undefined }),
+    );
+
+    const noTotal = await client.getTrackingFacets('ocharo');
+    const badCount = await client.getTrackingFacets('ocharo');
+    const noWindow = await client.getTrackingFacets('ocharo');
+
+    for (const result of [noTotal, badCount, noWindow]) expect(!result.ok && result.failure.reason).toBe('protocol');
+  });
+
+  it('maps a refused query, such as a cursor of another sort, to a validation failure, and a hidden catalog to notFound', async () => {
+    const { client } = fakeService(problem(400, { title: 'The list cursor is not valid.' }), problem(404));
+
+    const refused = await client.listTracking('ocharo', { sort: 'added', cursor: 'from-another-sort' });
+    const hidden = await client.getTrackingFacets('ocharo');
+
+    expect(!refused.ok && refused.failure.reason).toBe('validation');
+    expect(!hidden.ok && hidden.failure.reason).toBe('notFound');
+  });
+});
+
 describe('intake freshness', () => {
-  it('reads a catalog\'s freshness from its own route and unwraps it', async () => {
-    const freshness = { lastReceivedAtUtc: '2026-11-20T08:00:00Z', newestObservedAtUtc: '2026-11-20T07:40:00Z', failingSources: 1 };
+  it("reads a catalog's freshness from its own route and unwraps it", async () => {
+    const freshness = {
+      lastReceivedAtUtc: '2026-11-20T08:00:00Z',
+      newestObservedAtUtc: '2026-11-20T07:40:00Z',
+      failingSources: 1,
+    };
     const { client, requests } = fakeService(() => envelope(freshness));
 
     const result = await client.getIntakeFreshness('ocharo');
@@ -184,7 +287,7 @@ describe('intake freshness', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('refuses an answer without the count as a protocol failure, and maps another organization\'s 404 to notFound', async () => {
+  it("refuses an answer without the count as a protocol failure, and maps another organization's 404 to notFound", async () => {
     const { client } = fakeService(() => envelope({ lastReceivedAtUtc: null }), problem(404));
 
     const malformed = await client.getIntakeFreshness('ocharo');

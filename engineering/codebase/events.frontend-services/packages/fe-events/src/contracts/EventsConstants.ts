@@ -9,6 +9,10 @@ export const EventsConstants = {
   maxNotesLength: 8_000,
   maxTextLength: 2_000,
   maxListLength: 50,
+  /** The reserved `sources` filter value for the events no intake source reported: imports and curators' entries. */
+  curatedSource: 'curated',
+  /** How many days ahead the facets' open-deadline count looks when the query names no `deadlineBefore`. */
+  deadlineWindowDays: 30,
   defaultPageSize: 50,
   maxPageSize: 200,
   maxImportRows: 5_000,

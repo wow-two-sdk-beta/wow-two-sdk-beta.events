@@ -15,6 +15,7 @@ import type {
   ObservationPage,
   ReviewPage,
   TrackedEventModel,
+  TrackingFacetsModel,
   TrackingHistoryEntryModel,
   TrackingModel,
   TrackingPage,
@@ -53,6 +54,7 @@ export const EventsShapes = {
     lastReceivedAtUtc: isOptional(isString),
     newestObservedAtUtc: isOptional(isString),
   }),
+  facetCount: has({ value: isString, count: isNumber, label: isOptional(isString) }),
   importReport: has({ dryRun: (value: unknown) => typeof value === 'boolean', map: Array.isArray }),
   digest: has({
     id: isString,
@@ -65,6 +67,7 @@ export const EventsShapes = {
   digestPreview: has({ digestId: isString, items: Array.isArray, texts: Array.isArray, recipients: Array.isArray }),
 } as const;
 
+const facets = isArrayOf(EventsShapes.facetCount);
 const page = (item: Guard) => has({ items: isArrayOf(item), nextCursor: isOptional(isString) });
 
 /** Holds one decoder per answer shape. */
@@ -86,6 +89,18 @@ export const EventsDecoders = {
     page(has({ event: EventsShapes.event, tracking: isOptional(EventsShapes.tracking) })),
   ),
   trackingSummary: decoder<TrackingSummaryModel>(has({ byStage: isRecord, upcomingDeadlines: Array.isArray })),
+  trackingFacets: decoder<TrackingFacetsModel>(
+    has({
+      total: isNumber,
+      countries: facets,
+      cities: facets,
+      kinds: facets,
+      stages: facets,
+      priorities: facets,
+      sources: facets,
+      openDeadline: has({ before: isString, count: isNumber }),
+    }),
+  ),
   history: decoder<readonly TrackingHistoryEntryModel[]>(isArrayOf(EventsShapes.historyEntry)),
   workflow: decoder<WorkflowModel>(EventsShapes.workflow),
   intake: decoder<IntakeStatusModel>(EventsShapes.intake),

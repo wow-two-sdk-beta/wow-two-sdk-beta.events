@@ -6,6 +6,7 @@ import {
   eventQueryParams,
   observationQueryParams,
   reviewQueryParams,
+  trackingFacetsQueryParams,
   trackingQueryParams,
   trackingSummaryQueryParams,
   type CatalogModel,
@@ -34,6 +35,7 @@ import {
   type ReviewQuery,
   type SourceSplitDecision,
   type TrackedEventModel,
+  type TrackingFacetsModel,
   type TrackingHistoryEntryModel,
   type TrackingModel,
   type TrackingPage,
@@ -115,7 +117,16 @@ export interface EventsClient {
   listObservations(catalog: string, query?: ObservationQuery, signal?: AbortSignal): EventsResult<ObservationPage>;
   getObservation(catalog: string, id: string, signal?: AbortSignal): EventsResult<ObservationModel>;
 
+  /**
+   * Lists the catalog's published events with the caller's organization's tracking. The query's lists repeat their key
+   * (`cities=a&cities=b`), the default sort (`starts`) is not sent, and a cursor holds for the sort it came from.
+   */
   listTracking(catalog: string, query?: TrackingQuery, signal?: AbortSignal): EventsResult<TrackingPage>;
+  /**
+   * Counts what each filter chip of a tracking list would list, for the list's own query (`GET …/tracking/facets`): each
+   * facet counted without its own selection, plus the total. The query's sort, cursor and limit are not sent.
+   */
+  getTrackingFacets(catalog: string, query?: TrackingQuery, signal?: AbortSignal): EventsResult<TrackingFacetsModel>;
   /**
    * Reads the caller's organization's tracking summary: `today` as `YYYY-MM-DD`, or a query that also names the deadline
    * kinds to list.
@@ -280,6 +291,13 @@ export function createEventsClient(options: EventsClientOptions = {}): EventsCli
 
     listTracking: (catalog, query, signal) =>
       get(EventsRoutes.tracking(catalog), EventsDecoders.trackingPage, signal, trackingQueryParams(query)),
+    getTrackingFacets: (catalog, query, signal) =>
+      get(
+        EventsRoutes.trackingFacets(catalog),
+        EventsDecoders.trackingFacets,
+        signal,
+        trackingFacetsQueryParams(query),
+      ),
     getTrackingSummary: (catalog, today, signal) =>
       get(
         EventsRoutes.trackingSummary(catalog),

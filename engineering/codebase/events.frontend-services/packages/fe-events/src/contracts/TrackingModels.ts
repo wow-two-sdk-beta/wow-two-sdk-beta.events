@@ -1,10 +1,14 @@
 import type { JsonValue, LocalizedText } from './Common';
-import type { DeadlineKind, EventDeadline } from './EventFacts';
+import type { DeadlineKind, EventDeadline, EventStatus } from './EventFacts';
 import type { EventModel } from './EventModel';
 
 /** Mirrors `TrackingPriority`. */
 export const TrackingPriorityValues = ['high', 'normal', 'low'] as const;
 export type TrackingPriority = (typeof TrackingPriorityValues)[number];
+
+/** Mirrors `TrackingSort`: how a tracking list is ordered; every order ends on the event id. */
+export const TrackingSortValues = ['starts', 'added', 'deadline'] as const;
+export type TrackingSort = (typeof TrackingSortValues)[number];
 
 /** Mirrors `TrackingReference`: a product entity the tracking points at, by opaque type and id. */
 export interface TrackingReference {
@@ -42,6 +46,7 @@ export interface TrackingPage {
 /**
  * Mirrors `TrackingQuery`; dates are `YYYY-MM-DD`. An untracked event reads as the workflow's default stage for `stage`,
  * `stages` and `excludeStages`; an event with no country matches a country filter only with `includeUnknownCountry`.
+ * A list filter matches an event in any of its values, and the single value beside it (`kind`, `city`) adds to the list.
  */
 export interface TrackingQuery {
   readonly trackedOnly?: boolean;
@@ -54,6 +59,22 @@ export interface TrackingQuery {
   readonly from?: string;
   readonly to?: string;
   readonly kind?: string;
+  /** Kinds to list, with `kind`; at most 50. */
+  readonly kinds?: readonly string[];
+  /** The city to list, matched without case. */
+  readonly city?: string;
+  /** Cities to list, with `city`, matched without case; at most 50. */
+  readonly cities?: readonly string[];
+  /** The event status to list. */
+  readonly status?: EventStatus;
+  /**
+   * Source names to list, matched without case against the name each source of an event is stored under (`Afisha`): an
+   * event lists when any of its sources is one of them. The reserved `curated` (`EventsConstants.curatedSource`) lists
+   * the events no intake source reported: imports and curators' own entries. At most 50.
+   */
+  readonly sources?: readonly string[];
+  /** The first instant an event may have been published at (`2026-11-10T09:00:00Z`): lists events published on or after it. */
+  readonly publishedSince?: string;
   readonly country?: string;
   /** ISO-2 countries to list, with `country`. */
   readonly countries?: readonly string[];
@@ -64,6 +85,9 @@ export interface TrackingQuery {
   readonly text?: string;
   readonly deadlineBefore?: string;
   readonly includeUndated?: boolean;
+  /** `starts` when absent: start ascending, unknown last. `added` is newest published first; `deadline` the nearest open deadline first, none last. */
+  readonly sort?: TrackingSort;
+  /** The cursor a page returned; it holds for the sort it came from, and another sort answers a validation failure. */
   readonly cursor?: string;
   readonly limit?: number;
 }
@@ -115,4 +139,43 @@ export interface TrackingSummaryQuery {
   readonly today: string;
   /** Every kind when absent or empty. */
   readonly deadlineKinds?: readonly DeadlineKind[];
+}
+
+/**
+ * Mirrors `TrackingFacetCount`: how many events one facet value matches. `value` is what the list's filter takes back; only
+ * `sources` carries a `label`, the source's name as stored (`Afisha`).
+ */
+export interface TrackingFacetCount {
+  readonly value: string;
+  readonly count: number;
+  readonly label?: string | null;
+}
+
+/** Mirrors `TrackingDeadlineFacet`: the events with an open deadline starting on or before `before` (`YYYY-MM-DD`). */
+export interface TrackingDeadlineFacet {
+  /** The query's `deadlineBefore`, else 30 days after today (UTC). */
+  readonly before: string;
+  readonly count: number;
+}
+
+/**
+ * Mirrors `TrackingFacetsModel`: the counts behind a tracking list's filter chips for one query. Each facet is counted
+ * without its own selection (and under every other), so a chip shows what picking it would list; `total` counts the whole
+ * query.
+ */
+export interface TrackingFacetsModel {
+  readonly total: number;
+  /** ISO-2 country counts, most first; events with no country count nowhere. */
+  readonly countries: readonly TrackingFacetCount[];
+  /** Lowercase city counts, most first. */
+  readonly cities: readonly TrackingFacetCount[];
+  /** The catalog's kinds in its order, zeros included, then any other kind found. */
+  readonly kinds: readonly TrackingFacetCount[];
+  /** The workflow's stages in order, zeros included; an untracked event counts under the default stage. */
+  readonly stages: readonly TrackingFacetCount[];
+  /** `high`, `normal` and `low`, zeros included; tracked events only. */
+  readonly priorities: readonly TrackingFacetCount[];
+  /** Lowercase source-name counts with their labels, most first, plus `curated`. */
+  readonly sources: readonly TrackingFacetCount[];
+  readonly openDeadline: TrackingDeadlineFacet;
 }

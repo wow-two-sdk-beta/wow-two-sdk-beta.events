@@ -33,6 +33,13 @@ public static class EventsConstants
     /// <summary>Holds the most countries one list filter names (<c>countries</c>, <c>excludeCountries</c>).</summary>
     public const int MaxCountryFilter = 250;
 
+    /// <summary>Holds the reserved source filter value that matches the events no intake source reported: imports and
+    /// curators' own entries.</summary>
+    public const string CuratedSource = "curated";
+
+    /// <summary>Holds how many days ahead the tracking facets' open-deadline count looks when the query names no end.</summary>
+    public const int DeadlineWindowDays = 30;
+
     /// <summary>Holds the default page size.</summary>
     public const int DefaultPageSize = 50;
 

@@ -12,7 +12,7 @@
 | `IEventCatalogsBroker` | `GetAsync(slug)`, `ListAsync()`, `PutAsync(slug, CatalogSpec)` | reads: owner org, or anyone for a public catalog; put: creates for the caller's org, or replaces a catalog it owns |
 | `ICatalogEventsBroker` | `ListAsync(catalog, EventQuery)`, `GetAsync`, `CreateAsync(EventSpec)`, `ProposeAsync(EventSpec)`, `UpdateAsync`, `ArchiveAsync(expectedRevision)` | reads: published events for readers, every state for the owner; writes: owner org; a curator's entry publishes, a member's proposal publishes in a private catalog and is a candidate in a shared or public one |
 | `IEventReviewBroker` | `ListAsync(ReviewQuery)`, `AcceptAsync(id, ReviewDecision)`, `RejectAsync`, `MergeAsync(id, MergeDecision)`, `SplitSourceAsync(id, SourceSplitDecision)` (one source leaves an event for a new candidate; the pair is kept apart), `ApplyChangeAsync(observationId, ReviewDecision)`, `DismissChangeAsync`, `ListObservationsAsync(ObservationQuery)`, `GetObservationAsync` | owner org |
-| `IEventTrackingBroker` | `ListAsync(catalog, TrackingQuery)`, `GetAsync(catalog, eventId)`, `PutAsync(TrackingSpec)`, `DeleteAsync(expectedRevision)`, `GetHistoryAsync`, `GetSummaryAsync(today)` and `GetSummaryAsync(TrackingSummaryQuery)` (a default interface method, so an older implementation ignores the kinds) | the caller's active organization; its own tracking only |
+| `IEventTrackingBroker` | `ListAsync(catalog, TrackingQuery)`, `GetAsync(catalog, eventId)`, `PutAsync(TrackingSpec)`, `DeleteAsync(expectedRevision)`, `GetHistoryAsync`, `GetSummaryAsync(today)` and `GetSummaryAsync(TrackingSummaryQuery)` (a default interface method, so an older implementation ignores the kinds), `GetFacetsAsync(catalog, TrackingQuery)` (UI04: the counts behind a list's filter chips) | the caller's active organization; its own tracking only |
 | `IEventWorkflowsBroker` | `GetAsync()`, `PutAsync(WorkflowSpec)` | the caller's active organization |
 | `IEventImportsBroker` | `ImportAsync(catalog, EventImportBundle, dryRun)` | owner org; tracking lands in the caller's org |
 | `IEventCalendarBroker` | `ExportAsync(catalog, EventQuery)` → `CalendarFile` | as a catalog read |
@@ -53,7 +53,8 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 | `POST …/catalogs/{c}/observations/{id}/dismiss` | review `DismissChangeAsync` | `events.review` · `events:review` |
 | `GET …/catalogs/{c}/observations?state&eventId&cursor&limit` | review `ListObservationsAsync` | `events.review` · `events:review` |
 | `GET …/catalogs/{c}/observations/{id}` | review `GetObservationAsync` | `events.review` · `events:review` |
-| `GET …/catalogs/{c}/tracking?trackedOnly&stage&stages&excludeStages&priority&from&to&kind&country&countries&excludeCountries&includeUnknownCountry&text&deadlineBefore&includeUndated&cursor&limit` | tracking `ListAsync`; list keys repeat (`countries=UZ&countries=KZ`); an untracked event reads as the workflow's default stage for `stage`, `stages` and `excludeStages` (a stage in both is a 400); an event with no country matches a country filter only with `includeUnknownCountry=true`; a two-letter `text` also finds the events in that country | `events.read` · `events:read` |
+| `GET …/catalogs/{c}/tracking?trackedOnly&stage&stages&excludeStages&priority&from&to&kind&kinds&city&cities&status&country&countries&excludeCountries&includeUnknownCountry&sources&publishedSince&text&deadlineBefore&includeUndated&sort&cursor&limit` | tracking `ListAsync`; list keys repeat (`countries=UZ&countries=KZ`); an untracked event reads as the workflow's default stage for `stage`, `stages` and `excludeStages` (a stage in both is a 400); an event with no country matches a country filter only with `includeUnknownCountry=true`; a two-letter `text` also finds the events in that country; `kinds`, `cities` and `sources` list an event in any value, with `kind` and `city` adding to them; `sort` is `starts` (default), `added` or `deadline`, and its cursor holds for that sort only — § Tracking list: filters, sorts and facets | `events.read` · `events:read` |
+| `GET …/catalogs/{c}/tracking/facets?<the list's filters>` | tracking `GetFacetsAsync(TrackingQuery)`: `total` and the counts per value of `countries`, `cities`, `kinds`, `stages`, `priorities`, `sources`, plus `openDeadline`, each facet counted without its own selection; `cursor`, `limit` and `sort` are accepted and play no part | `events.read` · `events:read` |
 | `GET …/catalogs/{c}/tracking/summary?today=&deadlineKinds=` | tracking `GetSummaryAsync(TrackingSummaryQuery)`: `byStage` (tracked events), `untracked` (published events the organization does not track), `upcomingDeadlines` (the nearest five of published events not cancelled, untracked ones under the default stage with `tracked: false`, lost stages left out, only the repeated `deadlineKinds` when given) | `events.read` · `events:read` |
 | `GET …/catalogs/{c}/tracking/{eventId}` | tracking `GetAsync` | `events.read` · `events:read` |
 | `PUT …/catalogs/{c}/tracking/{eventId}` (body `TrackingSpec`) | tracking `PutAsync` | `events.track` · `events:track` |
@@ -86,6 +87,59 @@ service root; `{c}` is a catalog slug. Query names are the query records' proper
 - A person's call needs the scope and the permission; a service's call (client credentials) the scope alone.
 - Browsers never call the service directly, except the console's own pages through its BFF session; products proxy
   through their backends (Desk: token exchange, `api-communication.md`).
+
+## Tracking list: filters, sorts and facets (UI04)
+
+The tracking list (`ListAsync`) and its facets (`GetFacetsAsync`) read one query, `TrackingQuery`, the same way: published
+events of a catalog the caller reads, joined with the caller organization's tracking, and the caller needs an active
+organization (403 without one; another organization's private catalog is 404; a refused query is 400 on both).
+
+- Lists match an event in any value and different filters all have to match. `kinds` and `cities` (at most 50 values,
+  matched without case, so `Tashkent` finds `tashkent`) take the single `kind` and `city` as one more value; `status`
+  (an event's own: `scheduled`, `cancelled`, …) and `city` are now passed through to the module, which the tracking list
+  dropped before.
+- `sources` (at most 50 values) matches the **name each source of an event is stored under** — the `name` column of
+  `events_event_sources`, which intake fills from the SCFD record's `context.sourceName`, else its `sourceGroup`, else the
+  intake source's own name (`Afisha`, `Uzexpocentre`) — compared without case and trimmed (`sources=afisha`). An event
+  lists when any of its sources has that name, so a cross-source event (E17, `matched_by` `rule:title-date-city`) lists
+  under every publisher that reported it. `matched_by` is a rule, never a name. The reserved value `curated` matches the
+  events with **no SCFD source** (`kind` `scfd`): imports, curators' own entries and any event only those reported; a source
+  literally named `curated` cannot be asked for by name. An SCFD source with no stored name (a record from before E15,
+  until its next delivery) matches no value, `curated` included. Several values OR together, `curated` among them.
+- `publishedSince` is an instant (`2026-11-10T09:00:00Z`; no offset reads as UTC): lists the events whose `publishedAtUtc` is
+  on or after it, the base of E31's "new since your last visit".
+- `sort` is `starts` (default: start ascending, unknown last, then title), `added` (newest `publishedAtUtc` first) or
+  `deadline` (the earliest start among an event's **open** deadlines — those whose span has not ended on the module's UTC day
+  — first, events with none last, then title). Every order ends on the event id, so equal values keep one order. An unknown
+  `sort` is a 400. Month dividers are the client's concern: they help under `starts` only.
+- The cursor is a keyset: it holds the sort values of the last event returned, bound to the catalog and the sort, so an
+  event published, removed or retracked between two pages never repeats or skips a neighbour. A cursor from one sort (or
+  catalog) is a 400 under another, and so is any cursor of the earlier offset kind, one that does not decode, and one that
+  carries a value the store cannot hold or no sort has (a NUL, an unpaired surrogate, over 1,000 characters, an unparsable day,
+  instant or id); a tab or a line break in a title is valid.
+
+`GetFacetsAsync` / `GET …/tracking/facets` answers the counts behind the chips of one query. **Each facet is counted without
+its own selection** (the SCFD console's chip rule) and under every other, so a chip shows what picking it would list;
+`total` counts the whole query. A facet's value is what the list's filter takes back.
+
+| Field | Values | Ignores the query's |
+|---|---|---|
+| `total` | events the whole query lists | — |
+| `countries` | ISO-2 code → count, most first; events with no country count nowhere | `country`, `countries`, `excludeCountries`, `includeUnknownCountry` |
+| `cities` | lowercase city → count, most first | `city`, `cities` |
+| `kinds` | the catalog's kinds in its order with zeros, then any other kind found | `kind`, `kinds` |
+| `stages` | the organization's workflow stages in order with zeros; an untracked event under the default stage | `stage`, `stages`, `excludeStages` |
+| `priorities` | `high`, `normal`, `low` with zeros; tracked events only | `priority` |
+| `sources` | lowercase source name → count with the name as stored in `label`, most first, plus `curated`; an event with several sources counts once under each | `sources` |
+| `openDeadline` | `{ before, count }`: events with an open deadline starting on or before `before` | `deadlineBefore`, which only sets `before` |
+
+- Each entry is `{ value, count, label? }`; only `sources` carries a `label`.
+- `openDeadline.before` is the query's `deadlineBefore`, else 30 days after today (UTC) — the "Deadline within 30 days"
+  toggle's window — and is echoed so a client sees the window counted. `deadlineBefore` filters the other facets and the
+  total as it filters the list.
+- The tracked-only implication of `priority` holds for every facet but `priorities`; `trackedOnly` holds for all.
+- Cost: nine grouped reads over the catalog's published events, one per facet and the total (the `curated` count and the named
+  sources are two). No new index: the catalog holds about a hundred events, and the list's own index serves the rest.
 
 ## Forms
 
