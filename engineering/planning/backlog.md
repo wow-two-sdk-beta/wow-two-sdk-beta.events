@@ -49,8 +49,6 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 | Item | Type | Notes |
 |---|---|---|
 | E26 Ship a conformance-tested in-memory Events fake | engineering | spec in `tasks-events-path.md` |
-| E23 Let catalog members read intake freshness | feature | spec in `tasks-events-path.md` |
-| E18 Move tracking to the survivor when SCFD merges posts | fix | spec in `tasks-events-path.md` |
 | O14 WoW2 Events prod target `events-prod` | engineering | spec in `tasks-platform.md` |
 | V01 Review console on AppFrame and the SDK session | engineering | spec in `tasks-platform.md` |
 | V02 Places and organizers as deduplicated entities | feature | spec in `tasks-platform.md` |
@@ -85,6 +83,7 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 | Item | Type | Notes |
 |---|---|---|
 | Custom field schemas per workflow, validated | feature | P2; P1 stores fields as JSON |
+| Retry a merge that lands before its survivor's event | fix | E18 (`4deb80c`) carries tracking to the survivor when SCFD merges posts, but a merge whose survivor post has no Events event yet is not retried, so the tracking stays on the merged event; hold the merge until the survivor's event exists, or retry it on the survivor's intake |
 | Reminders on deadlines | feature | P2; EV4, events-integration #11 |
 | `VTIMEZONE` blocks in the calendar export for zoned local times | feature | P2; P1 writes `TZID` with no block, which most clients resolve from IANA |
 | Feed links inside the owner organization | feature | P2; no anonymous or token URLs for sourced catalogs (events-integration #50) |
