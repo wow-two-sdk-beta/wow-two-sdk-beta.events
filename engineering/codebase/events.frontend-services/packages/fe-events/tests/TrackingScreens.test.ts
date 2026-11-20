@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { CountryPicker } from '@wow-two-beta/fe/presentation/forms';
-import { afterEach, describe, expect, it } from 'vitest';
-import type { TrackingModel, WorkflowModel } from '../src/contracts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { EventImage, EventModel, TrackingModel, WorkflowModel } from '../src/contracts';
 import {
   eventFactsDraft,
   EventDetail,
@@ -166,6 +166,60 @@ describe('event detail (PG04, PG07, PG08, PG11, PG13, PG17)', () => {
     expect(wrapper.find('[data-test="event-calendar"]').exists()).toBe(true);
     expect(wrapper.find('textarea[name="field-internal"]').exists()).toBe(false);
     expect(service.requests.some((request) => new URL(request.url).pathname.endsWith('/events/e1'))).toBe(false);
+  });
+});
+
+describe('event detail images (imageSrc)', () => {
+  const first = { url: 'https://source.example.test/a.jpg', fileRef: 'f1', attribution: 'Credit' };
+  const second = { url: 'https://source.example.test/b.jpg' };
+  const imaged = eventModel('e2', { title: { en: 'Imaged' }, images: [first, second] });
+  const copy = 'https://files.example.test/f1';
+
+  async function renderDetail(props: Record<string, unknown>) {
+    const service = fakeService(() => envelope(imaged));
+    const wrapper = mount(EventDetail, {
+      props: { client: service.client, catalog: 'ocharo', eventId: 'e2', ...props },
+    });
+    wrappers.push(wrapper);
+    await flushPromises();
+    return wrapper;
+  }
+  const sources = (wrapper: Awaited<ReturnType<typeof renderDetail>>) =>
+    wrapper.findAll('[data-test="event-image"]').map((image) => image.attributes('src'));
+
+  it('shows the resolver source, the url when it is null or fails, and drops an image whose sources all fail', async () => {
+    const resolver = vi.fn((_event: EventModel, image: EventImage) =>
+      image.fileRef ? `https://files.example.test/${image.fileRef}` : null,
+    );
+    const wrapper = await renderDetail({ imageSrc: resolver });
+
+    // A hit uses its source; null keeps the url.
+    expect(resolver).toHaveBeenCalledWith(imaged, first, 0);
+    expect(resolver).toHaveBeenCalledWith(imaged, second, 1);
+    expect(sources(wrapper)).toEqual([copy, second.url]);
+    expect(wrapper.get('[data-test="event-image"]').attributes()).toMatchObject({
+      loading: 'lazy',
+      referrerpolicy: 'no-referrer',
+      alt: 'Image: Credit',
+    });
+
+    // A failed source falls back to the url.
+    await wrapper.findAll('[data-test="event-image"]')[0]!.trigger('error');
+    expect(sources(wrapper)).toEqual([first.url, second.url]);
+
+    // Both failing leaves the image out; the next one stays.
+    await wrapper.findAll('[data-test="event-image"]')[0]!.trigger('error');
+    expect(sources(wrapper)).toEqual([second.url]);
+
+    // With no image left the strip goes, as with no images at all.
+    await wrapper.get('[data-test="event-image"]').trigger('error');
+    expect(wrapper.find('[data-test="event-images"]').exists()).toBe(false);
+  });
+
+  it('keeps each image at its url with no resolver', async () => {
+    const wrapper = await renderDetail({});
+
+    expect(sources(wrapper)).toEqual([first.url, second.url]);
   });
 });
 

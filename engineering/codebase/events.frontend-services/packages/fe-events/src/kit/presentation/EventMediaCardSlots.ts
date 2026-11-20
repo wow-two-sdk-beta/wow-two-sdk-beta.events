@@ -8,7 +8,10 @@ export interface EventCardSlotBase {
 
 /** `media`: the zone behind the card. The image is the default; with no image the `fallback` zone shows. */
 export interface EventCardMediaSlot extends EventCardSlotBase {
-  /** The image the card would show (`facts.images[0]`, http or https only); null with none or after a failed load. */
+  /**
+   * The image the card would show: `url` is the source it tries now, the `imageSrc` resolver's or else `facts.images[0]`'s
+   * own (http or https only); null with none, or once every source failed to load.
+   */
   readonly image: { readonly url: string; readonly alt: string } | null;
 }
 

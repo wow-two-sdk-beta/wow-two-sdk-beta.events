@@ -96,7 +96,7 @@ to the consumer's Tailwind sources:
   its zone renders (types `EventCard*Slot`, zones `EventCardZones`):
   | Slot (feed: `card-…`) | Zone | Replaces | Scope beside `event` and `tracking` |
   |---|---|---|---|
-  | `media` | behind the card | the curated image | `image` (`{ url, alt }` or null) |
+  | `media` | behind the card | the curated image | `image` (`{ url, alt }`, `url` the source tried now, or null) |
   | `fallback` | behind the card, no media | the date tile | `tile` (`{ big, small, month }`: the day, the year of a month-only start, the month; or null), `kindKey` |
   | `pills` | top start | kind, stage, status, online and removed pills | `kind`, `stage`, `status` (labels), `online`, `removed` |
   | `actions` | top end | the high-priority mark and the quick-stage menu | `highPriority`, `quickStages`, `pending`, `track(stage)` |
@@ -105,6 +105,20 @@ to the consumer's Tailwind sources:
   | `detail` | second text line | the next deadline, else the sources | `deadline` (`{ label, left, tone }` or null), `sources` |
   A given `media` slot always shows (the `fallback` only shows with no media); a given `pills` or `actions` slot shows
   even when the default would be empty. A zone with no slot keeps its default.
+- Image sources: an event's image is `facts.images[n].url`, the credit link to the source, and, when SCFD holds a copy,
+  `fileRef`, a Files file id the kit cannot read itself. A consumer that serves the copy passes `imageSrc(event,
+  image, index)`, which returns the source to show or null for the `url`:
+
+  | Component | Prop | Where it applies |
+  |---|---|---|
+  | `EventMediaCard` | `imageSrc?: (event, image, index) => string \| null` | the card's image (`images[0]`, index 0) |
+  | `EventsFeed` | `imageSrc?` | forwarded unchanged to every card |
+  | `EventDetail` | `imageSrc?` | each image of the header strip, by its index |
+
+  A non-null source is rendered (a resolver hit even when the `url` is not http or https); when it fails to load the
+  image falls back to the `url` (through `safeHttpUrl`), and when that fails too the card shows its date tile and the
+  detail leaves the image out, the no-image state. With no resolver nothing changes. Images stay lazy and send no
+  referrer. A consumer's `media` slot still replaces the image entirely, and its `image.url` is the source being tried.
 - `EventFactsFields` (and so `EventProposalForm` and the review editor) picks the country with the fe sdk's
   `CountryPicker`: a searchable list in the viewer's language that stores the alpha-2 code (`UZ`), clearable. With
   `regions`, their countries head the list. The free-text code and its "two-letter code" check are gone.

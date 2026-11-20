@@ -18,6 +18,7 @@ import { computed, onMounted, onScopeDispose, shallowRef, watch } from 'vue';
 import {
   EventsConstants,
   type CatalogKindModel,
+  type EventImage,
   type EventModel,
   type EventQuery,
   type TrackingFacetCount,
@@ -120,6 +121,8 @@ const props = withDefaults(
      * at a `count` of 0. A pill expands to the `attention` slot, which gets its `key` and a `close` function.
      */
     attention?: readonly { key: string; label: string; count: number }[];
+    /** Forwarded to every card: the source to show for an event's image, such as its stored copy; null keeps the `url`. */
+    imageSrc?: (event: EventModel, image: EventImage, index: number) => string | null;
   }>(),
   {
     locale: 'en',
@@ -137,6 +140,7 @@ const props = withDefaults(
     proposal: () => ({}),
     viewerZone: undefined,
     attention: () => [],
+    imageSrc: undefined,
   },
 );
 
@@ -839,6 +843,7 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
                 :can-track="tracking && canTrack"
                 :track-pending="trackRequest.pending.value"
                 :viewer-zone="viewerZone"
+                :image-src="imageSrc"
                 @open="(id) => emit('open', id)"
                 @track="track"
               >

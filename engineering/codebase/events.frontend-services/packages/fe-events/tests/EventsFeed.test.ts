@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { FacetBar, type FacetDefinition } from '@wow-two-beta/fe/presentation/forms';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
+import type { EventImage, EventModel } from '../src/contracts';
 import { EventMediaCard, EventsFeed, type EventCardDetailSlot } from '../src/kit';
 import { envelope, eventModel, fakeService, stubIntersectionObserver } from './Fixtures';
 
@@ -219,6 +220,29 @@ describe('events feed', () => {
 
     expect(requests.some((request) => request.method === 'POST')).toBe(false);
     expect(wrapper.get('form [role="alert"]').text()).toContain('2026-03');
+  });
+});
+
+describe('image source forwarded by the feed', () => {
+  it('passes imageSrc to every card: its source first, the url on error, the date tile when both fail', async () => {
+    const resolver = vi.fn(
+      (event: EventModel, _image: EventImage, index: number) => `https://files.example.test/${event.id}-${index}`,
+    );
+    const { wrapper } = await render({ imageSrc: resolver }, page);
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(resolver.mock.calls[0]![0].id).toBe('october');
+    expect(resolver.mock.calls[0]![2]).toBe(0);
+    expect(wrapper.get('img').attributes('src')).toBe('https://files.example.test/october-0');
+    expect(wrapper.findAll('[data-test="event-date-tile"]')).toHaveLength(2);
+
+    await wrapper.get('img').trigger('error');
+    expect(wrapper.get('img').attributes('src')).toBe('https://cdn.example.test/curated.jpg');
+    expect(wrapper.get('img').attributes('referrerpolicy')).toBe('no-referrer');
+
+    await wrapper.get('img').trigger('error');
+    expect(wrapper.find('img').exists()).toBe(false);
+    expect(wrapper.findAll('[data-test="event-date-tile"]')).toHaveLength(3);
   });
 });
 

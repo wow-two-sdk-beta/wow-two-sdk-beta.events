@@ -4,7 +4,7 @@ import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { ResultExtensions } from '@wow-two-beta/fe/foundation/results';
-import type { CatalogKindModel, EventModel, EventSourceState, TrackingModel } from '../../contracts';
+import type { CatalogKindModel, EventImage, EventModel, EventSourceState, TrackingModel } from '../../contracts';
 import { createEventCalendar, downloadEventCalendar, type EventCalendarOptions } from '../calendar/EventCalendar';
 import type { EventsClient, EventsResult } from '../client/CreateEventsClient';
 import {
@@ -37,7 +37,8 @@ import TrackingForm from './TrackingForm.vue';
  * Shows one event with every reviewed fact: curated images, dates as precisely as known, place and scope, deadlines,
  * offers, links and each source by name with its listing state — and, when `trackable`, the organization's chosen
  * tracking fields and its tracking form. Offers the event's own calendar file when its dates are exact. Its images are
- * `facts.images`, each at its `url`.
+ * `facts.images`, each at its `url`, or at the source `imageSrc` gives for it (such as the stored copy named by its
+ * `fileRef`): a source that fails to load falls back to the `url`, and an image whose sources all fail is left out.
  */
 defineOptions({ name: 'EventDetail' });
 
@@ -66,6 +67,11 @@ const props = withDefaults(
     calendarOptions?: EventCalendarOptions;
     /** The viewer's IANA zone, to name the start time's zone only when it differs; the browser's by default. */
     viewerZone?: string;
+    /**
+     * Gives the source to show for an image (`facts.images[index]`), such as the URL of the stored copy named by its
+     * `fileRef`; null keeps the image's own `url`. A source that fails to load falls back to the `url`, then the image is left out.
+     */
+    imageSrc?: (event: EventModel, image: EventImage, index: number) => string | null;
   }>(),
   {
     locale: 'en',
@@ -79,6 +85,7 @@ const props = withDefaults(
     calendar: true,
     calendarOptions: undefined,
     viewerZone: undefined,
+    imageSrc: undefined,
   },
 );
 
@@ -101,11 +108,17 @@ const request = useEventsRequest(async (signal): EventsResult<EventModel> => {
 const event = computed(() => request.value.value);
 const facts = computed(() => event.value?.facts);
 const day = computed(() => props.today ?? localIsoDate());
-const images = computed(() =>
-  (facts.value?.images ?? [])
-    .map((image) => ({ ...image, safe: safeHttpUrl(image.url) }))
-    .filter((image): image is typeof image & { safe: string } => image.safe !== null),
-);
+/** The image sources that failed to load, as `index source`, so an image moves on to its next source and is then left out. */
+const failedImages = shallowRef<readonly string[]>([]);
+const images = computed(() => {
+  const current = event.value;
+  return (facts.value?.images ?? []).flatMap((image, index) => {
+    const source = [current ? props.imageSrc?.(current, image, index) : null, safeHttpUrl(image.url)].find(
+      (candidate): candidate is string => Boolean(candidate) && !failedImages.value.includes(`${index} ${candidate}`),
+    );
+    return source ? [{ ...image, index, source }] : [];
+  });
+});
 const links = computed(() =>
   [
     { key: 'website' as const, url: safeHttpUrl(facts.value?.website) },
@@ -172,7 +185,10 @@ function saved(next: TrackingModel) {
 }
 
 onMounted(() => request.run());
-watch([() => props.catalog, () => props.eventId, () => props.client, () => props.trackable], () => request.run());
+watch([() => props.catalog, () => props.eventId, () => props.client, () => props.trackable], () => {
+  failedImages.value = [];
+  void request.run();
+});
 </script>
 
 <template>
@@ -237,12 +253,15 @@ watch([() => props.catalog, () => props.eventId, () => props.client, () => props
       </header>
 
       <div v-if="images.length" class="flex gap-3 overflow-x-auto" data-test="event-images">
-        <figure v-for="image in images" :key="image.safe" class="shrink-0">
+        <figure v-for="image in images" :key="`${image.index} ${image.source}`" class="shrink-0">
           <img
-            :src="image.safe"
+            :src="image.source"
             :alt="image.attribution ? eventsText('imageBy', locale, { attribution: image.attribution }) : ''"
             class="h-48 rounded-md object-cover"
             loading="lazy"
+            referrerpolicy="no-referrer"
+            data-test="event-image"
+            @error="failedImages = [...failedImages, `${image.index} ${image.source}`]"
           />
           <figcaption v-if="image.attribution" class="mt-1 text-xs text-muted-foreground">
             {{ image.attribution }}

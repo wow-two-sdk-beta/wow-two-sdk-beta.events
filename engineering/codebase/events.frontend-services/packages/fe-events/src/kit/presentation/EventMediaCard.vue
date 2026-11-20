@@ -3,7 +3,7 @@ import { Button } from '@wow-two-beta/fe/presentation/actions';
 import { Badge, BadgeVariant, CardLink, MediaCard } from '@wow-two-beta/fe/presentation/display';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, MenuItem } from '@wow-two-beta/fe/presentation/nav';
 import { computed, shallowRef } from 'vue';
-import type { CatalogKindModel, EventModel, TrackingModel, WorkflowStageModel } from '../../contracts';
+import type { CatalogKindModel, EventImage, EventModel, TrackingModel, WorkflowStageModel } from '../../contracts';
 import {
   deadlineDaysLeft,
   deadlineTone,
@@ -42,7 +42,8 @@ import type {
  * the title (two lines), one line with the dates and the city, then the next open deadline in its tone, or else the
  * source names. The whole card opens the event; it is dimmed when cancelled, removed or past. Organizer, scope, cost,
  * the review state and the title's language tag stay on the event's page. Its image is `facts.images[0]` at its `url`;
- * a consumer that serves the Files copy named by `fileRef` fills the `media` slot.
+ * a consumer that serves the stored copy named by `fileRef` passes `imageSrc`, which gives the source to try first: the
+ * card falls back to the `url` (http or https only) when that source fails to load, and to the date tile when both do.
  *
  * Each zone takes a slot whose default is the content above, so a consumer swaps one zone and keeps the rest: `media`
  * (replaces the image), `fallback` (the tile shown with no media), `pills` (top start), `actions` (top end), `title`
@@ -75,6 +76,11 @@ const props = withDefaults(
     trackPending?: boolean;
     /** The viewer's IANA zone, to name the start time's zone only when it differs; the browser's by default. */
     viewerZone?: string;
+    /**
+     * Gives the source to show for an image (`facts.images[index]`), such as the URL of the stored copy named by its
+     * `fileRef`; null keeps the image's own `url`. A source that fails to load falls back to the `url`, then to the date tile.
+     */
+    imageSrc?: (event: EventModel, image: EventImage, index: number) => string | null;
   }>(),
   {
     locale: 'en',
@@ -88,6 +94,7 @@ const props = withDefaults(
     canTrack: false,
     trackPending: false,
     viewerZone: undefined,
+    imageSrc: undefined,
   },
 );
 
@@ -120,13 +127,17 @@ const titleId = computed(() => `event-media-card-${props.event.id}`);
 const lower = (text: string) => text.toLocaleLowerCase(props.locale);
 const lowerFirst = (text: string) => (text ? text.charAt(0).toLocaleLowerCase(props.locale) + text.slice(1) : text);
 
-const failedUrl = shallowRef<string | null>(null);
+/** The sources that failed to load, so the card moves on to the next one and then to the date tile. */
+const failedSources = shallowRef<readonly string[]>([]);
 const image = computed(() => {
   const curated = props.event.facts.images?.[0];
-  const url = curated ? safeHttpUrl(curated.url) : null;
-  if (!curated || !url || url === failedUrl.value) return null;
+  if (!curated) return null;
+  const source = [props.imageSrc?.(props.event, curated, 0), safeHttpUrl(curated.url)].find(
+    (candidate): candidate is string => Boolean(candidate) && !failedSources.value.includes(candidate as string),
+  );
+  if (!source) return null;
   const attribution = curated.attribution ?? '';
-  return { url, alt: attribution ? eventsText('imageBy', props.locale, { attribution }) : title.value };
+  return { url: source, alt: attribution ? eventsText('imageBy', props.locale, { attribution }) : title.value };
 });
 
 const kind = computed(() => EventsLabels.kind(props.event.facts.kind, props.kinds, props.locale));
@@ -235,7 +246,7 @@ const track = (next: string) => emit('track', props.event.id, next);
           loading="lazy"
           referrerpolicy="no-referrer"
           data-test="event-image"
-          @error="failedUrl = image.url"
+          @error="failedSources = [...failedSources, image.url]"
         />
       </slot>
     </template>

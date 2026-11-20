@@ -1,7 +1,14 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
-import type { CatalogKindModel, EventFacts, EventModel, TrackingModel, WorkflowStageModel } from '../src/contracts';
+import type {
+  CatalogKindModel,
+  EventFacts,
+  EventImage,
+  EventModel,
+  TrackingModel,
+  WorkflowStageModel,
+} from '../src/contracts';
 import { EventMediaCard } from '../src/kit';
 import { eventModel, sourceModel } from './Fixtures';
 
@@ -476,6 +483,77 @@ describe('event media card', () => {
     const wrapper = render(build(), { ...triage, trackPending: true });
 
     expect(wrapper.get('[data-test="event-stage-menu"]').attributes('disabled')).toBeDefined();
+  });
+});
+
+describe('event media card image source (imageSrc)', () => {
+  const stored = { ...poster, fileRef: '0193a5c2-4a4e-7a3b-8f19-5c1d2e3f4a5b' };
+  const copy = `https://files.example.test/${stored.fileRef}`;
+  /** Answers the stored copy of an image that names one, else null. */
+  const files = (_event: EventModel, image: EventImage, index: number) =>
+    image.fileRef ? `https://files.example.test/${image.fileRef}${index ? `?i=${index}` : ''}` : null;
+
+  it("shows the resolver's source, lazily and without a referrer", () => {
+    const resolver = vi.fn(files);
+    const event = build({ images: [stored, { url: 'https://cdn.example.test/second.jpg' }] });
+    const wrapper = render(event, { imageSrc: resolver });
+
+    expect(wrapper.findAll('img')).toHaveLength(1);
+    expect(wrapper.get('img').attributes()).toMatchObject({
+      src: copy,
+      loading: 'lazy',
+      referrerpolicy: 'no-referrer',
+      alt: 'Image: Ocharo',
+    });
+    expect(resolver).toHaveBeenCalledWith(event, stored, 0);
+    expect(wrapper.find('[data-test="event-date-tile"]').exists()).toBe(false);
+  });
+
+  it("uses the image's own url when the resolver gives null", () => {
+    const wrapper = render(build({ images: [poster] }), { imageSrc: files });
+
+    expect(wrapper.get('img').attributes('src')).toBe(poster.url);
+  });
+
+  it('falls back to the image url when the resolver source fails to load', async () => {
+    const wrapper = render(build({ images: [stored] }), { imageSrc: files });
+    expect(wrapper.get('img').attributes('src')).toBe(copy);
+
+    await wrapper.get('img').trigger('error');
+
+    expect(wrapper.get('img').attributes('src')).toBe(poster.url);
+    expect(wrapper.get('img').attributes('referrerpolicy')).toBe('no-referrer');
+    expect(wrapper.find('[data-test="event-date-tile"]').exists()).toBe(false);
+  });
+
+  it('falls back to the date tile when the resolver source and the url both fail', async () => {
+    const wrapper = render(build({ images: [stored] }), { imageSrc: files });
+
+    await wrapper.get('img').trigger('error');
+    await wrapper.get('img').trigger('error');
+
+    expect(wrapper.find('img').exists()).toBe(false);
+    expect(wrapper.find('[data-test="event-date-tile"]').exists()).toBe(true);
+  });
+
+  it('shows the resolver source for an image whose url is unsafe, and the tile once it fails', async () => {
+    const wrapper = render(build({ images: [{ url: 'javascript:alert(1)', fileRef: stored.fileRef }] }), {
+      imageSrc: files,
+    });
+    expect(wrapper.get('img').attributes('src')).toBe(copy);
+
+    await wrapper.get('img').trigger('error');
+
+    expect(wrapper.find('img').exists()).toBe(false);
+    expect(wrapper.find('[data-test="event-date-tile"]').exists()).toBe(true);
+  });
+
+  it('keeps showing the url of an image that names a copy when there is no resolver', () => {
+    expect(
+      render(build({ images: [stored] }))
+        .get('img')
+        .attributes('src'),
+    ).toBe(poster.url);
   });
 });
 
