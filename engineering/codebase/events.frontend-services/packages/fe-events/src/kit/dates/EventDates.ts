@@ -144,8 +144,15 @@ export function eventWhenRange(when: EventWhen | null | undefined): EventWhenRan
   return { first: day, last: day };
 }
 
-/** Returns a month's name in `locale` from the kit's fixed tables: `short` as written beside a day, `standalone` alone. */
-export function eventMonthName(month: number, locale: EventsLocale, form: 'short' | 'standalone' = 'short'): string {
+/**
+ * Returns a month's name in `locale` from the kit's fixed tables: `short` as written beside a day, `standalone` alone
+ * (abbreviated where the language abbreviates), `long` in full, as a heading writes it.
+ */
+export function eventMonthName(
+  month: number,
+  locale: EventsLocale,
+  form: 'short' | 'standalone' | 'long' = 'short',
+): string {
   return monthNames[locale][form][month] ?? '';
 }
 

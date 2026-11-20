@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { EventMediaCard } from '@wow-two-beta/fe-events/kit';
+import { EventMediaCard, toEventsLocale } from '@wow-two-beta/fe-events/kit';
 import { computed, onMounted, ref } from 'vue';
 import expoPoster from './posters/poster-expo.svg?no-inline';
 import runwayPoster from './posters/poster-runway.svg?no-inline';
@@ -17,13 +17,15 @@ import {
  * Renders sample event cards in the feed's grid at four viewport widths — 1440, 1024, 768 and 390 — to check the
  * columns and each card state by eye. A development page only: `cards.html`, served by the dev server and left out of
  * the build. The posters are imported as files (`?no-inline`) and resolve against the page's address, since the card
- * shows only http(s) images.
+ * shows only http(s) images. `?locale=ru` or `?locale=uz` writes the cards in that language (English by default), to
+ * check the date tile's month names at every width.
  */
 defineOptions({ name: 'CardGallery' });
 
 /** The page's side gutters (1.5rem each) the content width gives up; the console's rail is not drawn here. */
 const Gutter = 48;
 const viewports = [1440, 1024, 768, 390];
+const locale = toEventsLocale(new URLSearchParams(window.location.search).get('locale'));
 const absolute = (url: string) => new URL(url, window.location.href).href;
 const samples = computed(() =>
   cardSamples({ runway: absolute(runwayPoster), expo: absolute(expoPoster), showcase: absolute(showcasePoster) }),
@@ -68,6 +70,7 @@ onMounted(() => {
           <li v-for="sample in samples" :key="sample.event.id" class="min-w-0" :title="sample.label">
             <EventMediaCard
               :event="sample.event"
+              :locale="locale"
               :today="sampleToday"
               :kinds="sampleKinds"
               :href="`#${sample.event.id}`"

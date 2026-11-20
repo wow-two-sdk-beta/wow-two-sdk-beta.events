@@ -28,6 +28,18 @@ describe('event card gallery', () => {
     expect(first.findAll('[data-test="event-date-tile"]').length).toBeGreaterThanOrEqual(5);
     expect(first.findAll('[data-dimmed]')).toHaveLength(3);
     expect(first.find('[data-test="event-deadline"][data-tone="urgent"]').exists()).toBe(true);
+    // A month-only start draws the month name and the year, with no large day; the undated one has the icon alone.
+    const monthOnly = first
+      .findAll('[data-test="event-date-tile"]')
+      .filter((tile) => tile.find('[data-test="tile-year"]').exists());
+    expect(monthOnly).toHaveLength(1);
+    expect(monthOnly[0]!.find('[data-test="tile-day"]').exists()).toBe(false);
+    expect(monthOnly[0]!.get('[data-test="tile-month"]').text()).toBe('April');
+    expect(
+      first
+        .findAll('[data-test="event-date-tile"]')
+        .filter((tile) => !tile.find('[data-test="tile-month"]').exists() && tile.find('svg').exists()),
+    ).toHaveLength(1);
     expect(first.find('[data-test="event-priority"]').exists()).toBe(true);
     expect(first.find('[data-test="event-stage-menu"]').exists()).toBe(true);
   });

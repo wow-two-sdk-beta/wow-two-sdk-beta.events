@@ -153,11 +153,16 @@ const quick = computed(() =>
 );
 const highPriority = computed(() => props.tracking?.priority === 'high');
 
+/**
+ * The date tile's text: a dated start is the day in the large type with the short month under it; a month-only start
+ * has no day to show, so it gets the full month name in the month's type with the year under it in the small type.
+ * Null for an undated start (or a year only), which leaves the kind's icon alone.
+ */
 const tile = computed(() => {
   const start = readEventWhen(props.event.facts.starts);
   if (!start || start.month === undefined) return null;
   return start.day === undefined
-    ? { big: eventMonthName(start.month, props.locale, 'standalone'), small: String(start.year), month: '' }
+    ? { big: '', small: String(start.year), month: eventMonthName(start.month, props.locale, 'long') }
     : { big: String(start.day), small: '', month: eventMonthName(start.month, props.locale) };
 });
 
@@ -241,13 +246,21 @@ const track = (next: string) => emit('track', props.event.id, next);
           class="grid size-full place-items-center bg-gradient-to-br from-primary/30 via-primary-soft to-muted text-primary-soft-foreground"
           data-test="event-date-tile"
         >
-          <div class="-mt-34 flex flex-col items-center">
+          <div class="-mt-34 flex max-w-full flex-col items-center px-4 text-center">
             <template v-if="tile">
-              <span class="text-6xl leading-none font-semibold tabular-nums" data-test="tile-day">{{ tile.big }}</span>
-              <span v-if="tile.month" class="mt-1 text-2xl leading-none font-semibold" data-test="tile-month">
+              <span v-if="tile.big" class="text-6xl leading-none font-semibold tabular-nums" data-test="tile-day">
+                {{ tile.big }}
+              </span>
+              <span
+                class="break-words text-2xl leading-none font-semibold"
+                :class="tile.big ? 'mt-1' : ''"
+                data-test="tile-month"
+              >
                 {{ tile.month }}
               </span>
-              <span v-else class="mt-1 text-lg leading-none font-medium" data-test="tile-year">{{ tile.small }}</span>
+              <span v-if="tile.small" class="mt-1 text-lg leading-none font-medium" data-test="tile-year">
+                {{ tile.small }}
+              </span>
             </template>
             <EventGlyph
               :name="kindGlyph(event.facts.kind)"
