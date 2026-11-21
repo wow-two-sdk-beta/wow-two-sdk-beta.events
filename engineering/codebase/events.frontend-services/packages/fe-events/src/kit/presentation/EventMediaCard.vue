@@ -17,7 +17,6 @@ import {
   readEventWhen,
 } from '../dates/EventDates';
 import { eventTitle, safeHttpUrl } from '../facts/EventFactsText';
-import { kindGlyph } from '../facts/EventGlyphs';
 import { listingRemoved, sourceLabel } from '../facts/EventSources';
 import { EventsLabels } from '../text/EventsLabels';
 import { type EventsLocale } from '../text/EventsLocale';
@@ -35,8 +34,8 @@ import type {
 
 /**
  * Shows one event as an image-first card, the look of the SCFD Posts tab. The image (`facts.images[0]`) fills
- * the card; with none, or a failed one, a date tile shows the start's day and month on the brand gradient with the
- * kind's icon (an undated event shows the icon alone). Lower-case glass pills at the top start give the kind, the
+ * the card; with none, or a failed one, a date tile shows the start's day, month and year on the brand gradient, the
+ * same shape whether the start is dated, month-only or missing. Lower-case glass pills at the top start give the kind, the
  * stage when the event is tracked, cancelled, postponed or online when the facts say so, and removed. At the top end, a
  * menu holds the quick stages for an event at the default stage, and a mark shows a high priority. The text panel holds
  * the title (two lines), one line with the dates and the city, then the next open deadline in its tone, or else the
@@ -165,16 +164,20 @@ const quick = computed(() =>
 const highPriority = computed(() => props.tracking?.priority === 'high');
 
 /**
- * The date tile's text: a dated start is the day in the large type with the short month under it; a month-only start
- * has no day to show, so it gets the full month name in the month's type with the year under it in the small type.
- * Null for an undated start (or a year only), which leaves the kind's icon alone.
+ * The date tile's text, always this shape: `big` the day number, or `?` once the start has none; `month` the short
+ * month name, or the "TBA" message once the start has none; `small` the year, only when it differs from `today`'s.
  */
 const tile = computed(() => {
   const start = readEventWhen(props.event.facts.starts);
-  if (!start || start.month === undefined) return null;
-  return start.day === undefined
-    ? { big: '', small: String(start.year), month: eventMonthName(start.month, props.locale, 'long') }
-    : { big: String(start.day), small: '', month: eventMonthName(start.month, props.locale) };
+  const currentYear = Number(day.value.slice(0, 4));
+  return {
+    big: start?.day !== undefined ? String(start.day) : '?',
+    month:
+      start?.month !== undefined
+        ? eventMonthName(start.month, props.locale)
+        : eventsText('tileUnknownMonth', props.locale),
+    small: start?.year !== undefined && start.year !== currentYear ? String(start.year) : '',
+  };
 });
 
 const dates = computed(() =>
@@ -258,26 +261,19 @@ const track = (next: string) => emit('track', props.event.id, next);
           data-test="event-date-tile"
         >
           <div class="-mt-34 flex max-w-full flex-col items-center px-4 text-center">
-            <template v-if="tile">
-              <span v-if="tile.big" class="text-6xl leading-none font-semibold tabular-nums" data-test="tile-day">
-                {{ tile.big }}
-              </span>
-              <span
-                class="break-words text-2xl leading-none font-semibold"
-                :class="tile.big ? 'mt-1' : ''"
-                data-test="tile-month"
-              >
-                {{ tile.month }}
-              </span>
-              <span v-if="tile.small" class="mt-1 text-lg leading-none font-medium" data-test="tile-year">
-                {{ tile.small }}
-              </span>
-            </template>
-            <EventGlyph
-              :name="kindGlyph(event.facts.kind)"
-              :size="tile ? 20 : 44"
-              :class="tile ? 'mt-3 opacity-70' : 'opacity-60'"
-            />
+            <span
+              class="text-6xl leading-none font-semibold tabular-nums"
+              :class="tile.big === '?' ? 'opacity-50' : ''"
+              data-test="tile-day"
+            >
+              {{ tile.big }}
+            </span>
+            <span class="mt-1 break-words text-2xl leading-none font-semibold" data-test="tile-month">
+              {{ tile.month }}
+            </span>
+            <span class="mt-1 min-h-[1.125rem] text-lg leading-none font-medium" data-test="tile-year">
+              {{ tile.small }}
+            </span>
           </div>
         </div>
       </slot>

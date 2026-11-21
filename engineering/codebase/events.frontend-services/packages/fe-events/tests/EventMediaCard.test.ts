@@ -164,14 +164,14 @@ describe('event media card', () => {
     expect(wrapper.get('img').attributes('alt')).toBe('Fashion Week');
   });
 
-  it('shows the date tile with the day, the month and the kind icon when there is no image', () => {
+  it('shows the date tile with the day and the month, and no icon, when there is no image', () => {
     const wrapper = render(build());
 
     expect(wrapper.find('img').exists()).toBe(false);
     const tile = wrapper.get('[data-test="event-date-tile"]');
     expect(tile.get('[data-test="tile-day"]').text()).toBe('12');
     expect(tile.get('[data-test="tile-month"]').text()).toBe('Dec');
-    expect(tile.get('svg').attributes('data-glyph')).toBe('shirt');
+    expect(tile.find('svg').exists()).toBe(false);
     expect(tile.classes().join(' ')).toContain('from-primary/30');
   });
 
@@ -184,64 +184,60 @@ describe('event media card', () => {
     expect(wrapper.get('[data-test="tile-month"]').text()).toBe('мар.');
   });
 
-  it('shows a month-only start as the month name and the year, with no large day, then the icon', () => {
-    const month = render(build({ starts: { value: '2027-03', precision: 'month', certainty: 'estimated' } }));
-    const tile = month.get('[data-test="event-date-tile"]');
+  it('shapes every tile the same way: dated, month-only, year-only and undated (T08)', () => {
+    const tileOf = (facts: Partial<EventFacts>) => render(build(facts)).get('[data-test="event-date-tile"]');
 
-    expect(tile.find('[data-test="tile-day"]').exists()).toBe(false);
-    expect(tile.get('[data-test="tile-month"]').text()).toBe('March');
-    expect(tile.get('[data-test="tile-year"]').text()).toBe('2027');
-    expect(tile.get('[data-test="tile-month"]').classes()).toContain('text-2xl');
-    expect(tile.get('[data-test="tile-year"]').classes()).toContain('text-lg');
-    expect(tile.find('.text-6xl').exists()).toBe(false);
-    expect(tile.findAll('[data-test], svg').map((node) => node.attributes('data-test') ?? 'glyph')).toEqual([
-      'tile-month',
-      'tile-year',
-      'glyph',
-    ]);
-  });
+    const dated = tileOf({ starts: { value: '2026-12-16', precision: 'day', certainty: 'announced' } });
+    expect(dated.get('[data-test="tile-day"]').text()).toBe('16');
+    expect(dated.get('[data-test="tile-day"]').classes()).not.toContain('opacity-50');
+    expect(dated.get('[data-test="tile-month"]').text()).toBe('Dec');
+    expect(dated.get('[data-test="tile-year"]').text()).toBe('');
 
-  it('writes a month-only tile in the longest month names of each language', () => {
-    const september = { starts: { value: '2026-09', precision: 'month', certainty: 'announced' } } as const;
+    const anotherYear = tileOf({ starts: { value: '2027-12-16', precision: 'day', certainty: 'announced' } });
+    expect(anotherYear.get('[data-test="tile-day"]').text()).toBe('16');
+    expect(anotherYear.get('[data-test="tile-month"]').text()).toBe('Dec');
+    expect(anotherYear.get('[data-test="tile-year"]').text()).toBe('2027');
 
-    const uz = render(build(september), { locale: 'uz' });
-    expect(uz.get('[data-test="tile-month"]').text()).toBe('Sentabr');
-    expect(uz.get('[data-test="tile-year"]').text()).toBe('2026');
-    expect(uz.find('[data-test="tile-day"]').exists()).toBe(false);
+    const monthOnly = tileOf({ starts: { value: '2026-12', precision: 'month', certainty: 'estimated' } });
+    expect(monthOnly.get('[data-test="tile-day"]').text()).toBe('?');
+    expect(monthOnly.get('[data-test="tile-day"]').classes()).toContain('opacity-50');
+    expect(monthOnly.get('[data-test="tile-month"]').text()).toBe('Dec');
+    expect(monthOnly.get('[data-test="tile-year"]').text()).toBe('');
 
-    const en = render(build(september), { locale: 'en' });
-    expect(en.get('[data-test="tile-month"]').text()).toBe('September');
+    const yearOnly = tileOf({ starts: { value: '2027', precision: 'year', certainty: 'announced' } });
+    expect(yearOnly.get('[data-test="tile-day"]').text()).toBe('?');
+    expect(yearOnly.get('[data-test="tile-month"]').text()).toBe('TBA');
+    expect(yearOnly.get('[data-test="tile-year"]').text()).toBe('2027');
 
-    const ru = render(build(september), { locale: 'ru' });
-    expect(ru.get('[data-test="tile-month"]').text()).toBe('Сентябрь');
-    expect(ru.get('[data-test="tile-year"]').text()).toBe('2026');
-    for (const wrapper of [uz, en, ru]) {
-      expect(wrapper.get('[data-test="tile-month"]').classes()).toContain('break-words');
+    const noStart = tileOf({ starts: { value: null, precision: 'unknown', certainty: 'announced' } });
+    expect(noStart.get('[data-test="tile-day"]').text()).toBe('?');
+    expect(noStart.get('[data-test="tile-day"]').classes()).toContain('opacity-50');
+    expect(noStart.get('[data-test="tile-month"]').text()).toBe('TBA');
+    expect(noStart.get('[data-test="tile-year"]').text()).toBe('');
+
+    for (const tile of [dated, anotherYear, monthOnly, yearOnly, noStart]) {
+      expect(tile.find('svg').exists()).toBe(false);
+      expect(tile.get('[data-test="tile-day"]').classes()).toContain('text-6xl');
+      expect(tile.get('[data-test="tile-month"]').classes()).toContain('text-2xl');
+      expect(tile.get('[data-test="tile-year"]').classes()).toContain('text-lg');
     }
   });
 
-  it('keeps the large day with the short month under it for a dated start, and no year', () => {
-    const tile = render(build()).get('[data-test="event-date-tile"]');
+  it('writes the month slot short in every language', () => {
+    const september = { starts: { value: '2026-09', precision: 'month', certainty: 'announced' } } as const;
 
-    expect(tile.get('[data-test="tile-day"]').classes()).toContain('text-6xl');
-    expect(tile.get('[data-test="tile-day"]').text()).toBe('12');
-    expect(tile.get('[data-test="tile-month"]').text()).toBe('Dec');
-    expect(tile.find('[data-test="tile-year"]').exists()).toBe(false);
-  });
+    const uz = render(build(september), { locale: 'uz' });
+    expect(uz.get('[data-test="tile-month"]').text()).toBe('sen');
+    expect(uz.get('[data-test="tile-day"]').text()).toBe('?');
 
-  it('shows an undated event, and one known only to its year, as the kind icon alone', () => {
-    const undated = render(
-      build({ starts: { value: null, precision: 'unknown', certainty: 'announced' }, kind: 'other' }),
-    );
-    const tile = undated.get('[data-test="event-date-tile"]');
-    expect(tile.find('[data-test="tile-day"]').exists()).toBe(false);
-    expect(tile.find('[data-test="tile-month"]').exists()).toBe(false);
-    expect(tile.find('[data-test="tile-year"]').exists()).toBe(false);
-    expect(tile.get('svg').attributes('data-glyph')).toBe('calendar');
+    const en = render(build(september), { locale: 'en' });
+    expect(en.get('[data-test="tile-month"]').text()).toBe('Sep');
 
-    const yearOnly = render(build({ starts: { value: '2027', precision: 'year', certainty: 'announced' } }));
-    expect(yearOnly.find('[data-test="tile-month"]').exists()).toBe(false);
-    expect(yearOnly.get('[data-test="event-date-tile"] svg').attributes('data-glyph')).toBe('shirt');
+    const ru = render(build(september), { locale: 'ru' });
+    expect(ru.get('[data-test="tile-month"]').text()).toBe('сент.');
+    for (const wrapper of [uz, en, ru]) {
+      expect(wrapper.get('[data-test="tile-month"]').classes()).toContain('break-words');
+    }
   });
 
   it('falls back to the date tile when the image fails to load, or its address is unsafe', async () => {

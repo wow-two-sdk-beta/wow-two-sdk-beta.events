@@ -276,14 +276,14 @@ describe('card slots forwarded by the feed', () => {
 
   it('card-fallback replaces the date tile of the cards with no image and receives the tile', async () => {
     const wrapper = await renderCards({
-      'card-fallback': (scope: { tile: { big: string } | null; kindKey?: string }) =>
-        h('div', { 'data-test': 'custom-fallback' }, `${scope.tile?.big ?? 'no tile'}/${scope.kindKey}`),
+      'card-fallback': (scope: { tile: { big: string }; kindKey?: string }) =>
+        h('div', { 'data-test': 'custom-fallback' }, `${scope.tile.big}/${scope.kindKey}`),
     });
 
     expect(wrapper.findAll('[data-test="event-date-tile"]')).toHaveLength(0);
     expect(wrapper.findAll('[data-test="custom-fallback"]').map((item) => item.text())).toEqual([
       '14/runway',
-      'no tile/runway',
+      '?/runway',
     ]);
     expect(wrapper.findAll('[data-test="event-image"]')).toHaveLength(1);
   });

@@ -18,10 +18,10 @@ export interface EventCardMediaSlot extends EventCardSlotBase {
 /** `fallback`: the tile shown when there is no media. The date tile is the default. */
 export interface EventCardFallbackSlot extends EventCardSlotBase {
   /**
-   * The start as a tile: `big` is the day (large type) with the short `month` under it; a month-only start has no `big`
-   * and carries the full `month` name with the year in `small`. Null when undated or a year only.
+   * The start as a tile, always this shape: `big` the day number, or `?` once the start has no day; `month` the
+   * short month name, or "TBA" once the start has no month; `small` the year, only when it differs from today's.
    */
-  readonly tile: { readonly big: string; readonly small: string; readonly month: string } | null;
+  readonly tile: { readonly big: string; readonly small: string; readonly month: string };
   /** The event's kind key, for an icon. */
   readonly kindKey: string | undefined;
 }
