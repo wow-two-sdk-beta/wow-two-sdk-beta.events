@@ -1,6 +1,6 @@
 # wow-two-sdk-beta.events — Backlog
 
-*Last updated: 2026-11-20*
+*Last updated: 2026-11-21*
 
 Every unbuilt item, grouped; top of each group = next. Shipped work lives in [`version-track/`](version-track/).
 Shape: wow-two-ws/conventions/planning/version-track/version-track.md
@@ -57,6 +57,8 @@ ChatGPT builds these in the pull order of wow-two-ws `system/sessions/events-int
 | V05 Webhooks for published, changed, cancelled and deadline events | feature | spec in `tasks-platform.md` |
 | V06 Calendar export with VTIMEZONE blocks | fix | spec in `tasks-platform.md` |
 | E32 Decide a per-source policy for event thumbnails | product | spec in `tasks-events-path.md` |
+| K01 fe-events: `distinctEventImages` treats size variants of one file (`…_l`, `…_m`) as two images, so the gallery repeats a photo | fix | parked until the week of 2026-11-23 (developer, 2026-11-21: sources first, improvements next week); UI lane #21, evidence ocharo-platform `engineering/planning/version-track/v0.3/events-review/after/after.md` |
+| K02 fe-events: the detail page's source link is a 38×20 px tap target on phone; make it at least 44×44 | fix | low; parked as K01; same evidence |
 
 ## Intake
 
