@@ -164,19 +164,22 @@ const quick = computed(() =>
 const highPriority = computed(() => props.tracking?.priority === 'high');
 
 /**
- * The date tile's text, always this shape: `big` the day number, or `?` once the start has none; `month` the short
- * month name, or the "TBA" message once the start has none; `small` the year, only when it differs from `today`'s.
+ * The date tile's text: `big` the day number, or `?` once the start has no day; `month` the short month name, or the
+ * "TBA" message once the start has no month; `small` the year, or the "this year" message when it is `today`'s year.
+ * With no start at all `unknown` is true, `big` is `?` and `month` and `small` are empty: the tile shows one `?`.
  */
 const tile = computed(() => {
   const start = readEventWhen(props.event.facts.starts);
+  if (start?.year === undefined) return { big: '?', month: '', small: '', unknown: true };
   const currentYear = Number(day.value.slice(0, 4));
   return {
-    big: start?.day !== undefined ? String(start.day) : '?',
+    big: start.day !== undefined ? String(start.day) : '?',
     month:
-      start?.month !== undefined
+      start.month !== undefined
         ? eventMonthName(start.month, props.locale)
         : eventsText('tileUnknownMonth', props.locale),
-    small: start?.year !== undefined && start.year !== currentYear ? String(start.year) : '',
+    small: start.year === currentYear ? eventsText('tileThisYear', props.locale) : String(start.year),
+    unknown: false,
   };
 });
 
@@ -260,7 +263,13 @@ const track = (next: string) => emit('track', props.event.id, next);
           class="grid size-full place-items-center bg-gradient-to-br from-primary/30 via-primary-soft to-muted text-primary-soft-foreground"
           data-test="event-date-tile"
         >
-          <div class="-mt-34 flex max-w-full flex-col items-center px-4 text-center">
+          <div
+            v-if="tile.unknown"
+            class="-mt-34 flex h-[6.875rem] max-w-full items-center justify-center px-4 text-center"
+          >
+            <span class="text-6xl leading-none font-semibold tabular-nums opacity-50" data-test="tile-unknown">?</span>
+          </div>
+          <div v-else class="-mt-34 flex h-[6.875rem] max-w-full flex-col items-center px-4 text-center">
             <span
               class="text-6xl leading-none font-semibold tabular-nums"
               :class="tile.big === '?' ? 'opacity-50' : ''"
@@ -271,7 +280,7 @@ const track = (next: string) => emit('track', props.event.id, next);
             <span class="mt-1 break-words text-2xl leading-none font-semibold" data-test="tile-month">
               {{ tile.month }}
             </span>
-            <span class="mt-1 min-h-[1.125rem] text-lg leading-none font-medium" data-test="tile-year">
+            <span class="mt-1 text-lg leading-none font-medium whitespace-nowrap" data-test="tile-year">
               {{ tile.small }}
             </span>
           </div>

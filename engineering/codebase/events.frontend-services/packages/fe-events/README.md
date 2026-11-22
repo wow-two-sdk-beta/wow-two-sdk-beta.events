@@ -77,8 +77,7 @@ to the consumer's Tailwind sources:
     `attention` (`{ key, label, count }[]`), each expanding to the `#attention` slot (`{ key, close }`).
   - Breaks from v1: `EventCard` and the `variant` prop are gone (every event is a card), `shownFields` is dropped
     from the feed (cost stays off cards; `TrackingShownField` stays for `EventDetail`), and the peer floor is `0.0.56`.
-    The card shows `facts.images[0]`, else a date tile (the start's day in large type with the month under it, the kind's icon; a
-    month-only start the full month name with the year under it and no large day; an undated event the icon alone). Top start: lower-case glass pills for the kind, the stage when tracked, cancelled /
+    The card shows `facts.images[0]`, else a date tile (a day / month / year stack on every tile: the day or a muted `?`, the short month or `TBA`, the year or `this year`; an undated event one large muted `?`). Top start: lower-case glass pills for the kind, the stage when tracked, cancelled /
     postponed / online and removed. Top end: a menu of `quickStages` for an event at the default stage, and a mark for
     high priority. Panel: the title in two lines, "dates · city" (`ongoing` / `finished`), then the next open deadline
     ("apply by 3 Mar · 5d", "registration by 20 Jan · 71d"; the year only 12 or more months out; red when urgent), else
@@ -124,7 +123,7 @@ to the consumer's Tailwind sources:
   | Slot (feed: `card-…`) | Zone | Replaces | Scope beside `event` and `tracking` |
   |---|---|---|---|
   | `media` | behind the card | the curated image | `image` (`{ url, alt }`, `url` the source tried now, or null) |
-  | `fallback` | behind the card, no media | the date tile | `tile` (`{ big, small, month }`: the day, the year of a month-only start, the month; or null), `kindKey` |
+  | `fallback` | behind the card, no media | the date tile | `tile` (`{ big, small, month, unknown }`: the day or `?`, the year or "this year", the month or "TBA"; `unknown` for no start: one `?`), `kindKey` |
   | `pills` | top start | kind, stage, status, online and removed pills | `kind`, `stage`, `status` (labels), `online`, `removed` |
   | `actions` | top end | the high-priority mark and the quick-stage menu | `highPriority`, `quickStages`, `pending`, `track(stage)` |
   | `title` | the heading | the stretched link or `open` button | `title`, `href`, `open()`, `follow(event)` |

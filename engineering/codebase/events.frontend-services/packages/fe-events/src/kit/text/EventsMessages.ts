@@ -11,6 +11,7 @@ export const EventsMessages = {
   expected: entry('≈ {date} (expected)', '≈ {date} (ожидается)', '≈ {date} (kutilmoqda)'),
   yearOnly: entry('{year}, month not announced', '{year}, месяц не объявлен', '{year}, oyi e’lon qilinmagan'),
   tileUnknownMonth: entry('TBA', 'TBA', 'TBA'),
+  tileThisYear: entry('this year', 'this year', 'this year'),
   deadlinePassed: entry('Deadline passed', 'Срок истёк', 'Muddat o‘tgan'),
   deadlineToday: entry('Deadline today', 'Срок сегодня', 'Muddat bugun'),
   oneDayLeft: entry('1 day left', 'Остался 1 день', '1 kun qoldi'),

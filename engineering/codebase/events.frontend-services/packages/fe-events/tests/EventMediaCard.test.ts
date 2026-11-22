@@ -191,7 +191,7 @@ describe('event media card', () => {
     expect(dated.get('[data-test="tile-day"]').text()).toBe('16');
     expect(dated.get('[data-test="tile-day"]').classes()).not.toContain('opacity-50');
     expect(dated.get('[data-test="tile-month"]').text()).toBe('Dec');
-    expect(dated.get('[data-test="tile-year"]').text()).toBe('');
+    expect(dated.get('[data-test="tile-year"]').text()).toBe('this year');
 
     const anotherYear = tileOf({ starts: { value: '2027-12-16', precision: 'day', certainty: 'announced' } });
     expect(anotherYear.get('[data-test="tile-day"]').text()).toBe('16');
@@ -202,25 +202,45 @@ describe('event media card', () => {
     expect(monthOnly.get('[data-test="tile-day"]').text()).toBe('?');
     expect(monthOnly.get('[data-test="tile-day"]').classes()).toContain('opacity-50');
     expect(monthOnly.get('[data-test="tile-month"]').text()).toBe('Dec');
-    expect(monthOnly.get('[data-test="tile-year"]').text()).toBe('');
+    expect(monthOnly.get('[data-test="tile-year"]').text()).toBe('this year');
 
     const yearOnly = tileOf({ starts: { value: '2027', precision: 'year', certainty: 'announced' } });
     expect(yearOnly.get('[data-test="tile-day"]').text()).toBe('?');
     expect(yearOnly.get('[data-test="tile-month"]').text()).toBe('TBA');
     expect(yearOnly.get('[data-test="tile-year"]').text()).toBe('2027');
 
-    const noStart = tileOf({ starts: { value: null, precision: 'unknown', certainty: 'announced' } });
-    expect(noStart.get('[data-test="tile-day"]').text()).toBe('?');
-    expect(noStart.get('[data-test="tile-day"]').classes()).toContain('opacity-50');
-    expect(noStart.get('[data-test="tile-month"]').text()).toBe('TBA');
-    expect(noStart.get('[data-test="tile-year"]').text()).toBe('');
+    const monthOnlyLater = tileOf({ starts: { value: '2027-04', precision: 'month', certainty: 'estimated' } });
+    expect(monthOnlyLater.get('[data-test="tile-day"]').text()).toBe('?');
+    expect(monthOnlyLater.get('[data-test="tile-month"]').text()).toBe('Apr');
+    expect(monthOnlyLater.get('[data-test="tile-year"]').text()).toBe('2027');
 
-    for (const tile of [dated, anotherYear, monthOnly, yearOnly, noStart]) {
+    const yearOnlyNow = tileOf({ starts: { value: '2026', precision: 'year', certainty: 'announced' } });
+    expect(yearOnlyNow.get('[data-test="tile-day"]').text()).toBe('?');
+    expect(yearOnlyNow.get('[data-test="tile-month"]').text()).toBe('TBA');
+    expect(yearOnlyNow.get('[data-test="tile-year"]').text()).toBe('this year');
+
+    for (const tile of [dated, anotherYear, monthOnly, monthOnlyLater, yearOnly, yearOnlyNow]) {
       expect(tile.find('svg').exists()).toBe(false);
       expect(tile.get('[data-test="tile-day"]').classes()).toContain('text-6xl');
       expect(tile.get('[data-test="tile-month"]').classes()).toContain('text-2xl');
       expect(tile.get('[data-test="tile-year"]').classes()).toContain('text-lg');
+      expect(tile.get('[data-test="tile-year"]').classes()).toContain('whitespace-nowrap');
     }
+  });
+
+  it('shows one muted ? and no month or year when there is no start at all', () => {
+    const tile = render(build({ starts: { value: null, precision: 'unknown', certainty: 'announced' } })).get(
+      '[data-test="event-date-tile"]',
+    );
+    const unknown = tile.get('[data-test="tile-unknown"]');
+    expect(unknown.text()).toBe('?');
+    expect(unknown.classes()).toContain('text-6xl');
+    expect(unknown.classes()).toContain('opacity-50');
+    expect(tile.text()).toBe('?');
+    expect(tile.find('[data-test="tile-month"]').exists()).toBe(false);
+    expect(tile.find('[data-test="tile-year"]').exists()).toBe(false);
+    expect(tile.find('[data-test="tile-day"]').exists()).toBe(false);
+    expect(tile.find('svg').exists()).toBe(false);
   });
 
   it('writes the month slot short in every language', () => {
@@ -602,12 +622,12 @@ describe('event media card zone slots', () => {
 
   it('fallback replaces the date tile with the tile in scope', () => {
     const wrapper = renderWith({
-      fallback: (scope: { tile: { big: string; month: string } | null }) =>
-        h('div', { 'data-test': 'custom-fallback' }, `${scope.tile?.big} ${scope.tile?.month}`),
+      fallback: (scope: { tile: { big: string; month: string; small: string; unknown: boolean } }) =>
+        h('div', { 'data-test': 'custom-fallback' }, `${scope.tile.big} ${scope.tile.month} ${scope.tile.small}`),
     });
 
     expect(wrapper.find('[data-test="event-date-tile"]').exists()).toBe(false);
-    expect(wrapper.get('[data-test="custom-fallback"]').text()).toBe('12 Dec');
+    expect(wrapper.get('[data-test="custom-fallback"]').text()).toBe('12 Dec this year');
   });
 
   it('pills replaces the pills with the labels in scope, and shows for an event with none', () => {

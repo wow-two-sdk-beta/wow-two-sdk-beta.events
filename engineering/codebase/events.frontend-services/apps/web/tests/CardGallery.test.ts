@@ -28,17 +28,19 @@ describe('event card gallery', () => {
     expect(first.findAll('[data-test="event-date-tile"]').length).toBeGreaterThanOrEqual(5);
     expect(first.findAll('[data-dimmed]')).toHaveLength(3);
     expect(first.find('[data-test="event-deadline"][data-tone="urgent"]').exists()).toBe(true);
-    // A month-only start keeps the muted day placeholder, the short month and the year; the undated one is muted
-    // throughout, with "TBA" for the month — every tile the same shape, no icon.
+    // A month-only start keeps the muted day placeholder, the short month and the year; the undated one is a single
+    // muted `?` — every other tile the same day / month / year stack, no icon.
     const tiles = first.findAll('[data-test="event-date-tile"]');
     const monthOnly = tiles.filter(
       (tile) =>
-        tile.get('[data-test="tile-day"]').text() === '?' && tile.get('[data-test="tile-month"]').text() !== 'TBA',
+        tile.find('[data-test="tile-day"]').exists() &&
+        tile.get('[data-test="tile-day"]').text() === '?' &&
+        tile.get('[data-test="tile-month"]').text() !== 'TBA',
     );
     expect(monthOnly).toHaveLength(1);
     expect(monthOnly[0]!.get('[data-test="tile-month"]').text()).toBe('Apr');
     expect(monthOnly[0]!.get('[data-test="tile-year"]').text()).toBe('2027');
-    expect(tiles.filter((tile) => tile.get('[data-test="tile-month"]').text() === 'TBA')).toHaveLength(1);
+    expect(tiles.filter((tile) => tile.find('[data-test="tile-unknown"]').exists())).toHaveLength(1);
     expect(first.find('[data-test="event-date-tile"] svg').exists()).toBe(false);
     expect(first.find('[data-test="event-priority"]').exists()).toBe(true);
     expect(first.find('[data-test="event-stage-menu"]').exists()).toBe(true);
