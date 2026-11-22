@@ -69,6 +69,13 @@ export type { EventProposalOptions } from './facts/EventProposalOptions';
 export { eventFactsDraft, validateEventFactsDraft, type EventFactsDraft } from './facts/EventFactsDraft';
 export { useEventsRequest, type EventsRequest } from './hooks/UseEventsRequest';
 export {
+  useEventsFilters,
+  type EventsCustomRange,
+  type EventsFilters,
+  type EventsFiltersOptions,
+  type EventsRouteQuery,
+} from './hooks/UseEventsFilters';
+export {
   EventsLocaleValues,
   pickText,
   pickTextEntry,
@@ -79,6 +86,7 @@ export {
 } from './text/EventsLocale';
 export { EventsMessages, eventsText, type EventsMessageKey } from './text/EventsMessages';
 export { EventsLabels, eventsFailureMessage, type EventsFailureContext } from './text/EventsLabels';
+export { eventsFacetBarLabels, type EventsFacetBarLabels } from './text/EventsFacetBarLabels';
 export { default as EventMediaCard } from './presentation/EventMediaCard.vue';
 export {
   EventCardZones,
@@ -93,6 +101,7 @@ export {
   type EventCardZone,
 } from './presentation/EventMediaCardSlots';
 export { default as EventsFeed } from './presentation/EventsFeed.vue';
+export { feedFacetBarClass, feedPillClass, feedSortClass } from './presentation/EventsFeedStyles';
 export { default as EventsDeadlines } from './presentation/EventsDeadlines.vue';
 export { default as EventDetail } from './presentation/EventDetail.vue';
 export { default as EventProposalForm } from './presentation/EventProposalForm.vue';

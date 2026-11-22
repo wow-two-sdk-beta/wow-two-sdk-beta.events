@@ -212,6 +212,7 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
     });
     expect(optionsOf(wrapper, 'when').map((option) => option.label)).toEqual([
       'Upcoming',
+      'Today',
       'This month',
       'Next 3 months',
       'This year',

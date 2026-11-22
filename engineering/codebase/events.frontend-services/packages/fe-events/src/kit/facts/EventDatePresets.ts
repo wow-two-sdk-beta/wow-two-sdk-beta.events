@@ -1,5 +1,13 @@
 /** Names the date presets the feed's "Filters" popover offers; `upcoming` is the default and `custom` takes a range. */
-export const EventDatePresetValues = ['upcoming', 'thisMonth', 'next3Months', 'thisYear', 'past', 'custom'] as const;
+export const EventDatePresetValues = [
+  'upcoming',
+  'today',
+  'thisMonth',
+  'next3Months',
+  'thisYear',
+  'past',
+  'custom',
+] as const;
 export type EventDatePreset = (typeof EventDatePresetValues)[number];
 
 /** Holds the dates a preset selects (`YYYY-MM-DD`) and whether events with no date still list. */
@@ -34,7 +42,8 @@ function addMonths(day: string, months: number): string {
 
 /**
  * Turns a preset into the `from` and `to` days the lists take, counted from `today`: `upcoming` from today on (undated
- * events included), `thisMonth` and `thisYear` the whole calendar month or year, `next3Months` today to three months
+ * events included), `today` that one day (the backend lists every event running on it: started on or before it, ending
+ * on or after it), `thisMonth` and `thisYear` the whole calendar month or year, `next3Months` today to three months
  * ahead, `past` up to yesterday. `custom` takes the range the reader picked and, without one yet, reads as `upcoming`.
  */
 export function eventDateRange(
@@ -45,6 +54,8 @@ export function eventDateRange(
   const year = today.slice(0, 4);
   const month = today.slice(0, 7);
   switch (preset) {
+    case 'today':
+      return { from: today, to: today, includeUndated: false };
     case 'thisMonth':
       return {
         from: `${month}-01`,

@@ -67,7 +67,7 @@ to the consumer's Tailwind sources:
   - a "Filters" popover: stages (an untracked event counts under the default stage), city, source (labels as stored,
     `curated` as "Curated"), three `FacetKind.Toggle` switch rows — "High priority" (`priority=high`, counted from the
     `high` priority), "Deadline within 30 days" (`deadlineBefore` 30 days from today, counted from `openDeadline`) and
-    "Show {hidden stages}" (lifts `excludeStages`) — and the date presets (upcoming by default, this month, next 3
+    "Show {hidden stages}" (lifts `excludeStages`) — and the date presets (upcoming by default, today, this month, next 3
     months, this year, past, custom: the fe sdk's `DateRangePicker` appears at the end of the bar); each pick shows as a
     removable chip, a toggle that is on as one chip with its bare label closed by `Remove {label}`;
   - the sort (`starts`, `added`, `deadline`; tracking only), then the proposal button (`canPropose`) and an overflow menu
@@ -78,7 +78,8 @@ to the consumer's Tailwind sources:
   changes. Month dividers show under the `starts` sort only (undated events last); `added` and `deadline` keep the
   server's order in a flat grid. Without `tracking` the same toolbar filters the catalog list: search, kind, scope and
   the date presets, with no counts, no pill, no sort and no stage, city, source or priority facets. `eventDateRange(preset,
-  today, custom?)` gives the `from` and `to` a preset means.
+  today, custom?)` gives the `from` and `to` a preset means (`today` is that one day, undated events left out; the
+  backend lists every event running on it).
   - Attention pills sit between the toolbar and the grid and hide at a count of 0: the built-in "{n} deadlines in 14
     days" (open `application` deadlines of the tracking summary, expanding to `EventsDeadlines`) and the consumer's
     `attention` (`{ key, label, count }[]`), each expanding to the `#attention` slot (`{ key, close }`).
@@ -91,6 +92,21 @@ to the consumer's Tailwind sources:
     ("apply by 3 Mar · 5d", "registration by 20 Jan · 71d"; the year only 12 or more months out; red when urgent), else
     the source names. The whole card opens the event (`eventHref`, else `open`), and it is dimmed when cancelled,
     removed or past. Organizer, scope, cost, the review state and the title-language tag stay on the event's page.
+- Shared filter state: `useEventsFilters(options)` (`./kit`) owns what the feed's toolbar holds — `search`, `selection`
+  and `sort` (writable refs for `v-model`), `customRange` and the date `preset`, the facet count requests,
+  `facetDefinitions`, `matchCount` and `totalCount` (computed values for the fe sdk `FacetBar`) and the query the feed
+  lists with. Its options (`client`, `catalog`, `locale`, `today`, `kinds`, `tracking`, `workflow`, `hiddenStages`,
+  `regions`) are values, refs or getters. A page that hosts the bar in a card of its own calls it, renders the
+  `FacetBar` with `eventsFacetBarLabels(locale)` (the feed's own label props) and `feedFacetBarClass`, and passes the
+  state on: `<EventsFeed :filters="filters" actions-to="#feed-actions" …>`. With `filters` the feed lists from that
+  state, renders no `events-toolbar` and starts no facet requests; its custom range picker, sort, "Propose an event"
+  and overflow menu sit in a right-aligned `events-actions` row above the attention pills, which `actionsTo` (a CSS
+  selector) moves into a page element. Without `filters` nothing changes. The calendar asks the same state for its
+  window: `filters.toWindowQuery(from, to)` is a `TrackingQuery` with every picked filter and no date preset, so a
+  month- or year-precision event comes back with its precision unchanged. `toRouteQuery()` and `fromRouteQuery(query)`
+  carry `q`, `stages`, `kinds`, `cities`, `sources`, `regions` (the scope's key), `when` and `sort` through the URL, so
+  two pages given one router query keep the filters; the toggles, a country list and a custom range stay on the page.
+  `feedSortClass` and `feedPillClass` export beside `feedFacetBarClass`.
 - Card zones are slots (`EventMediaCard`; `EventsFeed` forwards `card-{zone}` to every card). Each defaults to the
   content above, so a consumer swaps one zone and keeps the rest; every slot gets `{ event, tracking }` plus the values
   its zone renders (types `EventCard*Slot`, zones `EventCardZones`):

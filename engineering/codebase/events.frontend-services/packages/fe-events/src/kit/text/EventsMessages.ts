@@ -247,6 +247,7 @@ export const EventsMessages = {
   matchOf: entry('{matched} of {total}', '{matched} из {total}', '{total} tadan {matched}'),
   dateFacet: entry('Date', 'Дата', 'Sana'),
   datePresetUpcoming: entry('Upcoming', 'Предстоящие', 'Yaqinlashayotgan'),
+  datePresetToday: entry('Today', 'Сегодня', 'Bugun'),
   datePresetThisMonth: entry('This month', 'Этот месяц', 'Shu oy'),
   datePresetNext3Months: entry('Next 3 months', 'Ближайшие 3 месяца', 'Keyingi 3 oy'),
   datePresetThisYear: entry('This year', 'Этот год', 'Shu yil'),

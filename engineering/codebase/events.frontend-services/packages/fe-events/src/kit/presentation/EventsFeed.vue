@@ -1,30 +1,14 @@
 <script setup lang="ts">
-import { RegionCodes, regionFlag, regionName } from '@wow-two-beta/fe/foundation/i18n';
 import { ResultExtensions } from '@wow-two-beta/fe/foundation/results';
 import { useAdaptiveList } from '@wow-two-beta/fe/foundation/virtualization';
-import { Button } from '@wow-two-beta/fe/presentation/actions';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
+import { FacetBar } from '@wow-two-beta/fe/presentation/forms';
+import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import {
-  DateRangePicker,
-  FacetBar,
-  FacetKind,
-  FacetPlacement,
-  type FacetDefinition,
-  type FacetOption,
-  type FacetSelection,
-} from '@wow-two-beta/fe/presentation/forms';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, MenuItem } from '@wow-two-beta/fe/presentation/nav';
-import { computed, nextTick, onMounted, onScopeDispose, shallowRef, useTemplateRef, watch } from 'vue';
-import {
-  EventsConstants,
   type CatalogKindModel,
   type EventImage,
   type EventModel,
-  type EventQuery,
-  type TrackingFacetCount,
   type TrackingModel,
-  type TrackingQuery,
-  type TrackingSort,
   type TrackingSpec,
   type WorkflowModel,
 } from '../../contracts';
@@ -32,15 +16,14 @@ import { downloadEventsCalendar } from '../calendar/DownloadEventsCalendar';
 import type { EventsClient, EventsResult } from '../client/CreateEventsClient';
 import type { EventsFailure } from '../client/EventsFailure';
 import { deadlineDaysLeft, eventGroupHeading, groupEventsByMonth, localIsoDate } from '../dates/EventDates';
-import { addEventDays, eventDateRange, EventDatePresetValues, type EventDatePreset } from '../facts/EventDatePresets';
 import { eventTitle } from '../facts/EventFactsText';
 import type { EventProposalOptions } from '../facts/EventProposalOptions';
-import { regionQuery, type EventRegion } from '../facts/EventRegions';
+import type { EventRegion } from '../facts/EventRegions';
+import { useEventsFilters, type EventsFilters } from '../hooks/UseEventsFilters';
 import { useEventsRequest } from '../hooks/UseEventsRequest';
-import { EventsLabels } from '../text/EventsLabels';
-import { pickText, type EventsLocale } from '../text/EventsLocale';
-import { eventsText, type EventsMessageKey } from '../text/EventsMessages';
-import EventGlyph from './EventGlyph.vue';
+import { eventsFacetBarLabels } from '../text/EventsFacetBarLabels';
+import type { EventsLocale } from '../text/EventsLocale';
+import { eventsText } from '../text/EventsMessages';
 import EventMediaCard from './EventMediaCard.vue';
 import {
   type EventCardActionsSlot,
@@ -52,8 +35,9 @@ import {
   type EventCardTitleSlot,
 } from './EventMediaCardSlots';
 import EventProposalForm from './EventProposalForm.vue';
-import { feedFacetBarClass, feedPillClass, feedSortClass } from './EventsFeedStyles';
 import EventsDeadlines from './EventsDeadlines.vue';
+import EventsFeedActions from './EventsFeedActions.vue';
+import { feedFacetBarClass, feedPillClass } from './EventsFeedStyles';
 import FailureNotice from './FailureNotice.vue';
 
 interface FeedItem {
@@ -84,6 +68,13 @@ interface FeedPage {
  * A `card-{zone}` slot (`card-media`, `card-fallback`, `card-pills`, `card-actions`, `card-title`, `card-meta`,
  * `card-detail`) is forwarded to every card's slot of that zone with the card's own slot props; a zone left empty keeps
  * the card's content.
+ *
+ * The filter state lives in `useEventsFilters`. The feed calls it from its own props; a page that hosts the filter bar in
+ * its own card (the calendar beside the feed) calls it itself, renders the `FacetBar` from `facetDefinitions`, `search`,
+ * `selection`, `matchCount` and `totalCount`, and passes the result as `filters`. Then the feed lists from that state,
+ * renders no toolbar (no `events-toolbar`) and reads no facet counts; the custom range picker (the `custom` preset only),
+ * the sort (tracking only), the proposal button and the overflow menu sit in a right-aligned `events-actions` row above
+ * the attention pills, which `actionsTo` (a CSS selector) moves into the page's card.
  */
 defineOptions({ name: 'EventsFeed' });
 
@@ -124,6 +115,13 @@ const props = withDefaults(
     attention?: readonly { key: string; label: string; count: number }[];
     /** Forwarded to every card: the source to show for an event's image, such as its stored copy; null keeps the `url`. */
     imageSrc?: (event: EventModel, image: EventImage, index: number) => string | null;
+    /**
+     * The filter state of a page that hosts the filter bar itself (`useEventsFilters`). The feed lists from it, renders
+     * no `FacetBar` and starts no facet requests of its own; it shows its own controls in the `events-actions` row.
+     */
+    filters?: EventsFilters;
+    /** A CSS selector for the element the `events-actions` row moves into, so a page's card can host it; with `filters`. */
+    actionsTo?: string;
   }>(),
   {
     locale: 'en',
@@ -142,6 +140,8 @@ const props = withDefaults(
     viewerZone: undefined,
     attention: () => [],
     imageSrc: undefined,
+    filters: undefined,
+    actionsTo: undefined,
   },
 );
 
@@ -174,15 +174,8 @@ const slots = defineSlots<{
 
 const deadlinesPill = 'deadlines';
 const deadlinesWindow = 14;
-const deadlineFacetDays = 30;
-const allScopes = 'all';
 
 const day = computed(() => props.today ?? localIsoDate());
-const search = shallowRef('');
-const text = shallowRef('');
-const selection = shallowRef<FacetSelection>({});
-const sort = shallowRef<TrackingSort>('starts');
-const customRange = shallowRef<{ readonly from: string; readonly to: string } | null>(null);
 const openPill = shallowRef<string | null>(null);
 const settled = shallowRef(false);
 const proposing = shallowRef(false);
@@ -194,119 +187,55 @@ const calendarFailure = shallowRef<EventsFailure | null>(null);
 const calendarPending = shallowRef(false);
 const downloadFailed = shallowRef(false);
 const proposalSection = useTemplateRef<HTMLElement>('proposalForm');
-let timer: ReturnType<typeof setTimeout> | undefined;
 
-const workflowRequest = useEventsRequest((signal) => props.client.getWorkflow(signal));
+// The filter state: a page's (`filters`), else the feed's own. With a page's, the feed's own reads nothing.
+const own = useEventsFilters({
+  client: () => props.client,
+  catalog: () => props.catalog,
+  locale: () => props.locale,
+  today: () => props.today,
+  kinds: () => props.kinds,
+  tracking: () => props.tracking && !props.filters,
+  workflow: () => props.workflow,
+  hiddenStages: () => props.hiddenStages,
+  regions: () => props.regions,
+});
+const { search, selection, facetDefinitions, matchCount, totalCount, select } = own;
+const state = computed(() => props.filters ?? own);
+const tracked = computed(() => state.value.tracking.value);
+const sortChoice = computed({
+  get: () => state.value.sort.value,
+  set: (value) => {
+    state.value.sort.value = value;
+  },
+});
+const customPreset = computed(() => state.value.preset.value === 'custom');
+
 const trackRequest = useEventsRequest((signal, eventId: string, spec: TrackingSpec) =>
   props.client.putTracking(props.catalog, eventId, spec, signal),
 );
 
-const flow = computed(() => props.workflow ?? workflowRequest.value.value);
+const flow = computed(() => props.workflow ?? state.value.workflow.value);
 const stages = computed(() => flow.value?.stages ?? []);
-const defaultStage = computed(() => (props.tracking ? flow.value?.defaultStage : undefined));
-const hidden = computed(() => props.hiddenStages.filter((key) => key !== ''));
-const hiddenLabels = computed(() =>
-  hidden.value.map((key) => EventsLabels.stage(key, stages.value, props.locale)).join(', '),
-);
+const defaultStage = computed(() => (tracked.value ? flow.value?.defaultStage : undefined));
 
-/** The values a choice facet holds, whatever its kind; a toggle holds none. */
-function pick(key: string): readonly string[] {
-  const value = selection.value[key];
-  if (value === undefined || value === null || value === '' || typeof value === 'boolean') return [];
-  return typeof value === 'string' ? [value] : value;
-}
-const one = (key: string) => pick(key)[0] ?? '';
-/** Whether a toggle facet is on: its selection value is `true`, its key absent while off. */
-const on = (key: string) => selection.value[key] === true;
-
-const selectedRegion = computed(() => props.regions?.find((item) => item.key === one('scope')) ?? null);
-const preset = computed<EventDatePreset>(() => {
-  const value = one('when');
-  return (EventDatePresetValues as readonly string[]).includes(value) ? (value as EventDatePreset) : 'upcoming';
-});
-const dateRange = computed(() => eventDateRange(preset.value, day.value, customRange.value));
-const dates = computed(() => ({
-  ...(dateRange.value.from ? { from: dateRange.value.from } : {}),
-  ...(dateRange.value.to ? { to: dateRange.value.to } : {}),
-  ...(dateRange.value.includeUndated ? { includeUndated: true } : {}),
-}));
-
-/** The catalog query: the filters the catalog list and the calendar file take. */
-const eventFilter = computed<EventQuery>(() => {
-  const region = selectedRegion.value;
-  const country = props.regions?.length
-    ? region?.countries?.length === 1 && !region.otherCountries
-      ? region.countries[0]!.toUpperCase()
-      : ''
-    : pick('country').length === 1
-      ? pick('country')[0]!
-      : '';
-  return {
-    review: 'published',
-    ...dates.value,
-    ...(text.value ? { text: text.value } : {}),
-    ...(pick('kind').length === 1 ? { kind: pick('kind')[0]! } : {}),
-    ...(country ? { country } : {}),
-  };
-});
-/** The tracking query; the facets read takes it as it is, and the list adds the sort, the cursor and the limit. */
-const trackingFilter = computed<TrackingQuery>(() => {
-  const picked = pick('stage');
-  return {
-    ...dates.value,
-    ...(text.value ? { text: text.value } : {}),
-    ...(pick('kind').length ? { kinds: pick('kind') } : {}),
-    ...(props.regions?.length
-      ? regionQuery(selectedRegion.value, props.regions)
-      : pick('country').length
-        ? { countries: pick('country') }
-        : {}),
-    ...(pick('city').length ? { cities: pick('city') } : {}),
-    ...(pick('source').length ? { sources: pick('source') } : {}),
-    ...(picked.length
-      ? { stages: picked }
-      : hidden.value.length && !on('hidden')
-        ? { excludeStages: hidden.value }
-        : {}),
-    ...(on('priority') ? { priority: 'high' as const } : {}),
-    ...(on('deadline') ? { deadlineBefore: addEventDays(day.value, deadlineFacetDays) } : {}),
-  };
-});
-/** The base query: nothing the reader chose, the default upcoming view with the hidden stages still left out. */
-const baseFilter = computed<TrackingQuery>(() => ({
-  includeUndated: true,
-  from: day.value,
-  ...(hidden.value.length ? { excludeStages: hidden.value } : {}),
-}));
-const facetsKey = computed(() => (props.tracking ? JSON.stringify(trackingFilter.value) : ''));
-const queryKey = computed(() =>
-  JSON.stringify(props.tracking ? [trackingFilter.value, sort.value] : eventFilter.value),
-);
-const filtered = computed(() => Boolean(text.value || Object.keys(selection.value).length));
-
-const facets = useEventsRequest((signal) =>
-  props.client.getTrackingFacets(props.catalog, trackingFilter.value, signal),
-);
-const baseFacets = useEventsRequest((signal) =>
-  props.client.getTrackingFacets(props.catalog, baseFilter.value, signal),
-);
 const summary = useEventsRequest((signal) =>
   props.client.getTrackingSummary(props.catalog, { today: day.value, deadlineKinds: ['application'] }, signal),
 );
 
+/** Reads the counts again after a write: the filter state's facets, and the deadlines. */
 function loadCounts() {
-  if (!props.tracking) return;
-  void facets.run();
-  void baseFacets.run();
+  if (!tracked.value) return;
+  state.value.refresh();
   void summary.run();
 }
 
 async function fetchPage(cursor: string | null, signal: AbortSignal): EventsResult<FeedPage> {
   const page = { limit: props.pageSize, ...(cursor ? { cursor } : {}) };
-  if (props.tracking) {
+  if (tracked.value) {
     const result = await props.client.listTracking(
       props.catalog,
-      { ...trackingFilter.value, sort: sort.value, ...page },
+      { ...state.value.trackingQuery.value, sort: state.value.sort.value, ...page },
       signal,
     );
     return result.ok
@@ -316,7 +245,7 @@ async function fetchPage(cursor: string | null, signal: AbortSignal): EventsResu
         })
       : result;
   }
-  const result = await props.client.listEvents(props.catalog, { ...eventFilter.value, ...page }, signal);
+  const result = await props.client.listEvents(props.catalog, { ...state.value.eventQuery.value, ...page }, signal);
   return result.ok
     ? ResultExtensions.ok({
         items: result.value.items.map((event) => ({ event, tracking: null })),
@@ -348,7 +277,7 @@ function reload() {
   return adaptive.reset();
 }
 
-const byMonth = computed(() => !props.tracking || sort.value === 'starts');
+const byMonth = computed(() => !tracked.value || state.value.sort.value === 'starts');
 const groups = computed(() =>
   byMonth.value
     ? groupEventsByMonth(items.value.map((item) => ({ facts: item.event.facts, item }))).map((group) => ({
@@ -360,204 +289,9 @@ const groups = computed(() =>
       : [],
 );
 
-// --- Facets ---
-
-const upper = (value: string) => value.toUpperCase();
-const capitalized = (value: string) =>
-  value ? value.charAt(0).toLocaleUpperCase(props.locale) + value.slice(1) : value;
-const countOf = (list: readonly TrackingFacetCount[] | undefined, value: string) =>
-  list?.find((item) => item.value === value)?.count;
-
-/** Builds a facet's options from the server's counts, keeping a chosen value that the counts no longer list. */
-function countedOptions(
-  key: string,
-  list: readonly TrackingFacetCount[],
-  label: (item: TrackingFacetCount) => string,
-): FacetOption[] {
-  const options = list.map((item) => ({ value: item.value, label: label(item), count: item.count }));
-  for (const value of pick(key)) {
-    if (!options.some((option) => option.value === value)) {
-      options.push({ value, label: label({ value, count: 0 }), count: 0 });
-    }
-  }
-  return options;
-}
-
-/** Sums the countries facet over a region's country set; an `otherCountries` region takes the unlisted ones. */
-function regionCount(region: EventRegion, list: readonly TrackingFacetCount[]): number {
-  const listed = new Set(
-    (props.regions ?? []).flatMap((item) => (item.otherCountries ? [] : (item.countries ?? []))).map(upper),
-  );
-  const own = new Set((region.countries ?? []).map(upper));
-  return list.reduce((sum, item) => {
-    const code = upper(item.value);
-    return (region.otherCountries ? !listed.has(code) : own.has(code)) ? sum + item.count : sum;
-  }, 0);
-}
-
-const countryLabel = (code: string) => `${regionFlag(code)} ${regionName(code, props.locale)}`.trim();
-const allCountries = computed(() =>
-  RegionCodes.map((code) => ({ value: code, label: countryLabel(code) })).sort((a, b) =>
-    a.label.localeCompare(b.label, props.locale),
-  ),
-);
-
-const presetKeys: Record<EventDatePreset, EventsMessageKey> = {
-  upcoming: 'datePresetUpcoming',
-  thisMonth: 'datePresetThisMonth',
-  next3Months: 'datePresetNext3Months',
-  thisYear: 'datePresetThisYear',
-  past: 'datePresetPast',
-  custom: 'datePresetCustom',
-};
-
-const facetDefinitions = computed<readonly FacetDefinition[]>(() => {
-  const counts = props.tracking ? facets.value.value : null;
-  const msg = (key: EventsMessageKey, params?: Record<string, string | number>) =>
-    eventsText(key, props.locale, params);
-  const definitions: FacetDefinition[] = [];
-
-  if (props.regions?.length) {
-    definitions.push({
-      key: 'scope',
-      label: msg('scope'),
-      kind: FacetKind.Single,
-      placement: FacetPlacement.Inline,
-      options: [
-        { value: allScopes, label: msg('all') },
-        ...props.regions.map((region) => ({
-          value: region.key,
-          label: pickText(region.label, props.locale) || region.key,
-          ...(counts ? { count: regionCount(region, counts.countries) } : {}),
-        })),
-      ],
-    });
-  }
-
-  const kindOptions = counts
-    ? countedOptions('kind', counts.kinds, (item) => EventsLabels.kind(item.value, props.kinds, props.locale))
-    : (props.kinds ?? []).map((item) => ({ value: item.key, label: pickText(item.label, props.locale) || item.key }));
-  if (kindOptions.length) {
-    definitions.push({
-      key: 'kind',
-      label: msg('kind'),
-      kind: props.tracking ? FacetKind.Multi : FacetKind.Single,
-      placement: FacetPlacement.Inline,
-      options: kindOptions,
-    });
-  }
-
-  if (props.tracking) {
-    const stageOptions = counts
-      ? countedOptions('stage', counts.stages, (item) => EventsLabels.stage(item.value, stages.value, props.locale))
-      : stages.value.map((item) => ({
-          value: item.key,
-          label: EventsLabels.stage(item.key, stages.value, props.locale),
-        }));
-    if (stageOptions.length) {
-      definitions.push({
-        key: 'stage',
-        label: msg('stage'),
-        kind: FacetKind.Multi,
-        placement: FacetPlacement.Popover,
-        options: stageOptions,
-      });
-    }
-    if (hidden.value.length && !pick('stage').length) {
-      definitions.push({
-        key: 'hidden',
-        label: msg('showHidden', { labels: hiddenLabels.value }),
-        kind: FacetKind.Toggle,
-        placement: FacetPlacement.Popover,
-      });
-    }
-    if (counts?.cities.length || pick('city').length) {
-      definitions.push({
-        key: 'city',
-        label: msg('city'),
-        kind: FacetKind.Multi,
-        placement: FacetPlacement.Popover,
-        options: countedOptions('city', counts?.cities ?? [], (item) => capitalized(item.value)),
-      });
-    }
-    if (counts?.sources.length || pick('source').length) {
-      definitions.push({
-        key: 'source',
-        label: msg('sourceFacet'),
-        kind: FacetKind.Multi,
-        placement: FacetPlacement.Popover,
-        options: countedOptions('source', counts?.sources ?? [], (item) =>
-          item.value === EventsConstants.curatedSource ? msg('sourceCurated') : (item.label ?? item.value),
-        ),
-      });
-    }
-    if (!props.regions?.length && (counts?.countries.length || pick('country').length)) {
-      definitions.push({
-        key: 'country',
-        label: msg('country'),
-        kind: FacetKind.Multi,
-        placement: FacetPlacement.Popover,
-        options: countedOptions('country', counts?.countries ?? [], (item) => countryLabel(item.value)),
-      });
-    }
-    definitions.push({
-      key: 'priority',
-      label: msg('highPriority'),
-      kind: FacetKind.Toggle,
-      placement: FacetPlacement.Popover,
-      ...(counts ? { count: countOf(counts.priorities, 'high') ?? 0 } : {}),
-    });
-    definitions.push({
-      key: 'deadline',
-      label: msg('deadlineSoon'),
-      kind: FacetKind.Toggle,
-      placement: FacetPlacement.Popover,
-      ...(counts ? { count: counts.openDeadline.count } : {}),
-    });
-  } else if (!props.regions?.length) {
-    definitions.push({
-      key: 'country',
-      label: msg('country'),
-      kind: FacetKind.Single,
-      placement: FacetPlacement.Popover,
-      options: allCountries.value,
-    });
-  }
-
-  definitions.push({
-    key: 'when',
-    label: msg('dateFacet'),
-    kind: FacetKind.Single,
-    placement: FacetPlacement.Popover,
-    options: EventDatePresetValues.map((value) => ({ value, label: msg(presetKeys[value]) })),
-  });
-  return definitions;
-});
-
-const matchCount = computed(() => (props.tracking ? facets.value.value?.total : undefined));
-const totalCount = computed(() =>
-  props.tracking && matchCount.value !== undefined ? baseFacets.value.value?.total : undefined,
-);
-
-/** Stores what the bar reports, leaving the defaults out: "All" scopes and the upcoming dates are no choice at all. */
-function select(next: FacetSelection) {
-  const { scope, when, ...rest } = next;
-  selection.value = {
-    ...rest,
-    ...(typeof scope === 'string' && scope !== allScopes ? { scope } : {}),
-    ...(typeof when === 'string' && when !== 'upcoming' ? { when } : {}),
-  };
-}
-
 function pickRange(range: { start: { toString(): string }; end: { toString(): string } } | null) {
-  customRange.value = range ? { from: range.start.toString(), to: range.end.toString() } : null;
+  state.value.customRange.value = range ? { from: range.start.toString(), to: range.end.toString() } : null;
 }
-
-const sortOptions: readonly { value: TrackingSort; key: EventsMessageKey }[] = [
-  { value: 'starts', key: 'sortStarts' },
-  { value: 'added', key: 'sortAdded' },
-  { value: 'deadline', key: 'sortDeadline' },
-];
 
 // --- Attention pills ---
 
@@ -569,7 +303,7 @@ const soonDeadlines = computed(
     }).length,
 );
 const pills = computed(() => [
-  ...(props.tracking && soonDeadlines.value > 0
+  ...(tracked.value && soonDeadlines.value > 0
     ? [
         {
           key: deadlinesPill,
@@ -591,36 +325,20 @@ const closePill = () => {
 
 // --- Wiring ---
 
-watch(search, (value) => {
-  clearTimeout(timer);
-  timer = setTimeout(() => {
-    text.value = value.trim();
-  }, 250);
-});
-watch(preset, (value) => {
-  if (value !== 'custom') customRange.value = null;
-});
-watch([queryKey, () => props.catalog, () => props.client, () => props.tracking], () => void reload());
-watch([facetsKey, () => props.catalog, () => props.client], () => {
-  if (props.tracking) void facets.run();
-});
-watch([() => props.catalog, () => props.client, () => props.tracking, day, () => hidden.value.join('\u0000')], () => {
-  if (!props.tracking) return;
-  void baseFacets.run();
-  void summary.run();
+watch([() => state.value.queryKey.value, () => props.catalog, () => props.client, tracked], () => void reload());
+watch([() => props.catalog, () => props.client, tracked, day], () => {
+  if (tracked.value) void summary.run();
 });
 onMounted(() => {
-  if (props.tracking && !props.workflow) void workflowRequest.run();
-  loadCounts();
+  if (tracked.value) void summary.run();
 });
-onScopeDispose(() => clearTimeout(timer));
 
 async function downloadCalendar() {
   calendarPending.value = true;
   const result = await downloadEventsCalendar({
     client: props.client,
     catalog: props.catalog,
-    query: eventFilter.value,
+    query: state.value.eventQuery.value,
   });
   calendarPending.value = false;
   calendarFailure.value = result.ok ? null : result.failure;
@@ -682,63 +400,46 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
     <h2 id="events-feed-title" class="sr-only">{{ eventsText('eventsTitle', locale) }}</h2>
 
     <FacetBar
+      v-if="!filters"
       v-model:search="search"
       :facets="facetDefinitions"
       :model-value="selection"
       :match-count="matchCount"
       :total-count="totalCount"
-      :search-label="eventsText('searchEvents', locale)"
-      :search-placeholder="eventsText('searchPlaceholder', locale)"
-      :filters-label="eventsText('filters', locale)"
-      :clear-all-label="eventsText('clearAll', locale)"
-      :any-label="eventsText('anyValue', locale)"
-      :selected-label="eventsText('selectedCount', locale, { count: '{count}' })"
-      :remove-label="eventsText('removeFilter', locale, { facet: '{facet}', value: '{value}' })"
-      :remove-toggle-label="eventsText('removeToggleFilter', locale, { facet: '{facet}' })"
-      :match-label="eventsText('matchOf', locale, { matched: '{matched}', total: '{total}' })"
+      v-bind="eventsFacetBarLabels(locale)"
       :class="feedFacetBarClass"
       data-test="events-toolbar"
       @update:model-value="select"
     >
       <template #trailing>
-        <DateRangePicker
-          v-if="preset === 'custom'"
-          :placeholder="eventsText('customRange', locale)"
-          data-test="custom-range"
-          @update:model-value="pickRange"
+        <EventsFeedActions
+          v-model:sort="sortChoice"
+          :locale="locale"
+          :custom="customPreset"
+          :tracking="tracked"
+          :proposable="canPropose && !proposing"
+          :calendar-pending="calendarPending"
+          @range="pickRange"
+          @propose="openProposal"
+          @download="downloadCalendar"
         />
-        <label v-if="tracking" class="flex items-center max-sm:min-w-40 max-sm:grow">
-          <span class="sr-only">{{ eventsText('sort', locale) }}</span>
-          <select v-model="sort" name="sort" :class="feedSortClass">
-            <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-              {{ eventsText(option.key, locale) }}
-            </option>
-          </select>
-        </label>
-        <Button v-if="canPropose && !proposing" size="md" variant="outline" class="max-sm:grow" @click="openProposal">
-          {{ eventsText('proposeEvent', locale) }}
-        </Button>
-        <DropdownMenu placement="bottom-end">
-          <DropdownMenuTrigger as-child>
-            <Button
-              variant="ghost"
-              size="md"
-              shape="circle"
-              :aria-label="eventsText('moreActions', locale)"
-              :is-disabled="calendarPending"
-              data-test="feed-overflow"
-            >
-              <EventGlyph name="more" :size="18" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent v-bind="{ 'aria-label': eventsText('moreActions', locale) }">
-            <MenuItem class="max-sm:min-h-10" data-test="download-calendar" @select="downloadCalendar">
-              {{ eventsText('downloadCalendar', locale) }}
-            </MenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </template>
     </FacetBar>
+    <Teleport v-else defer :to="actionsTo" :disabled="!actionsTo">
+      <div class="flex flex-wrap items-center justify-end gap-2" data-test="events-actions">
+        <EventsFeedActions
+          v-model:sort="sortChoice"
+          :locale="locale"
+          :custom="customPreset"
+          :tracking="tracked"
+          :proposable="canPropose && !proposing"
+          :calendar-pending="calendarPending"
+          @range="pickRange"
+          @propose="openProposal"
+          @download="downloadCalendar"
+        />
+      </div>
+    </Teleport>
 
     <div v-if="pills.length" class="flex flex-wrap items-center gap-2" data-test="attention-pills">
       <button
@@ -847,7 +548,7 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
                 :stages="stages"
                 :default-stage="defaultStage"
                 :quick-stages="quickStages"
-                :can-track="tracking && canTrack"
+                :can-track="tracked && canTrack"
                 :track-pending="trackRequest.pending.value"
                 :viewer-zone="viewerZone"
                 :image-src="imageSrc"
@@ -887,7 +588,7 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
           v-if="!groups.length && !adaptive.isLoading.value && !adaptive.error.value"
           class="py-8 text-center text-sm text-muted-foreground"
         >
-          {{ filtered ? eventsText('noEventsMatch', locale) : eventsText('noUpcoming', locale) }}
+          {{ state.filtered.value ? eventsText('noEventsMatch', locale) : eventsText('noUpcoming', locale) }}
         </p>
         <div v-if="items.length && adaptive.isLoading.value" class="space-y-3">
           <span role="status" class="sr-only">{{ eventsText('loadingEvents', locale) }}</span>
