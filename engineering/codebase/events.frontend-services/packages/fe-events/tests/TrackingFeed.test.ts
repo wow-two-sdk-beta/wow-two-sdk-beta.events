@@ -1,5 +1,4 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { FacetBar, type FacetDefinition, type FacetSelection } from '@wow-two-beta/fe/presentation/forms';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import type {
@@ -9,9 +8,17 @@ import type {
   TrackingSummaryModel,
   WorkflowModel,
 } from '../src/contracts';
-import { EventMediaCard, EventsFeed, type EventRegion } from '../src/kit';
-import { envelope, eventModel, facetCount, facetsModel, fakeService, stubIntersectionObserver } from './Fixtures';
-import { desktop, heightAt, phone, rulesAt, utilitiesAt } from './Viewport';
+import {
+  EventMediaCard,
+  eventsFilterLabels,
+  type EventRegion,
+  type EventsFacet,
+  type EventsFilters,
+  type EventsFilterSelection,
+} from '../src/kit';
+import { envelope, eventModel, facetCount, facetsModel, stubIntersectionObserver } from './Fixtures';
+import { mountFeed } from './FeedPage';
+import { desktop, heightAt, phone, utilitiesAt } from './Viewport';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -100,15 +107,11 @@ const ocharo = {
   canTrack: true,
 };
 
+/** Mounts the feed the way a page does, with the page's own filter state in tracking mode (`mountFeed`). */
 async function render(props: Record<string, unknown>, responder: (request: Request) => Response, slots = {}) {
-  const service = fakeService(responder);
-  const wrapper = mount(EventsFeed, {
-    props: { client: service.client, catalog: 'ocharo', today: '2026-11-10', tracking: true, ...props },
-    slots,
-  });
-  wrappers.push(wrapper);
-  await flushPromises();
-  return { ...service, wrapper };
+  const mounted = await mountFeed({ tracking: true, ...props }, responder, { slots });
+  wrappers.push(mounted.host);
+  return mounted;
 }
 
 const listRequests = (requests: Request[]) =>
@@ -118,27 +121,27 @@ const facetRequests = (requests: Request[]) =>
 const lastParams = (requests: Request[]) => new URL(requests.at(-1)!.url).searchParams;
 
 type Mounted = Awaited<ReturnType<typeof render>>['wrapper'];
-const bar = (wrapper: Mounted) => wrapper.findComponent(FacetBar);
-const facetOf = (wrapper: Mounted, key: string) =>
-  (bar(wrapper).props('facets') as readonly FacetDefinition[]).find((item) => item.key === key);
+const facetOf = (filters: EventsFilters, key: string): EventsFacet | undefined =>
+  filters.facetDefinitions.value.find((item) => item.key === key);
 /** The options of a choice facet; a toggle has none. */
-const optionsOf = (wrapper: Mounted, key: string) => {
-  const facet = facetOf(wrapper, key);
+const optionsOf = (filters: EventsFilters, key: string) => {
+  const facet = facetOf(filters, key);
   return facet && facet.kind !== 'toggle' ? facet.options : [];
 };
-const countsOf = (wrapper: Mounted, key: string) =>
-  Object.fromEntries(optionsOf(wrapper, key).map((option) => [option.value, option.count]));
-/** Reports a choice the way the bar does, so the feed takes the whole selection. */
-async function choose(wrapper: Mounted, selection: FacetSelection) {
-  bar(wrapper).vm.$emit('update:modelValue', selection);
+const countsOf = (filters: EventsFilters, key: string) =>
+  Object.fromEntries(optionsOf(filters, key).map((option) => [option.value, option.count]));
+/** Writes a choice the way a page's bar does, so the state takes the whole selection. */
+async function choose(filters: EventsFilters, selection: EventsFilterSelection) {
+  filters.selection.value = selection;
   await flushPromises();
 }
-async function typeSearch(wrapper: Mounted, value: string) {
-  await wrapper.get('input[type="search"]').setValue(value);
+async function typeSearch(filters: EventsFilters, value: string) {
+  filters.search.value = value;
   await new Promise((resolve) => setTimeout(resolve, 300));
   await flushPromises();
 }
-const pill = (wrapper: Mounted) => wrapper.get('[data-facet-match]').text();
+/** The match pill a page's bar shows: the current query's total over the base total. */
+const pill = (filters: EventsFilters) => `${filters.matchCount.value} of ${filters.totalCount.value}`;
 
 describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
   it("lists the organization's tracking as image-first cards, hiding skipped and rejected", async () => {
@@ -162,8 +165,8 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
     expect(wrapper.find('[data-test="event-field-cost"]').exists()).toBe(false);
   });
 
-  it('puts the toolbar on the facet bar: scope chips with counts, kind chips with counts, the rest in the popover', async () => {
-    const { wrapper } = await render(
+  it('gives the page the facets of the toolbar: scope and kind inline with counts, the rest behind the Filters button', async () => {
+    const { filters } = await render(
       {
         ...ocharo,
         kinds: [
@@ -179,38 +182,36 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
       }),
     );
 
-    expect(bar(wrapper).props('facets')).toSatisfy(
-      (list: readonly FacetDefinition[]) =>
-        list.map((item) => `${item.key}:${item.placement}`).join(' ') ===
-        'scope:inline kind:inline stage:popover hidden:popover city:popover source:popover priority:popover deadline:popover when:popover',
+    expect(filters.facetDefinitions.value.map((item) => `${item.key}:${item.placement}`).join(' ')).toBe(
+      'scope:inline kind:inline stage:popover hidden:popover city:popover source:popover priority:popover deadline:popover when:popover',
     );
-    expect(countsOf(wrapper, 'scope')).toEqual({ all: undefined, local: 40, regional: 15, international: 3 });
-    expect(countsOf(wrapper, 'kind')).toEqual({ runway: 2, exhibition: 0 });
-    expect(facetOf(wrapper, 'kind')?.kind).toBe('multi');
-    expect(countsOf(wrapper, 'city')).toEqual({ tashkent: 1, almaty: 1 });
-    expect(optionsOf(wrapper, 'city').map((option) => option.label)).toEqual(['Tashkent', 'Almaty']);
-    expect(optionsOf(wrapper, 'source').map((option) => option.label)).toEqual(['Afisha', 'Curated']);
-    expect(facetOf(wrapper, 'priority')).toEqual({
+    expect(countsOf(filters, 'scope')).toEqual({ all: undefined, local: 40, regional: 15, international: 3 });
+    expect(countsOf(filters, 'kind')).toEqual({ runway: 2, exhibition: 0 });
+    expect(facetOf(filters, 'kind')?.kind).toBe('multi');
+    expect(countsOf(filters, 'city')).toEqual({ tashkent: 1, almaty: 1 });
+    expect(optionsOf(filters, 'city').map((option) => option.label)).toEqual(['Tashkent', 'Almaty']);
+    expect(optionsOf(filters, 'source').map((option) => option.label)).toEqual(['Afisha', 'Curated']);
+    expect(facetOf(filters, 'priority')).toEqual({
       key: 'priority',
       label: 'High priority',
       kind: 'toggle',
       placement: 'popover',
       count: 1,
     });
-    expect(facetOf(wrapper, 'deadline')).toEqual({
+    expect(facetOf(filters, 'deadline')).toEqual({
       key: 'deadline',
       label: 'Deadline within 30 days',
       kind: 'toggle',
       placement: 'popover',
       count: 1,
     });
-    expect(facetOf(wrapper, 'hidden')).toEqual({
+    expect(facetOf(filters, 'hidden')).toEqual({
       key: 'hidden',
       label: 'Show Skipped, Rejected',
       kind: 'toggle',
       placement: 'popover',
     });
-    expect(optionsOf(wrapper, 'when').map((option) => option.label)).toEqual([
+    expect(optionsOf(filters, 'when').map((option) => option.label)).toEqual([
       'Upcoming',
       'Today',
       'This month',
@@ -219,26 +220,25 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
       'Past',
       'Custom range…',
     ]);
-    expect(wrapper.findAll('button').some((button) => button.text() === 'Filters')).toBe(true);
   });
 
-  it('shows "n of N": the current query\'s total over the unfiltered base total', async () => {
-    const { wrapper, requests } = await render(
+  it('counts "n of N": the current query\'s total over the unfiltered base total', async () => {
+    const { filters, requests } = await render(
       ocharo,
       router({ facets: (url) => facetsModel(url.searchParams.has('text') ? 12 : 72) }),
     );
-    expect(pill(wrapper)).toBe('72 of 72');
+    expect(pill(filters)).toBe('72 of 72');
     const base = new URL(facetRequests(requests)[0]!.url).searchParams;
     expect(base.get('from')).toBe('2026-11-10');
     expect(base.getAll('excludeStages')).toEqual(['skipped', 'rejected']);
 
-    await typeSearch(wrapper, 'fashion');
+    await typeSearch(filters, 'fashion');
 
-    expect(pill(wrapper)).toBe('12 of 72');
+    expect(pill(filters)).toBe('12 of 72');
   });
 
   it('re-reads the facets with the search text, so the stage counts follow it', async () => {
-    const { wrapper, requests } = await render(
+    const { filters, requests } = await render(
       ocharo,
       router({
         facets: (url) =>
@@ -254,20 +254,20 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
             : facetsModel(72),
       }),
     );
-    expect(countsOf(wrapper, 'stage')).toEqual({ candidate: 2, shortlisted: 1, skipped: 2, rejected: 0 });
+    expect(countsOf(filters, 'stage')).toEqual({ candidate: 2, shortlisted: 1, skipped: 2, rejected: 0 });
 
-    await typeSearch(wrapper, 'fashion');
+    await typeSearch(filters, 'fashion');
 
     expect(lastParams(facetRequests(requests)).get('text')).toBe('fashion');
     expect(lastParams(listRequests(requests)).get('text')).toBe('fashion');
-    expect(countsOf(wrapper, 'stage')).toEqual({ candidate: 0, shortlisted: 1, skipped: 0, rejected: 0 });
+    expect(countsOf(filters, 'stage')).toEqual({ candidate: 0, shortlisted: 1, skipped: 0, rejected: 0 });
   });
 
   it("reads one facets answer per query change, with the list's filters and no sort, cursor or limit", async () => {
-    const { wrapper, requests } = await render(ocharo, router());
+    const { filters, requests } = await render(ocharo, router());
     const before = facetRequests(requests).length;
 
-    await choose(wrapper, { city: ['tashkent'] });
+    await choose(filters, { city: ['tashkent'] });
 
     expect(facetRequests(requests)).toHaveLength(before + 1);
     const params = lastParams(facetRequests(requests));
@@ -345,54 +345,46 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
     expect(wrapper.findAll('[data-test="event-group"] > h3')).toHaveLength(2);
   });
 
-  it('turns a popover choice into a removable chip, and removing it drops the filter', async () => {
-    const { wrapper, requests } = await render(ocharo, router());
+  it('lists with every pick in the selection, and writing the selection without one drops that filter', async () => {
+    const { filters, requests } = await render(ocharo, router());
 
-    await choose(wrapper, { city: ['tashkent'], priority: true });
+    await choose(filters, { city: ['tashkent'], priority: true });
 
     expect(lastParams(listRequests(requests)).getAll('cities')).toEqual(['tashkent']);
     expect(lastParams(listRequests(requests)).get('priority')).toBe('high');
-    const chips = wrapper.get('[data-facet-chips]');
-    expect(chips.text()).toContain('City: Tashkent');
-    expect(chips.text()).toContain('High priority');
-    expect(wrapper.get('[data-facet-filters-count]').text()).toBe('2');
+    expect(filters.filtered.value).toBe(true);
 
-    await wrapper.get('[aria-label="Remove City: Tashkent"]').trigger('click');
-    await flushPromises();
+    await choose(filters, { priority: true });
 
-    expect(wrapper.get('[data-facet-chips]').text()).not.toContain('City: Tashkent');
     expect(lastParams(listRequests(requests)).getAll('cities')).toEqual([]);
     expect(lastParams(listRequests(requests)).get('priority')).toBe('high');
   });
 
-  it('shows hidden stages on request or by their own filter, and filters by scope chips', async () => {
-    const { wrapper, requests } = await render(ocharo, router());
+  it('shows hidden stages on request or by their own filter, and filters by scope', async () => {
+    const { filters, requests } = await render(ocharo, router());
 
-    await choose(wrapper, { hidden: true });
+    await choose(filters, { hidden: true });
     expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual([]);
 
-    await choose(wrapper, { hidden: true, stage: ['skipped'] });
+    await choose(filters, { hidden: true, stage: ['skipped'] });
     expect(lastParams(listRequests(requests)).getAll('stages')).toEqual(['skipped']);
-    expect(facetOf(wrapper, 'hidden')).toBeUndefined();
+    expect(facetOf(filters, 'hidden')).toBeUndefined();
 
-    await choose(wrapper, {});
-    const regional = wrapper.findAll('button').find((button) => button.text().startsWith('Regional'))!;
-    await regional.trigger('click');
-    await flushPromises();
+    await choose(filters, { scope: 'regional' });
     expect(lastParams(listRequests(requests)).getAll('countries')).toEqual(['KZ', 'RU']);
 
-    await choose(wrapper, { scope: 'international' });
+    await choose(filters, { scope: 'international' });
     const international = lastParams(listRequests(requests));
     expect(international.getAll('excludeCountries')).toEqual(['UZ', 'KZ', 'RU']);
     expect(international.get('includeUnknownCountry')).toBeNull();
 
-    await choose(wrapper, { scope: 'all' });
+    await choose(filters, { scope: 'all' });
     expect(lastParams(listRequests(requests)).getAll('countries')).toEqual([]);
     expect(lastParams(listRequests(requests)).getAll('excludeCountries')).toEqual([]);
   });
 
   it('turns the date presets into from and to, the default listing undated events', async () => {
-    const { wrapper, requests } = await render(ocharo, router());
+    const { filters, requests } = await render(ocharo, router());
 
     for (const [preset, from, to] of [
       ['thisMonth', '2026-11-01', '2026-11-30'],
@@ -400,17 +392,19 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
       ['thisYear', '2026-01-01', '2026-12-31'],
       ['past', null, '2026-11-09'],
     ] as const) {
-      await choose(wrapper, { when: preset });
+      await choose(filters, { when: preset });
       const params = lastParams(listRequests(requests));
       expect(params.get('from'), preset).toBe(from);
       expect(params.get('to'), preset).toBe(to);
       expect(params.get('includeUndated'), preset).toBeNull();
     }
 
-    await choose(wrapper, { when: 'upcoming' });
+    await choose(filters, { when: 'upcoming' });
     expect(lastParams(listRequests(requests)).get('from')).toBe('2026-11-10');
     expect(lastParams(listRequests(requests)).get('includeUndated')).toBe('true');
-    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
+    // The default preset is no choice: the selection holds nothing.
+    expect(filters.selection.value).toEqual({});
+    expect(filters.filtered.value).toBe(false);
   });
 
   it('moves an untracked event from the stage menu on its card, then reloads the list and the counts', async () => {
@@ -462,105 +456,84 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
 });
 
 describe('toggle facets', () => {
-  it('sets the priority query with "High priority", clears it, and its chip removes it', async () => {
-    const { wrapper, requests } = await render(ocharo, router());
+  it('sets the priority query with "High priority", clears it, and dropping it from the selection removes it', async () => {
+    const { filters, requests } = await render(ocharo, router());
     expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
 
-    await choose(wrapper, { priority: true });
+    await choose(filters, { priority: true });
 
     expect(lastParams(listRequests(requests)).get('priority')).toBe('high');
     expect(lastParams(facetRequests(requests)).get('priority')).toBe('high');
-    expect(wrapper.get('[data-facet-chips]').text()).toContain('High priority');
-    expect(wrapper.get('[data-facet-filters-count]').text()).toBe('1');
+    expect(facetOf(filters, 'priority')?.kind).toBe('toggle');
 
-    await wrapper.get('[aria-label="Remove High priority"]').trigger('click');
-    await flushPromises();
+    await choose(filters, {});
     expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
     expect(lastParams(facetRequests(requests)).get('priority')).toBeNull();
-    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
+    expect(filters.filtered.value).toBe(false);
 
-    await choose(wrapper, { priority: true });
-    await choose(wrapper, {});
+    await choose(filters, { priority: true });
+    await choose(filters, {});
     expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
   });
 
-  it('sets the deadline query 30 days from today with "Deadline within 30 days", clears it, and its chip removes it', async () => {
-    const { wrapper, requests } = await render(ocharo, router());
+  it('sets the deadline query 30 days from today with "Deadline within 30 days", and clears it', async () => {
+    const { filters, requests } = await render(ocharo, router());
     expect(lastParams(listRequests(requests)).get('deadlineBefore')).toBeNull();
 
-    await choose(wrapper, { deadline: true });
+    await choose(filters, { deadline: true });
 
     expect(lastParams(listRequests(requests)).get('deadlineBefore')).toBe('2026-12-10');
     expect(lastParams(facetRequests(requests)).get('deadlineBefore')).toBe('2026-12-10');
-    expect(wrapper.get('[data-facet-chips]').text()).toContain('Deadline within 30 days');
 
-    await wrapper.get('[aria-label="Remove Deadline within 30 days"]').trigger('click');
-    await flushPromises();
+    await choose(filters, {});
     expect(lastParams(listRequests(requests)).get('deadlineBefore')).toBeNull();
-    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
 
-    await choose(wrapper, { deadline: true });
-    await choose(wrapper, {});
+    await choose(filters, { deadline: true });
+    await choose(filters, {});
     expect(lastParams(listRequests(requests)).get('deadlineBefore')).toBeNull();
   });
 
-  it('lifts the hidden-stage exclusion with "Show {hidden stages}", restores it on clear, and its chip removes it', async () => {
-    const { wrapper, requests } = await render(ocharo, router());
+  it('lifts the hidden-stage exclusion with "Show {hidden stages}" and restores it on clear', async () => {
+    const { filters, requests } = await render(ocharo, router());
     expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual(['skipped', 'rejected']);
 
-    await choose(wrapper, { hidden: true });
+    await choose(filters, { hidden: true });
 
     expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual([]);
     expect(lastParams(facetRequests(requests)).getAll('excludeStages')).toEqual([]);
-    expect(wrapper.get('[data-facet-chips]').text()).toContain('Show Skipped, Rejected');
+    expect(facetOf(filters, 'hidden')?.label).toBe('Show Skipped, Rejected');
 
-    await wrapper.get('[aria-label="Remove Show Skipped, Rejected"]').trigger('click');
-    await flushPromises();
+    await choose(filters, {});
     expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual(['skipped', 'rejected']);
-    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
 
-    await choose(wrapper, { hidden: true });
-    await choose(wrapper, {});
+    await choose(filters, { hidden: true });
+    await choose(filters, {});
     expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual(['skipped', 'rejected']);
   });
 
-  it('flips a toggle from its switch row in the Filters popover', async () => {
-    const { wrapper, requests } = await render(ocharo, router());
-    await wrapper
-      .findAll('button')
-      .find((button) => button.text().startsWith('Filters'))!
-      .trigger('click');
-    await flushPromises();
+  it('carries the toggles with their server counts, in the order of the Filters button', async () => {
+    const { filters } = await render(ocharo, router());
 
-    const rows = [...document.querySelectorAll<HTMLElement>('[data-facet-toggle-row]')];
-    const switchOf = (row: HTMLElement) => row.querySelector<HTMLInputElement>('input[role="switch"]')!;
-    expect(rows.map((row) => switchOf(row).getAttribute('aria-label'))).toEqual([
+    const toggles = filters.facetDefinitions.value.filter((facet) => facet.kind === 'toggle');
+
+    expect(toggles.map((facet) => facet.label)).toEqual([
       'Show Skipped, Rejected',
       'High priority',
       'Deadline within 30 days',
     ]);
-    expect(rows[1]!.textContent).toContain('1');
-
-    switchOf(rows[1]!).click();
-    await flushPromises();
-    expect(switchOf(rows[1]!).checked).toBe(true);
-    expect(lastParams(listRequests(requests)).get('priority')).toBe('high');
-    expect(wrapper.get('[data-facet-chips]').text()).toContain('High priority');
-
-    switchOf(rows[1]!).click();
-    await flushPromises();
-    expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
-    expect(wrapper.find('[data-facet-chips]').exists()).toBe(false);
+    expect(toggles.map((facet) => (facet.kind === 'toggle' ? facet.count : null))).toEqual([undefined, 1, 1]);
+    expect(toggles.every((facet) => facet.placement === 'popover')).toBe(true);
   });
 
-  it("names a toggle chip's close button in each language", async () => {
-    for (const [locale, name] of [
-      ['ru', 'Убрать: Высокий приоритет'],
-      ['uz', 'Olib tashlash: Yuqori ustuvorlik'],
+  it('names a toggle facet in each language, and the close button its label asks for', async () => {
+    for (const [locale, label, name] of [
+      ['ru', 'Высокий приоритет', 'Убрать: Высокий приоритет'],
+      ['uz', 'Yuqori ustuvorlik', 'Olib tashlash: Yuqori ustuvorlik'],
     ] as const) {
-      const { wrapper } = await render({ ...ocharo, locale }, router());
-      await choose(wrapper, { priority: true });
-      expect(wrapper.find(`[aria-label="${name}"]`).exists(), locale).toBe(true);
+      const { filters } = await render({ ...ocharo, locale }, router());
+
+      expect(facetOf(filters, 'priority')?.label, locale).toBe(label);
+      expect(eventsFilterLabels(locale).removeToggleLabel.replace('{facet}', label), locale).toBe(name);
     }
   });
 });
@@ -691,10 +664,11 @@ describe('attention pills', () => {
 });
 
 /**
- * The feed's toolbar and its proposal form at the two widths of the dev review (390 px and 1440 px): rows 12, 13, 15 and
- * 16 of the Events app review. happy-dom does no layout, so `Viewport` reads the classes a browser would apply.
+ * The feed's actions row and its proposal form at the two widths of the dev review (390 px and 1440 px): rows 12, 13, 15
+ * and 16 of the Events app review. happy-dom does no layout, so `Viewport` reads the classes a browser would apply. The
+ * filter bar is the page's, so only the controls the feed renders are read.
  */
-describe('feed toolbar on a phone and a desktop (events review #12, #13, #15, #16)', () => {
+describe('feed actions on a phone and a desktop (events review #12, #13, #15, #16)', () => {
   const phoneFeed = {
     ...ocharo,
     canPropose: true,
@@ -703,14 +677,9 @@ describe('feed toolbar on a phone and a desktop (events review #12, #13, #15, #1
 
   /** Mounts the feed in the document, so focus and scrolling can be read. */
   async function attached(props: Record<string, unknown> = phoneFeed) {
-    const service = fakeService(router());
-    const wrapper = mount(EventsFeed, {
-      props: { client: service.client, catalog: 'ocharo', today: '2026-11-10', tracking: true, ...props },
-      attachTo: document.body,
-    });
-    wrappers.push(wrapper);
-    await flushPromises();
-    return wrapper;
+    const mounted = await mountFeed({ tracking: true, ...props }, router(), { attachTo: document.body });
+    wrappers.push(mounted.host);
+    return mounted.wrapper;
   }
   const propose = (wrapper: Mounted) =>
     wrapper.findAll('button').find((button) => button.text() === 'Propose an event')!;
@@ -719,13 +688,13 @@ describe('feed toolbar on a phone and a desktop (events review #12, #13, #15, #1
   const sort = (wrapper: Mounted) => wrapper.get('select[name="sort"]');
   const attentionPill = (wrapper: Mounted) => wrapper.get('[data-pill="past"]');
 
-  it('#12: every control of the toolbar and the attention pill is at least 40 px high on a phone', async () => {
+  it('#12: every control of the actions row and the attention pill is at least 40 px high on a phone', async () => {
     const wrapper = await attached();
 
     for (const control of [sort(wrapper), propose(wrapper), overflow(wrapper), attentionPill(wrapper)]) {
       expect(heightAt(control.element, phone)).toBeGreaterThanOrEqual(40);
     }
-    // The pill keeps its smaller desktop height; the toolbar's controls are 40 px at both widths (#16).
+    // The pill keeps its smaller desktop height; the actions row's controls are 40 px at both widths (#16).
     expect(heightAt(attentionPill(wrapper).element, desktop)).toBe(32);
   });
 
@@ -754,46 +723,23 @@ describe('feed toolbar on a phone and a desktop (events review #12, #13, #15, #1
     expect(heightAt(item, phone)).toBeGreaterThanOrEqual(40);
   });
 
-  it('#16: search, Filters, sort, Propose an event and the overflow button are one height at 1440 px', async () => {
+  it('#16: the sort, Propose an event and the overflow button are one height at 1440 px', async () => {
     const wrapper = await attached();
 
-    const search = wrapper.get('[data-facet-search] input');
-    const filters = wrapper.findAll('[data-facet-end] button').find((button) => button.text().startsWith('Filters'))!;
-    const heights = [search, filters, sort(wrapper), propose(wrapper), overflow(wrapper)].map((control) =>
+    const heights = [sort(wrapper), propose(wrapper), overflow(wrapper)].map((control) =>
       heightAt(control.element, desktop),
     );
-    expect(heights).toEqual([40, 40, 40, 40, 40]);
+    expect(heights).toEqual([40, 40, 40]);
   });
 
-  it('#15: on a phone the chip groups scroll sideways in rows of their own and the end controls fill the width', async () => {
+  it('#15: on a phone the sort and Propose an event grow to close their row, and the overflow button does not', async () => {
     const wrapper = await attached();
-    const root = wrapper.get('[data-test="events-toolbar"]').element;
 
-    // A column of full-width groups, each one row that scrolls: no wrapping into a row per chip.
-    expect(utilitiesAt(root, phone, '[data-facet-inline]')).toEqual(
-      expect.arrayContaining(['w-full', 'flex-col', 'flex-nowrap', 'overflow-visible']),
-    );
-    expect(utilitiesAt(root, phone, '[data-facet-inline]>*')).toEqual(
-      expect.arrayContaining(['flex-nowrap', 'overflow-x-auto', 'min-w-0']),
-    );
-    expect(utilitiesAt(root, phone, '[data-facet-inline]>*>*')).toContain('shrink-0');
-    // The end controls start at the left over the whole width; the sort and Propose grow to close their rows.
-    expect(utilitiesAt(root, phone, '[data-facet-end]')).toEqual(expect.arrayContaining(['w-full', 'justify-start']));
     for (const control of [sort(wrapper).element.parentElement!, propose(wrapper).element]) {
       expect(utilitiesAt(control, phone)).toContain('grow');
       expect(utilitiesAt(control, desktop)).not.toContain('grow');
     }
     expect(utilitiesAt(overflow(wrapper).element, phone)).not.toContain('grow');
-  });
-
-  it('#15: from sm up the bar keeps its own layout, and "Clear all" is as tall as the other controls at both widths', async () => {
-    const wrapper = await attached();
-    const root = wrapper.get('[data-test="events-toolbar"]').element;
-
-    expect(rulesAt(root, desktop).filter((rule) => rule.selector !== null)).toEqual([
-      { selector: '[data-facet-clear-all]', utility: 'min-h-10' },
-    ]);
-    expect(utilitiesAt(root, phone, '[data-facet-clear-all]')).toEqual(['min-h-10']);
   });
 
   it('#13: opening the proposal form scrolls it into view and moves focus to its first field', async () => {

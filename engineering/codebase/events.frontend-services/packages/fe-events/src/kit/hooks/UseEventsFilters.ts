@@ -1,12 +1,5 @@
 import { RegionCodes, regionFlag, regionName } from '@wow-two-beta/fe/foundation/i18n';
 import {
-  FacetKind,
-  FacetPlacement,
-  type FacetDefinition,
-  type FacetOption,
-  type FacetSelection,
-} from '@wow-two-beta/fe/presentation/forms';
-import {
   computed,
   getCurrentInstance,
   onMounted,
@@ -32,6 +25,13 @@ import type { EventsClient } from '../client/CreateEventsClient';
 import { localIsoDate } from '../dates/EventDates';
 import { addEventDays, eventDateRange, EventDatePresetValues, type EventDatePreset } from '../facts/EventDatePresets';
 import { regionQuery, type EventRegion } from '../facts/EventRegions';
+import {
+  EventsFacetKind,
+  EventsFacetPlacement,
+  type EventsFacet,
+  type EventsFacetOption,
+  type EventsFilterSelection,
+} from '../facts/EventsFacets';
 import { EventsLabels } from '../text/EventsLabels';
 import { pickText, type EventsLocale } from '../text/EventsLocale';
 import { eventsText, type EventsMessageKey } from '../text/EventsMessages';
@@ -68,12 +68,12 @@ export interface EventsCustomRange {
  */
 export type EventsRouteQuery = Readonly<Record<string, string | readonly (string | null)[] | null | undefined>>;
 
-/** Holds the feed's filter state, so a page can host the filter bar in a card and an `EventsFeed` can list from it. */
+/** Holds the feed's filter state, so a page can build its own filter bar and an `EventsFeed` can list from it. */
 export interface EventsFilters {
   /** The search box's text; bind it with `v-model:search`. The query takes it after a short pause. */
   readonly search: Ref<string>;
   /** The picks by facet key; bind it with `v-model`. A write keeps no default (the "All" scope, the upcoming dates). */
-  readonly selection: Ref<FacetSelection>;
+  readonly selection: Ref<EventsFilterSelection>;
   /** How the tracking list is ordered; bind it with `v-model` on a select. */
   readonly sort: Ref<TrackingSort>;
   /** The range the `custom` preset lists; a preset other than `custom` clears it. */
@@ -84,9 +84,9 @@ export interface EventsFilters {
   readonly tracking: ComputedRef<boolean>;
   /** The workflow: the option's, else the one read from the client; null until it arrives. */
   readonly workflow: ComputedRef<Pick<WorkflowModel, 'stages' | 'defaultStage'> | null>;
-  /** The facets for the fe sdk `FacetBar`, with the server's counts under `tracking`. */
-  readonly facetDefinitions: ComputedRef<readonly FacetDefinition[]>;
-  /** How many events the current query lists (tracking only); the bar's match pill. */
+  /** The facets a page's own bar renders, in display order, with the server's counts under `tracking`. */
+  readonly facetDefinitions: ComputedRef<readonly EventsFacet[]>;
+  /** How many events the current query lists (tracking only); what a bar's match pill reads. */
   readonly matchCount: ComputedRef<number | undefined>;
   /** How many events the default view lists (tracking only), once `matchCount` is known. */
   readonly totalCount: ComputedRef<number | undefined>;
@@ -99,7 +99,7 @@ export interface EventsFilters {
   /** Whether the reader chose anything: a search or a pick. */
   readonly filtered: ComputedRef<boolean>;
   /** Stores what the bar reports, leaving the defaults out: the "All" scope and the upcoming dates are no choice. */
-  select(selection: FacetSelection): void;
+  select(selection: EventsFilterSelection): void;
   /** Reads the facet counts again (tracking only), after a write that changes them. */
   refresh(): void;
   /**
@@ -135,16 +135,18 @@ const countOf = (list: readonly TrackingFacetCount[] | undefined, value: string)
   list?.find((item) => item.value === value)?.count;
 
 /** Writes a selection with its keys sorted, so two selections of the same picks compare equal. */
-function canonical(selection: FacetSelection): string {
+function canonical(selection: EventsFilterSelection): string {
   return JSON.stringify(Object.entries(selection).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 /**
  * Owns the filter state the events feed lists with: the search, the picks, the sort, the date preset and its custom range;
  * the facet definitions with the server's counts and the match and total counts under `tracking`; and the query that
- * state means. A page hosts the fe sdk `FacetBar` itself and hands the result to `EventsFeed` as `filters`, so the bar
- * and the list read one state. Like `useEventsRequest`, call it in a component's setup: its requests abort with the
- * component, and under `tracking` it reads the workflow and the counts once the component mounts.
+ * state means. The state is headless: the kit ships no filter bar (the fe sdk ships input primitives only). A page builds
+ * its own bar from `facetDefinitions`, `search`, `selection`, `matchCount` and `totalCount`, and hands the result to
+ * `EventsFeed` as `filters`, so the bar and the list read one state. Like `useEventsRequest`, call it in a component's
+ * setup: its requests abort with the component, and under `tracking` it reads the workflow and the counts once the
+ * component mounts.
  */
 export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
   const client = () => toValue(options.client);
@@ -158,7 +160,7 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
 
   const search = shallowRef('');
   const text = shallowRef('');
-  const selected = shallowRef<FacetSelection>({});
+  const selected = shallowRef<EventsFilterSelection>({});
   const sort = shallowRef<TrackingSort>('starts');
   const customRange = shallowRef<EventsCustomRange | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -265,7 +267,7 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
     key: string,
     list: readonly TrackingFacetCount[],
     label: (item: TrackingFacetCount) => string,
-  ): FacetOption[] {
+  ): EventsFacetOption[] {
     const options = list.map((item) => ({ value: item.value, label: label(item), count: item.count }));
     for (const value of pick(key)) {
       if (!options.some((option) => option.value === value)) {
@@ -294,18 +296,18 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
     ),
   );
 
-  const facetDefinitions = computed<readonly FacetDefinition[]>(() => {
+  const facetDefinitions = computed<readonly EventsFacet[]>(() => {
     const counts = tracking.value ? facets.value.value : null;
     const lang = locale.value;
     const msg = (key: EventsMessageKey, params?: Record<string, string | number>) => eventsText(key, lang, params);
-    const definitions: FacetDefinition[] = [];
+    const definitions: EventsFacet[] = [];
 
     if (regions.value?.length) {
       definitions.push({
         key: 'scope',
         label: msg('scope'),
-        kind: FacetKind.Single,
-        placement: FacetPlacement.Inline,
+        kind: EventsFacetKind.Single,
+        placement: EventsFacetPlacement.Inline,
         options: [
           { value: allScopes, label: msg('all') },
           ...regions.value.map((region) => ({
@@ -324,8 +326,8 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
       definitions.push({
         key: 'kind',
         label: msg('kind'),
-        kind: tracking.value ? FacetKind.Multi : FacetKind.Single,
-        placement: FacetPlacement.Inline,
+        kind: tracking.value ? EventsFacetKind.Multi : EventsFacetKind.Single,
+        placement: EventsFacetPlacement.Inline,
         options: kindOptions,
       });
     }
@@ -341,8 +343,8 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
         definitions.push({
           key: 'stage',
           label: msg('stage'),
-          kind: FacetKind.Multi,
-          placement: FacetPlacement.Popover,
+          kind: EventsFacetKind.Multi,
+          placement: EventsFacetPlacement.Popover,
           options: stageOptions,
         });
       }
@@ -350,16 +352,16 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
         definitions.push({
           key: 'hidden',
           label: msg('showHidden', { labels: hiddenLabels.value }),
-          kind: FacetKind.Toggle,
-          placement: FacetPlacement.Popover,
+          kind: EventsFacetKind.Toggle,
+          placement: EventsFacetPlacement.Popover,
         });
       }
       if (counts?.cities.length || pick('city').length) {
         definitions.push({
           key: 'city',
           label: msg('city'),
-          kind: FacetKind.Multi,
-          placement: FacetPlacement.Popover,
+          kind: EventsFacetKind.Multi,
+          placement: EventsFacetPlacement.Popover,
           options: countedOptions('city', counts?.cities ?? [], (item) => capitalized(item.value)),
         });
       }
@@ -367,8 +369,8 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
         definitions.push({
           key: 'source',
           label: msg('sourceFacet'),
-          kind: FacetKind.Multi,
-          placement: FacetPlacement.Popover,
+          kind: EventsFacetKind.Multi,
+          placement: EventsFacetPlacement.Popover,
           options: countedOptions('source', counts?.sources ?? [], (item) =>
             item.value === EventsConstants.curatedSource ? msg('sourceCurated') : (item.label ?? item.value),
           ),
@@ -378,31 +380,31 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
         definitions.push({
           key: 'country',
           label: msg('country'),
-          kind: FacetKind.Multi,
-          placement: FacetPlacement.Popover,
+          kind: EventsFacetKind.Multi,
+          placement: EventsFacetPlacement.Popover,
           options: countedOptions('country', counts?.countries ?? [], (item) => countryLabel(item.value)),
         });
       }
       definitions.push({
         key: 'priority',
         label: msg('highPriority'),
-        kind: FacetKind.Toggle,
-        placement: FacetPlacement.Popover,
+        kind: EventsFacetKind.Toggle,
+        placement: EventsFacetPlacement.Popover,
         ...(counts ? { count: countOf(counts.priorities, 'high') ?? 0 } : {}),
       });
       definitions.push({
         key: 'deadline',
         label: msg('deadlineSoon'),
-        kind: FacetKind.Toggle,
-        placement: FacetPlacement.Popover,
+        kind: EventsFacetKind.Toggle,
+        placement: EventsFacetPlacement.Popover,
         ...(counts ? { count: counts.openDeadline.count } : {}),
       });
     } else if (!regions.value?.length) {
       definitions.push({
         key: 'country',
         label: msg('country'),
-        kind: FacetKind.Single,
-        placement: FacetPlacement.Popover,
+        kind: EventsFacetKind.Single,
+        placement: EventsFacetPlacement.Popover,
         options: allCountries.value,
       });
     }
@@ -410,8 +412,8 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
     definitions.push({
       key: 'when',
       label: msg('dateFacet'),
-      kind: FacetKind.Single,
-      placement: FacetPlacement.Popover,
+      kind: EventsFacetKind.Single,
+      placement: EventsFacetPlacement.Popover,
       options: EventDatePresetValues.map((value) => ({ value, label: msg(presetKeys[value]) })),
     });
     return definitions;
@@ -422,7 +424,7 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
     tracking.value && matchCount.value !== undefined ? baseFacets.value.value?.total : undefined,
   );
 
-  function select(next: FacetSelection) {
+  function select(next: EventsFilterSelection) {
     const { scope, when, ...rest } = next;
     selected.value = {
       ...rest,
@@ -430,7 +432,7 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
       ...(typeof when === 'string' && when !== 'upcoming' ? { when } : {}),
     };
   }
-  const selection = computed<FacetSelection>({ get: () => selected.value, set: select });
+  const selection = computed<EventsFilterSelection>({ get: () => selected.value, set: select });
 
   // --- Pages ---
 
@@ -485,7 +487,8 @@ export function useEventsFilters(options: EventsFiltersOptions): EventsFilters {
     const when = values('when')[0];
     if (when && when !== 'upcoming' && (EventDatePresetValues as readonly string[]).includes(when)) next.when = when;
 
-    if (canonical(next as FacetSelection) !== canonical(selected.value)) selected.value = next as FacetSelection;
+    if (canonical(next as EventsFilterSelection) !== canonical(selected.value))
+      selected.value = next as EventsFilterSelection;
     const order = values('sort')[0];
     sort.value =
       tracking.value && (TrackingSortValues as readonly string[]).includes(order ?? '')

@@ -36,11 +36,11 @@ to the consumer's Tailwind sources:
   names its zone (`19:00 GMT+5`) only when the event's zone runs at another offset than the viewer's.
 - Titles match by language prefix (`ru` finds `ru-Cyrl`, `uz` finds `uz-Latn`); a card and the detail tag a title written
   in another language (`RU`).
-- An organization's page lists its tracking with `<EventsFeed tracking :hidden-stages :regions :quick-stages :can-track
-  :attention>`: every event is an `EventMediaCard` (stage pill when tracked, an untracked event the default stage's
-  quick actions in the card menu), `hiddenStages` are left out unless the "Show …" toggle or a stage pick asks, and
-  `quickStages` move an event at the default stage in one click. Mark a stage `lost` in the workflow to keep its events
-  out of the deadlines. `EventsDeadlines` takes `deadlineKinds` and `eventHref`; `EventDetail` takes `trackable`,
+- An organization's page lists its tracking with `useEventsFilters({ client, catalog, tracking: true, hiddenStages,
+  regions })` and `<EventsFeed :filters :quick-stages :can-track :attention>`: every event is an `EventMediaCard` (stage
+  pill when tracked, an untracked event the default stage's quick actions in the card menu), `hiddenStages` are left out
+  unless the "Show …" toggle or a stage pick asks, and `quickStages` move an event at the default stage in one click.
+  Mark a stage `lost` in the workflow to keep its events out of the deadlines. `EventsDeadlines` takes `deadlineKinds` and `eventHref`; `EventDetail` takes `trackable`,
   `regions`, `shownFields`, `hiddenFields` and offers the event's own calendar file; `TrackingForm` keeps the draft on a
   409, emits `dirty`, and shows a schema field marked `readOnly` without offering it.
 - The tracking list's query (`TrackingQuery`) takes `kinds`, `cities`, `sources`, `status`, `publishedSince` and `sort`
@@ -58,29 +58,21 @@ to the consumer's Tailwind sources:
   stages in order with zeros, `priorities` all three with zeros, an untracked event counts under the default stage, and
   `openDeadline` is `{ before, count }`: the events with an open deadline on or before `before`, the query's
   `deadlineBefore` else 30 days ahead. The query's sort, cursor and limit are not sent.
-- `EventsFeed` v2 (fe sdk `0.0.56`, `FacetBar`, `useAdaptiveList`) is a grid of `EventMediaCard`s
-  (`repeat(auto-fill, minmax(min(100%, 17rem), 1fr))`, fe sdk `MediaCard`) behind one toolbar:
-  - the match pill "{n} of {N}" (tracking): `n` is the current query's facets `total`, `N` a base query's total (the
-    default upcoming view, no chosen filter, hidden stages still left out), read on mount and after a tracking write;
-  - search (debounced ~250 ms), inline scope chips from `regions` (all, each region; counts summed from the `countries`
-    facet) and inline kind chips with counts (several kinds with `tracking`, one without);
-  - a "Filters" popover: stages (an untracked event counts under the default stage), city, source (labels as stored,
-    `curated` as "Curated"), three `FacetKind.Toggle` switch rows — "High priority" (`priority=high`, counted from the
-    `high` priority), "Deadline within 30 days" (`deadlineBefore` 30 days from today, counted from `openDeadline`) and
-    "Show {hidden stages}" (lifts `excludeStages`) — and the date presets (upcoming by default, today, this month, next 3
-    months, this year, past, custom: the fe sdk's `DateRangePicker` appears at the end of the bar); each pick shows as a
-    removable chip, a toggle that is on as one chip with its bare label closed by `Remove {label}`;
-  - the sort (`starts`, `added`, `deadline`; tracking only), then the proposal button (`canPropose`) and an overflow menu
-    holding the calendar download.
-  Counts come from one `getTrackingFacets` call per query change (the list's own query, aborted when superseded; each
-  facet from its own array); a facets failure leaves the chips without counts. The list scrolls: `useAdaptiveList`
-  loads the next cursor ahead of the reader, with no button, and starts over from no cursor when a filter or the sort
-  changes. Month dividers show under the `starts` sort only (undated events last); `added` and `deadline` keep the
-  server's order in a flat grid. Without `tracking` the same toolbar filters the catalog list: search, kind, scope and
-  the date presets, with no counts, no pill, no sort and no stage, city, source or priority facets. `eventDateRange(preset,
-  today, custom?)` gives the `from` and `to` a preset means (`today` is that one day, undated events left out; the
-  backend lists every event running on it).
-  - Attention pills sit between the toolbar and the grid and hide at a count of 0: the built-in "{n} deadlines in 14
+- `EventsFeed` (fe sdk `0.0.56`, `useAdaptiveList`) is a grid of `EventMediaCard`s
+  (`repeat(auto-fill, minmax(min(100%, 17rem), 1fr))`, fe sdk `MediaCard`) and ships **no filter bar**: the fe sdk offers
+  input primitives only, so each product builds its own bar from the headless filter state (the next item) and passes
+  that state as the required `filters` prop. Its props are `client`, `catalog`, `filters`, `locale`, `today`, `kinds`,
+  `pageSize`, `canPropose`, `eventHref`, `workflow`, `regions`, `quickStages`, `canTrack`, `proposal`, `viewerZone`,
+  `attention`, `imageSrc` and `actionsTo`; whether it lists the organization's tracking, which stages stay hidden and
+  how the list is sorted all come from `filters`. What it renders of its own:
+  - an `events-actions` row (right-aligned, above the attention pills): the sort (`starts`, `added`, `deadline`;
+    tracking only), the fe sdk's `DateRangePicker` while the `custom` date preset is picked, the proposal button
+    (`canPropose`) and an overflow menu holding the calendar download. `actionsTo` (a CSS selector) moves the row into an
+    element of the page's own card;
+  - the list: `useAdaptiveList` loads the next cursor ahead of the reader, with no button, and starts over from no cursor
+    when a filter or the sort changes. Month dividers show under the `starts` sort only (undated events last); `added`
+    and `deadline` keep the server's order in a flat grid. The empty, failure and loading states stay.
+  - Attention pills sit between the actions row and the grid and hide at a count of 0: the built-in "{n} deadlines in 14
     days" (open `application` deadlines of the tracking summary, expanding to `EventsDeadlines`) and the consumer's
     `attention` (`{ key, label, count }[]`), each expanding to the `#attention` slot (`{ key, close }`).
   - Breaks from v1: `EventCard` and the `variant` prop are gone (every event is a card), `shownFields` is dropped
@@ -92,21 +84,40 @@ to the consumer's Tailwind sources:
     ("apply by 3 Mar · 5d", "registration by 20 Jan · 71d"; the year only 12 or more months out; red when urgent), else
     the source names. The whole card opens the event (`eventHref`, else `open`), and it is dimmed when cancelled,
     removed or past. Organizer, scope, cost, the review state and the title-language tag stay on the event's page.
-- Shared filter state: `useEventsFilters(options)` (`./kit`) owns what the feed's toolbar holds — `search`, `selection`
-  and `sort` (writable refs for `v-model`), `customRange` and the date `preset`, the facet count requests,
-  `facetDefinitions`, `matchCount` and `totalCount` (computed values for the fe sdk `FacetBar`) and the query the feed
-  lists with. Its options (`client`, `catalog`, `locale`, `today`, `kinds`, `tracking`, `workflow`, `hiddenStages`,
-  `regions`) are values, refs or getters. A page that hosts the bar in a card of its own calls it, renders the
-  `FacetBar` with `eventsFacetBarLabels(locale)` (the feed's own label props) and `feedFacetBarClass`, and passes the
-  state on: `<EventsFeed :filters="filters" actions-to="#feed-actions" …>`. With `filters` the feed lists from that
-  state, renders no `events-toolbar` and starts no facet requests; its custom range picker, sort, "Propose an event"
-  and overflow menu sit in a right-aligned `events-actions` row above the attention pills, which `actionsTo` (a CSS
-  selector) moves into a page element. Without `filters` nothing changes. The calendar asks the same state for its
-  window: `filters.toWindowQuery(from, to)` is a `TrackingQuery` with every picked filter and no date preset, so a
-  month- or year-precision event comes back with its precision unchanged. `toRouteQuery()` and `fromRouteQuery(query)`
-  carry `q`, `stages`, `kinds`, `cities`, `sources`, `regions` (the scope's key), `when` and `sort` through the URL, so
-  two pages given one router query keep the filters; the toggles, a country list and a custom range stay on the page.
-  `feedSortClass` and `feedPillClass` export beside `feedFacetBarClass`.
+  - Breaking: the feed no longer renders a filter bar, so `filters` is required and the props only that bar used
+    (`tracking`, `hiddenStages`) moved to `useEventsFilters`; the bar's phone layout class is gone and the bar's label
+    helper is now `eventsFilterLabels`. The facet types are the kit's own (below), so a page migrates by renaming imports.
+- Headless filter state: `useEventsFilters(options)` (`./kit`) owns everything a filter bar needs and renders nothing —
+  `search`, `selection` and `sort` (writable refs for `v-model`), `customRange` and the date `preset`, the facet count
+  requests, `facetDefinitions` (the facets, in order), `matchCount` and `totalCount` (the "12 of 72" pill, tracking only)
+  and the query the feed lists with. Its options (`client`, `catalog`, `locale`, `today`, `kinds`, `tracking`,
+  `workflow`, `hiddenStages`, `regions`) are values, refs or getters. The page calls it in its setup, builds its bar
+  from it and passes the state on: `<EventsFeed :filters="filters" actions-to="#feed-actions" …>`; the feed starts no
+  facet requests of its own.
+  - The facets are neutral data, exported as `EventsFacet` (`EventsChoiceFacet | EventsToggleFacet`), `EventsFacetOption`,
+    `EventsFilterSelection`, `EventsFacetKind` and `EventsFacetPlacement`: a facet has a `key`, a `label`, a `kind`
+    (`single`, `multi` or `toggle`) and a `placement` (`inline`, a chip row beside the search, or `popover`, behind the
+    bar's "Filters" button); a choice facet has `options` of `{ value, label, count? }` and a toggle a `count?`. Under
+    `tracking` the counts come from the server's facets; without it no count is set. In order: `scope` (the consumer's
+    `regions`, with "All"), `kind`, then under `tracking` `stage`, `hidden` ("Show {hidden stages}" toggle), `city`,
+    `source`, `country` (without `regions`), the toggles `priority` and `deadline`, and last `when` (the date
+    presets: upcoming by default, today, this month, next 3 months, this year, past, custom). `selection` holds the
+    picks by facet key (a string, a list, or `true` for a toggle); a write keeps no default (the "All" scope, the
+    upcoming dates).
+  - `eventsFilterLabels(locale)` writes the strings a bar needs (`searchLabel`, `searchPlaceholder`, `filtersLabel`,
+    `clearAllLabel`, `anyLabel`, `selectedLabel`, `removeLabel`, `removeToggleLabel`, `matchLabel`) in `en`, `ru` or
+    `uz`, with `{count}`, `{facet}`, `{value}`, `{matched}` and `{total}` left for the bar to fill. `feedSortClass` and
+    `feedPillClass` (the actions row's sort select and an attention pill) export for a bar that wants the same heights.
+  - Counts come from one `getTrackingFacets` call per query change (the list's own query, aborted when superseded; each
+    facet from its own array) and a base query's total for `totalCount`, read on mount and after a tracking write; a
+    facets failure leaves the facets without counts. The search is debounced (~250 ms). `eventDateRange(preset, today,
+    custom?)` gives the `from` and `to` a preset means (`today` is that one day, undated events left out; the backend
+    lists every event running on it).
+  - The calendar asks the same state for its window: `filters.toWindowQuery(from, to)` is a `TrackingQuery` with every
+    picked filter and no date preset, so a month- or year-precision event comes back with its precision unchanged.
+    `toRouteQuery()` and `fromRouteQuery(query)` carry `q`, `stages`, `kinds`, `cities`, `sources`, `regions` (the scope's
+    key), `when` and `sort` through the URL, so two pages given one router query keep the filters; the toggles, a
+    country list and a custom range stay on the page.
 - Card zones are slots (`EventMediaCard`; `EventsFeed` forwards `card-{zone}` to every card). Each defaults to the
   content above, so a consumer swaps one zone and keeps the rest; every slot gets `{ event, tracking }` plus the values
   its zone renders (types `EventCard*Slot`, zones `EventCardZones`):

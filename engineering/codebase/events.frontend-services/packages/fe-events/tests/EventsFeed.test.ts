@@ -1,10 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { FacetBar, type FacetDefinition } from '@wow-two-beta/fe/presentation/forms';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import type { EventImage, EventModel } from '../src/contracts';
-import { EventMediaCard, EventsFeed, type EventCardDetailSlot } from '../src/kit';
-import { envelope, eventModel, fakeService, stubIntersectionObserver } from './Fixtures';
+import { EventMediaCard, type EventCardDetailSlot } from '../src/kit';
+import { envelope, eventModel, facetsModel, fakeService, stubIntersectionObserver } from './Fixtures';
+import { mountFeed } from './FeedPage';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -29,14 +29,26 @@ const events = [
 ];
 const page = () => envelope({ items: events, nextCursor: null });
 
+/** Answers the routes of a tracking feed: an empty list, 72 events in the facets, no deadlines. */
+function trackingRoutes(request: Request) {
+  const path = new URL(request.url).pathname;
+  if (path.endsWith('/tracking/facets')) return envelope(facetsModel(72));
+  if (path.endsWith('/workflow')) return envelope({ stages: [], defaultStage: 'candidate', revision: 1 });
+  if (path.endsWith('/tracking/summary')) return envelope({ byStage: {}, untracked: 0, upcomingDeadlines: [] });
+  return envelope({ items: [], nextCursor: null });
+}
+
+/** Mounts the feed the way a page does, with the page's own filter state (`mountFeed`). */
 async function render(props: Record<string, unknown>, ...responders: Parameters<typeof fakeService>) {
-  const service = fakeService(...responders);
-  const wrapper = mount(EventsFeed, {
-    props: { client: service.client, catalog: 'ocharo', today: '2026-11-10', ...props },
-  });
-  wrappers.push(wrapper);
-  await flushPromises();
-  return { ...service, wrapper };
+  const mounted = await mountFeed(props, responders.length > 1 ? sequence(responders) : responders[0]!);
+  wrappers.push(mounted.host);
+  return mounted;
+}
+
+/** Answers each request with the next responder, the last one for every request after. */
+function sequence(responders: Parameters<typeof fakeService>) {
+  const rest = [...responders];
+  return (request: Request) => (rest.length > 1 ? rest.shift()! : rest[0]!)(request);
 }
 
 describe('events feed', () => {
@@ -88,8 +100,26 @@ describe('events feed', () => {
     ]);
   });
 
-  it('renders the catalog list without counts: no facets read, no pill, no sort, no stage, source or priority facets', async () => {
-    const { wrapper, requests } = await render(
+  it('renders no filter bar: no toolbar, no search box, no Filters button, no match pill', async () => {
+    const { wrapper } = await render(
+      { tracking: true, canPropose: true, kinds: [{ key: 'runway', label: { en: 'Runway' } }] },
+      trackingRoutes,
+    );
+
+    expect(wrapper.find('[data-test="events-toolbar"]').exists()).toBe(false);
+    expect(wrapper.find('input[type="search"]').exists()).toBe(false);
+    expect(wrapper.find('[data-facet-match]').exists()).toBe(false);
+    expect(wrapper.find('[data-facet-search]').exists()).toBe(false);
+    expect(wrapper.findAll('button').some((button) => button.text().startsWith('Filters'))).toBe(false);
+    // What the feed does render of its own: the actions row (sort under tracking, proposal, overflow menu).
+    const actions = wrapper.get('[data-test="events-actions"]');
+    expect(actions.find('select[name="sort"]').exists()).toBe(true);
+    expect(actions.findAll('button').some((button) => button.text() === 'Propose an event')).toBe(true);
+    expect(actions.find('[data-test="feed-overflow"]').exists()).toBe(true);
+  });
+
+  it("lists the catalog from the page's filter state, with no counts read and no sort", async () => {
+    const { wrapper, requests, filters } = await render(
       {
         kinds: [{ key: 'runway', label: { en: 'Runway' } }],
         regions: [{ key: 'local', label: { en: 'Local' }, countries: ['UZ'] }],
@@ -98,9 +128,9 @@ describe('events feed', () => {
     );
 
     expect(requests.every((request) => !new URL(request.url).pathname.includes('/tracking'))).toBe(true);
-    expect(wrapper.get('[data-facet-match]').text()).toBe('');
     expect(wrapper.find('select[name="sort"]').exists()).toBe(false);
-    const facets = wrapper.findComponent(FacetBar).props('facets') as readonly FacetDefinition[];
+    expect(filters.matchCount.value).toBeUndefined();
+    const facets = filters.facetDefinitions.value;
     expect(facets.map((facet) => facet.key)).toEqual(['scope', 'kind', 'when']);
     expect(facets.find((facet) => facet.key === 'kind')?.kind).toBe('single');
     expect(
@@ -112,18 +142,17 @@ describe('events feed', () => {
     expect(wrapper.find('[data-test="attention-pills"]').exists()).toBe(false);
   });
 
-  it('filters the catalog by kind, scope and date presets with the same bar', async () => {
-    const { wrapper, requests } = await render(
+  it("filters the catalog by kind, scope and date presets through the page's selection", async () => {
+    const { requests, filters } = await render(
       {
         kinds: [{ key: 'runway', label: { en: 'Runway' } }],
         regions: [{ key: 'local', label: { en: 'Local' }, countries: ['UZ'] }],
       },
       page,
     );
-    const bar = wrapper.findComponent(FacetBar);
     const params = () => new URL(requests.at(-1)!.url).searchParams;
 
-    bar.vm.$emit('update:modelValue', { kind: 'runway', scope: 'local', when: 'thisYear' });
+    filters.selection.value = { kind: 'runway', scope: 'local', when: 'thisYear' };
     await flushPromises();
 
     expect(params().get('kind')).toBe('runway');
@@ -249,14 +278,9 @@ describe('image source forwarded by the feed', () => {
 describe('card slots forwarded by the feed', () => {
   /** Mounts the feed with `card-*` slots; `page` answers every list read. */
   async function renderCards(slots: Record<string, (scope: never) => unknown>, props: Record<string, unknown> = {}) {
-    const service = fakeService(page);
-    const wrapper = mount(EventsFeed, {
-      props: { client: service.client, catalog: 'ocharo', today: '2026-11-10', ...props },
-      slots: slots as never,
-    });
-    wrappers.push(wrapper);
-    await flushPromises();
-    return wrapper;
+    const mounted = await mountFeed(props, page, { slots });
+    wrappers.push(mounted.host);
+    return mounted.wrapper;
   }
 
   it('card-media replaces the curated image in every card and receives the image', async () => {

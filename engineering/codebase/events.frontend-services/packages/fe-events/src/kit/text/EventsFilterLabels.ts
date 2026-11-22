@@ -1,8 +1,12 @@
 import { eventsText } from './EventsMessages';
 import type { EventsLocale } from './EventsLocale';
 
-/** Holds the label props the fe sdk's `FacetBar` takes, written for the events feed (`searchLabel` … `matchLabel`). */
-export interface EventsFacetBarLabels {
+/**
+ * Holds the strings a page's own filter bar needs, written for the events feed: the search box (`searchLabel`,
+ * `searchPlaceholder`), the "Filters" button and "Clear all", the picker's "Any" and `{count}` selected, the removable
+ * chips' close buttons and the match pill (`matchLabel`, "{matched} of {total}").
+ */
+export interface EventsFilterLabels {
   readonly searchLabel: string;
   readonly searchPlaceholder: string;
   readonly filtersLabel: string;
@@ -15,11 +19,10 @@ export interface EventsFacetBarLabels {
 }
 
 /**
- * Writes the label props the feed gives its `FacetBar`, in `locale`, so a card that hosts the bar on a page reads the
- * same words: `v-bind="eventsFacetBarLabels(locale)"`. The `{count}`, `{facet}`, `{value}`, `{matched}` and `{total}`
- * placeholders stay for the bar to fill.
+ * Writes the filter bar's strings in `locale`, so a product's bar reads the words the events feed uses. The `{count}`,
+ * `{facet}`, `{value}`, `{matched}` and `{total}` placeholders stay for the bar to fill.
  */
-export function eventsFacetBarLabels(locale: EventsLocale = 'en'): EventsFacetBarLabels {
+export function eventsFilterLabels(locale: EventsLocale = 'en'): EventsFilterLabels {
   return {
     searchLabel: eventsText('searchEvents', locale),
     searchPlaceholder: eventsText('searchPlaceholder', locale),

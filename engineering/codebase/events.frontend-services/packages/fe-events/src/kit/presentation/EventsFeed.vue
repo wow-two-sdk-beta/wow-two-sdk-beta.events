@@ -2,7 +2,6 @@
 import { ResultExtensions } from '@wow-two-beta/fe/foundation/results';
 import { useAdaptiveList } from '@wow-two-beta/fe/foundation/virtualization';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
-import { FacetBar } from '@wow-two-beta/fe/presentation/forms';
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import {
   type CatalogKindModel,
@@ -19,9 +18,8 @@ import { deadlineDaysLeft, eventGroupHeading, groupEventsByMonth, localIsoDate }
 import { eventTitle } from '../facts/EventFactsText';
 import type { EventProposalOptions } from '../facts/EventProposalOptions';
 import type { EventRegion } from '../facts/EventRegions';
-import { useEventsFilters, type EventsFilters } from '../hooks/UseEventsFilters';
+import type { EventsFilters } from '../hooks/UseEventsFilters';
 import { useEventsRequest } from '../hooks/UseEventsRequest';
-import { eventsFacetBarLabels } from '../text/EventsFacetBarLabels';
 import type { EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
 import EventMediaCard from './EventMediaCard.vue';
@@ -37,7 +35,7 @@ import {
 import EventProposalForm from './EventProposalForm.vue';
 import EventsDeadlines from './EventsDeadlines.vue';
 import EventsFeedActions from './EventsFeedActions.vue';
-import { feedFacetBarClass, feedPillClass } from './EventsFeedStyles';
+import { feedPillClass } from './EventsFeedStyles';
 import FailureNotice from './FailureNotice.vue';
 
 interface FeedItem {
@@ -51,30 +49,21 @@ interface FeedPage {
 }
 
 /**
- * Lists a catalog's events as image-first `EventMediaCard`s in a responsive grid, behind the fe sdk's `FacetBar`: the
- * match pill ("12 of 72", tracking only), a search, inline scope chips (the consumer's `regions`) and kind chips, a
- * "Filters" popover (stage, city, source, the toggles "High priority", "Deadline within 30 days" and "Show {hidden
- * stages}", and the date presets: upcoming by default, this month, next 3 months, this year, past, a custom range)
- * whose picks show as removable chips, a sort (start date, recently added, nearest deadline) and — at the end — the proposal button and an
- * overflow menu with the calendar download. The list scrolls without a button: `useAdaptiveList` loads the next cursor
- * ahead of the reader. Under the `starts` sort each month has a divider, undated events last; under the other sorts
- * the grid is flat. With `tracking` (PG01) it lists the organization's tracking: each card carries its stage (an
- * untracked event the default stage), priority and quick stage actions; the chips carry server counts (one
- * `getTrackingFacets` read per query change, each facet counted without its own selection), and attention pills
- * between the toolbar and the grid — "{n} deadlines in 14 days", expanding to `EventsDeadlines`, plus the consumer's
- * `attention` pills, expanding to the `attention` slot — show only above zero. Without `tracking` it lists the catalog
- * on the same toolbar with no counts, no stage, priority, source or city facets and no sort. A member's proposal
- * publishes at once in a private catalog and the feed reloads to show it; in a shared or public one it waits for review.
- * A `card-{zone}` slot (`card-media`, `card-fallback`, `card-pills`, `card-actions`, `card-title`, `card-meta`,
- * `card-detail`) is forwarded to every card's slot of that zone with the card's own slot props; a zone left empty keeps
- * the card's content.
- *
- * The filter state lives in `useEventsFilters`. The feed calls it from its own props; a page that hosts the filter bar in
- * its own card (the calendar beside the feed) calls it itself, renders the `FacetBar` from `facetDefinitions`, `search`,
- * `selection`, `matchCount` and `totalCount`, and passes the result as `filters`. Then the feed lists from that state,
- * renders no toolbar (no `events-toolbar`) and reads no facet counts; the custom range picker (the `custom` preset only),
- * the sort (tracking only), the proposal button and the overflow menu sit in a right-aligned `events-actions` row above
- * the attention pills, which `actionsTo` (a CSS selector) moves into the page's card.
+ * Lists a catalog's events as image-first `EventMediaCard`s in a responsive grid, with no filter bar of its own: the page
+ * owns the filter state (`useEventsFilters`), builds the bar from it and passes it as `filters`. The feed lists from that
+ * state, reads no facet counts and shows its own controls — the custom range picker (the `custom` preset only), the sort
+ * (date start, recently added, nearest deadline; tracking only), the proposal button and an overflow menu with the
+ * calendar download — in a right-aligned `events-actions` row above the attention pills, which `actionsTo` (a CSS
+ * selector) moves into the page's own card. The list scrolls without a button: `useAdaptiveList` loads the next cursor
+ * ahead of the reader. Under the `starts` sort each month has a divider, undated events last; under the other sorts the
+ * grid is flat. With `filters.tracking` (PG01) it lists the organization's tracking: each card carries its stage (an
+ * untracked event the default stage), priority and quick stage actions, and attention pills between the actions row and
+ * the grid — "{n} deadlines in 14 days", expanding to `EventsDeadlines`, plus the consumer's `attention` pills,
+ * expanding to the `attention` slot — show only above zero. Without it the feed lists the catalog, with no stage,
+ * priority or sort. A member's proposal publishes at once in a private catalog and the feed reloads to show it; in a
+ * shared or public one it waits for review. A `card-{zone}` slot (`card-media`, `card-fallback`, `card-pills`,
+ * `card-actions`, `card-title`, `card-meta`, `card-detail`) is forwarded to every card's slot of that zone with the
+ * card's own slot props; a zone left empty keeps the card's content.
  */
 defineOptions({ name: 'EventsFeed' });
 
@@ -85,20 +74,16 @@ const props = withDefaults(
     locale?: EventsLocale;
     /** The person's calendar day, `YYYY-MM-DD`; the browser's by default. */
     today?: string;
-    /** The catalog's kinds, for the filter and the labels. */
+    /** The catalog's kinds, for the cards' labels and the proposal form. */
     kinds?: readonly CatalogKindModel[];
     pageSize?: number;
     /** Whether the person may propose an event (a member of the catalog's readers). */
     canPropose?: boolean;
     /** Builds an event's page link; the cards emit `open` either way. */
     eventHref?: (id: string) => string;
-    /** Whether to list the organization's tracking (stages, priority, counts) instead of the catalog's events. */
-    tracking?: boolean;
-    /** The organization's workflow; read with `client.getWorkflow()` when absent and `tracking` is on. */
+    /** The organization's workflow, overriding the filter state's (the `filters.workflow` it read or was given). */
     workflow?: Pick<WorkflowModel, 'stages' | 'defaultStage'> | null;
-    /** Stages left out unless their own filter or the "Show …" toggle asks (Ocharo: skipped, rejected). */
-    hiddenStages?: readonly string[];
-    /** The consumer's regions: scope chips over country sets (with counts, summed from the countries facet). */
+    /** The consumer's regions, for the proposal form's scope field. */
     regions?: readonly EventRegion[];
     /** Stages offered as one-click actions on cards at the default stage (Ocharo: shortlisted, skipped). */
     quickStages?: readonly string[];
@@ -116,11 +101,11 @@ const props = withDefaults(
     /** Forwarded to every card: the source to show for an event's image, such as its stored copy; null keeps the `url`. */
     imageSrc?: (event: EventModel, image: EventImage, index: number) => string | null;
     /**
-     * The filter state of a page that hosts the filter bar itself (`useEventsFilters`). The feed lists from it, renders
-     * no `FacetBar` and starts no facet requests of its own; it shows its own controls in the `events-actions` row.
+     * The filter state, which the page owns (`useEventsFilters`) and its own filter bar reads. The feed lists from it
+     * (the query, the sort, whether it is the organization's tracking) and starts no facet requests of its own.
      */
-    filters?: EventsFilters;
-    /** A CSS selector for the element the `events-actions` row moves into, so a page's card can host it; with `filters`. */
+    filters: EventsFilters;
+    /** A CSS selector for the element the `events-actions` row moves into, so a page's card can host it. */
     actionsTo?: string;
   }>(),
   {
@@ -130,9 +115,7 @@ const props = withDefaults(
     pageSize: 50,
     canPropose: false,
     eventHref: undefined,
-    tracking: false,
     workflow: undefined,
-    hiddenStages: () => [],
     regions: undefined,
     quickStages: () => [],
     canTrack: false,
@@ -140,7 +123,6 @@ const props = withDefaults(
     viewerZone: undefined,
     attention: () => [],
     imageSrc: undefined,
-    filters: undefined,
     actionsTo: undefined,
   },
 );
@@ -188,20 +170,8 @@ const calendarPending = shallowRef(false);
 const downloadFailed = shallowRef(false);
 const proposalSection = useTemplateRef<HTMLElement>('proposalForm');
 
-// The filter state: a page's (`filters`), else the feed's own. With a page's, the feed's own reads nothing.
-const own = useEventsFilters({
-  client: () => props.client,
-  catalog: () => props.catalog,
-  locale: () => props.locale,
-  today: () => props.today,
-  kinds: () => props.kinds,
-  tracking: () => props.tracking && !props.filters,
-  workflow: () => props.workflow,
-  hiddenStages: () => props.hiddenStages,
-  regions: () => props.regions,
-});
-const { search, selection, facetDefinitions, matchCount, totalCount, select } = own;
-const state = computed(() => props.filters ?? own);
+// The filter state is the page's: the feed reads and writes it, and the page's bar reads the same refs.
+const state = computed(() => props.filters);
 const tracked = computed(() => state.value.tracking.value);
 const sortChoice = computed({
   get: () => state.value.sort.value,
@@ -399,33 +369,7 @@ function proposed(event: EventModel, written: TrackingModel | null = null) {
   <section class="space-y-4" aria-labelledby="events-feed-title">
     <h2 id="events-feed-title" class="sr-only">{{ eventsText('eventsTitle', locale) }}</h2>
 
-    <FacetBar
-      v-if="!filters"
-      v-model:search="search"
-      :facets="facetDefinitions"
-      :model-value="selection"
-      :match-count="matchCount"
-      :total-count="totalCount"
-      v-bind="eventsFacetBarLabels(locale)"
-      :class="feedFacetBarClass"
-      data-test="events-toolbar"
-      @update:model-value="select"
-    >
-      <template #trailing>
-        <EventsFeedActions
-          v-model:sort="sortChoice"
-          :locale="locale"
-          :custom="customPreset"
-          :tracking="tracked"
-          :proposable="canPropose && !proposing"
-          :calendar-pending="calendarPending"
-          @range="pickRange"
-          @propose="openProposal"
-          @download="downloadCalendar"
-        />
-      </template>
-    </FacetBar>
-    <Teleport v-else defer :to="actionsTo" :disabled="!actionsTo">
+    <Teleport defer :to="actionsTo" :disabled="!actionsTo">
       <div class="flex flex-wrap items-center justify-end gap-2" data-test="events-actions">
         <EventsFeedActions
           v-model:sort="sortChoice"

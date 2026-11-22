@@ -56,8 +56,8 @@ describe('events feed page', () => {
 
     await until(() => {
       expect(wrapper.findAll('[data-test="event-media-card"]')).toHaveLength(12);
-      expect(wrapper.get('[data-facet-match]').text()).toMatch(/^(\d+) of \1$/);
-      expect(wrapper.findAll('button').some((button) => button.text() === 'Filters')).toBe(true);
+      expect(wrapper.get('[data-test="feed-match"]').text()).toMatch(/^(\d+) of \1$/);
+      expect(wrapper.get('[data-test="feed-filters"] summary').text()).toBe('Filters');
       expect(wrapper.findAll('[data-test="event-group"] > h3').length).toBeGreaterThanOrEqual(2);
       expect(wrapper.findAll('[data-test="event-stage-menu"]').length).toBeGreaterThan(0);
       expect(wrapper.findAll('[data-test="attention-pills"] button').map((button) => button.text())).toEqual([

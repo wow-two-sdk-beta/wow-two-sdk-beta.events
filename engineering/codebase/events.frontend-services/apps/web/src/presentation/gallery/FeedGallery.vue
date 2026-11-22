@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { EventDetail, EventsFeed, eventTitle, formatEventWhen } from '@wow-two-beta/fe-events/kit';
+import { EventDetail, EventsFeed, eventTitle, formatEventWhen, useEventsFilters } from '@wow-two-beta/fe-events/kit';
 import { ref } from 'vue';
 import expoPoster from './posters/poster-expo.svg?no-inline';
 import runwayPoster from './posters/poster-runway.svg?no-inline';
 import showcasePoster from './posters/poster-showcase.svg?no-inline';
 import { sampleKinds, sampleQuickStages, sampleToday } from './CardSamples';
 import { createFeedFake, feedRegions, feedWorkflow } from './FeedFake';
+import FeedFilterBar from './FeedFilterBar.vue';
 
 /**
  * Renders `EventsFeed` in tracking mode over an in-memory service (`FeedFake`: 40 events, pages of 12, facets that
  * follow the query), with Ocharo's regions, kinds, workflow, hidden stages and quick stages and one consumer attention
- * pill, to check the facet bar, the scroll and the cards by eye at any width; opening a card shows its `EventDetail`
- * above the feed. A development page only: `feed.html`,
- * served by the dev server and left out of the build.
+ * pill, to check the filters, the scroll and the cards by eye at any width. The page owns the filter state
+ * (`useEventsFilters`) and its bar (`FeedFilterBar`, built from the neutral facets), as a product does; opening a card
+ * shows its `EventDetail` above the feed. A development page only: `feed.html`, served by the dev server and left out of
+ * the build.
  */
 defineOptions({ name: 'FeedGallery' });
 
@@ -22,6 +24,16 @@ const absolute = (url: string) => new URL(url, window.location.href).href;
 const fake = createFeedFake({
   posters: [absolute(runwayPoster), absolute(expoPoster), absolute(showcasePoster)],
   latencyMs: props.latencyMs,
+});
+const filters = useEventsFilters({
+  client: fake.client,
+  catalog: 'ocharo',
+  today: sampleToday,
+  tracking: true,
+  kinds: sampleKinds,
+  workflow: feedWorkflow,
+  hiddenStages: ['skipped', 'rejected'],
+  regions: feedRegions,
 });
 const pastEvents = fake.events.filter((event) => (event.facts.starts?.value ?? '9') < sampleToday);
 const attention = [{ key: 'past', label: `${pastEvents.length} past to close`, count: pastEvents.length }];
@@ -49,14 +61,14 @@ const opened = ref<string | null>(null);
       />
       <button type="button" class="text-sm underline underline-offset-4" @click="opened = null">Close event</button>
     </section>
+    <FeedFilterBar :filters="filters" />
     <EventsFeed
       :client="fake.client"
       catalog="ocharo"
       :today="sampleToday"
-      tracking
+      :filters="filters"
       :kinds="sampleKinds"
       :workflow="feedWorkflow"
-      :hidden-stages="['skipped', 'rejected']"
       :regions="feedRegions"
       :quick-stages="sampleQuickStages"
       can-track

@@ -1,20 +1,23 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { FacetBar, type FacetDefinition } from '@wow-two-beta/fe/presentation/forms';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h, type PropType, type VNodeChild } from 'vue';
+import { h } from 'vue';
 import type { TrackedEventModel, WorkflowModel } from '../src/contracts';
 import {
   eventDateRange,
   EventDatePresetValues,
+  EventsFacetKind,
+  EventsFacetPlacement,
   EventsFeed,
-  eventsFacetBarLabels,
+  eventsFilterLabels,
   useEventsFilters,
   type EventRegion,
   type EventsClient,
+  type EventsFacet,
   type EventsFilters,
   type EventsFiltersOptions,
 } from '../src/kit';
 import { envelope, eventModel, facetCount, facetsModel, fakeService, stubIntersectionObserver } from './Fixtures';
+import { filterBar, Host } from './FeedPage';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -76,12 +79,6 @@ const facetRequests = (requests: Request[]) => paths(requests, '/tracking/facets
 const lastParams = (requests: Request[]) => new URL(requests.at(-1)!.url).searchParams;
 const pause = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A component whose setup runs `build`, so a page's setup can be written in a test and its lifecycle hooks attach. */
-const Host = defineComponent({
-  props: { build: { type: Function as PropType<() => () => VNodeChild>, required: true } },
-  setup: (props) => props.build(),
-});
-
 /** Calls `useEventsFilters` in a component's setup, as a page does, and gives back its state. */
 async function stateOf(client: EventsClient, extra: Partial<EventsFiltersOptions> = {}) {
   let filters!: EventsFilters;
@@ -104,8 +101,8 @@ interface PageOptions {
 }
 
 /**
- * A page that hosts the filter bar in a card of its own: one `useEventsFilters` feeds a `FacetBar` and an `EventsFeed`;
- * the card has an element for the feed's actions.
+ * A page that builds the filter bar in a card of its own: one `useEventsFilters` feeds the page's bar (`filterBar`, made
+ * of the neutral facets alone) and an `EventsFeed`; the card has an element for the feed's actions.
  */
 async function mountPage(responder: (request: Request) => Response, options: PageOptions = {}) {
   const service = fakeService(responder);
@@ -123,19 +120,7 @@ async function mountPage(responder: (request: Request) => Response, options: Pag
         });
         return () =>
           h('div', [
-            h('div', { id: 'filters-card' }, [
-              h(FacetBar, {
-                facets: filters.facetDefinitions.value,
-                modelValue: filters.selection.value,
-                search: filters.search.value,
-                matchCount: filters.matchCount.value,
-                totalCount: filters.totalCount.value,
-                ...eventsFacetBarLabels('en'),
-                'onUpdate:modelValue': (next: Parameters<typeof filters.select>[0]) => (filters.selection.value = next),
-                'onUpdate:search': (value: string) => (filters.search.value = value),
-              }),
-              h('div', { id: 'card-actions' }),
-            ]),
+            h('div', { id: 'filters-card' }, [filterBar(filters), h('div', { id: 'card-actions' })]),
             h(EventsFeed, {
               client: service.client,
               catalog: 'ocharo',
@@ -157,33 +142,25 @@ async function mountPage(responder: (request: Request) => Response, options: Pag
 }
 
 describe('shared filter state (T11)', () => {
-  it('keeps the feed with no `filters` as it was: its own toolbar, no actions row', async () => {
-    const service = fakeService(router());
-    const wrapper = mount(EventsFeed, {
-      props: { client: service.client, catalog: 'ocharo', today: '2026-11-10', tracking: true, canPropose: true },
-    });
-    wrappers.push(wrapper);
-    await flushPromises();
-
-    const toolbar = wrapper.get('[data-test="events-toolbar"]');
-    expect(toolbar.findComponent(FacetBar).exists()).toBe(true);
-    expect(toolbar.find('select[name="sort"]').exists()).toBe(true);
-    expect(toolbar.findAll('button').some((button) => button.text() === 'Propose an event')).toBe(true);
-    expect(wrapper.find('[data-test="events-actions"]').exists()).toBe(false);
-  });
-
-  it("lets a page's FacetBar drive the feed's list: a stage, a city, a source and a search all reach it", async () => {
-    const { wrapper, requests, filters, feed } = await mountPage(router());
+  it("renders no bar of its own: the page's bar is the only search box, and the feed keeps its actions row", async () => {
+    const { wrapper, feed } = await mountPage(router());
 
     expect(feed.find('[data-test="events-toolbar"]').exists()).toBe(false);
-    expect(feed.findComponent(FacetBar).exists()).toBe(false);
+    expect(feed.find('input[type="search"]').exists()).toBe(false);
+    expect(wrapper.findAll('input[type="search"]')).toHaveLength(1);
+    expect(wrapper.get('#filters-card').find('input[type="search"]').exists()).toBe(true);
+    expect(feed.find('[data-test="events-actions"]').exists()).toBe(true);
+  });
+
+  it("lets a page's own bar drive the feed's list: a stage, a city, a source and a search all reach it", async () => {
+    const { wrapper, requests, filters, feed } = await mountPage(router());
+
     const actions = feed.get('[data-test="events-actions"]');
     expect(actions.find('select[name="sort"]').exists()).toBe(true);
     expect(actions.findAll('button').some((button) => button.text() === 'Propose an event')).toBe(true);
     expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual(['skipped', 'rejected']);
 
-    const bar = wrapper.findComponent(FacetBar);
-    bar.vm.$emit('update:modelValue', { stage: ['shortlisted'], city: ['tashkent'], source: ['afisha'] });
+    filters.selection.value = { stage: ['shortlisted'], city: ['tashkent'], source: ['afisha'] };
     await flushPromises();
     await wrapper.get('input[type="search"]').setValue('fashion');
     await pause();
@@ -214,7 +191,7 @@ describe('shared filter state (T11)', () => {
   it("shows the match pill from the page's own counts", async () => {
     const { wrapper } = await mountPage(router());
 
-    expect(wrapper.get('[data-facet-match]').text()).toBe('72 of 72');
+    expect(wrapper.get('[data-test="page-bar-match"]').text()).toBe('72 of 72');
   });
 
   it("moves the feed's actions row into the page's card with `actionsTo`", async () => {
@@ -236,68 +213,120 @@ describe('shared filter state (T11)', () => {
     expect(moved.feed.find('[data-test="events-actions"]').exists()).toBe(false);
   });
 
-  it("gives the page the definitions the feed's own toolbar renders, keys and counts included", async () => {
-    const service = fakeService(router());
-    const own = mount(EventsFeed, {
-      props: { client: service.client, catalog: 'ocharo', today: '2026-11-10', tracking: true, ...ocharo },
-    });
-    wrappers.push(own);
-    await flushPromises();
-    const rendered = own.getComponent(FacetBar).props('facets') as readonly FacetDefinition[];
-
+  it("gives the page neutral facets with the server's counts under `tracking`: keys, kinds, placements and counts", async () => {
     const { filters } = await mountPage(router());
 
-    expect(filters.facetDefinitions.value).toEqual(rendered);
-    expect(filters.facetDefinitions.value.map((item) => item.key)).toEqual([
-      'scope',
-      'kind',
-      'stage',
-      'hidden',
-      'city',
-      'source',
-      'priority',
-      'deadline',
-      'when',
+    const facets = filters.facetDefinitions.value;
+    expect(facets.map((item) => `${item.key}:${item.kind}:${item.placement}`)).toEqual([
+      'scope:single:inline',
+      'kind:multi:inline',
+      'stage:multi:popover',
+      'hidden:toggle:popover',
+      'city:multi:popover',
+      'source:multi:popover',
+      'priority:toggle:popover',
+      'deadline:toggle:popover',
+      'when:single:popover',
     ]);
-    const scope = filters.facetDefinitions.value.find((item) => item.key === 'scope');
-    expect(scope && scope.kind !== 'toggle' ? scope.options.map((option) => option.count) : []).toEqual([
-      undefined,
-      40,
-      15,
-      3,
-    ]);
+    const countsOf = (key: string) => {
+      const facet = facets.find((item) => item.key === key);
+      return facet && facet.kind !== 'toggle' ? facet.options.map((option) => option.count) : [];
+    };
+    expect(countsOf('scope')).toEqual([undefined, 40, 15, 3]);
+    expect(countsOf('kind')).toEqual([2, 0]);
+    expect(countsOf('stage')).toEqual([2, 1, 2, 0]);
+    expect(facets.find((item) => item.key === 'priority')).toEqual({
+      key: 'priority',
+      label: 'High priority',
+      kind: 'toggle',
+      placement: 'popover',
+      count: 1,
+    });
+    expect(facets.find((item) => item.key === 'deadline')).toMatchObject({ kind: 'toggle', count: 1 });
+    // A choice facet is plain data: the key, the label, the kind, the placement and options of value, label and count.
+    expect(facets.find((item) => item.key === 'city')).toEqual({
+      key: 'city',
+      label: 'City',
+      kind: 'multi',
+      placement: 'popover',
+      options: [
+        { value: 'tashkent', label: 'Tashkent', count: 1 },
+        { value: 'almaty', label: 'Almaty', count: 1 },
+      ],
+    });
     expect(filters.matchCount.value).toBe(72);
     expect(filters.totalCount.value).toBe(72);
   });
 
-  it('writes the same label props the feed gives its bar', async () => {
-    const service = fakeService(router());
+  it('names the facet kinds and placements the way the facets carry them', () => {
+    expect(EventsFacetKind).toEqual({ Single: 'single', Multi: 'multi', Toggle: 'toggle' });
+    expect(EventsFacetPlacement).toEqual({ Inline: 'inline', Popover: 'popover' });
+    const facet: EventsFacet = {
+      key: 'kind',
+      label: 'Kind',
+      kind: EventsFacetKind.Single,
+      placement: EventsFacetPlacement.Inline,
+      options: [{ value: 'runway', label: 'Runway' }],
+    };
+    expect(facet.kind).toBe('single');
+  });
+
+  it("lets a page's bar write a pick and a toggle through the neutral facets", async () => {
+    const { wrapper, requests } = await mountPage(router());
+
+    await wrapper.get('[data-facet="kind"] [data-value="runway"]').trigger('click');
+    await flushPromises();
+    expect(lastParams(listRequests(requests)).getAll('kinds')).toEqual(['runway']);
+
+    await wrapper.get('[data-facet="priority"] button').trigger('click');
+    await flushPromises();
+    expect(lastParams(listRequests(requests)).get('priority')).toBe('high');
+    expect(wrapper.get('[data-facet="priority"] button').attributes('aria-pressed')).toBe('true');
+
+    await wrapper.get('[data-facet="priority"] button').trigger('click');
+    await flushPromises();
+    expect(lastParams(listRequests(requests)).get('priority')).toBeNull();
+  });
+
+  it('gives the page the strings its bar needs, in each language, with the placeholders left to fill', () => {
+    const keys = [
+      'searchLabel',
+      'searchPlaceholder',
+      'filtersLabel',
+      'clearAllLabel',
+      'anyLabel',
+      'selectedLabel',
+      'removeLabel',
+      'removeToggleLabel',
+      'matchLabel',
+    ];
     for (const locale of ['en', 'ru', 'uz'] as const) {
-      const wrapper = mount(EventsFeed, {
-        props: { client: service.client, catalog: 'ocharo', today: '2026-11-10', tracking: true, locale },
-      });
-      wrappers.push(wrapper);
-      await flushPromises();
-      const bar = wrapper.getComponent(FacetBar);
+      const labels = eventsFilterLabels(locale);
 
-      const labels = eventsFacetBarLabels(locale);
-
-      expect(Object.keys(labels)).toEqual([
-        'searchLabel',
-        'searchPlaceholder',
-        'filtersLabel',
-        'clearAllLabel',
-        'anyLabel',
-        'selectedLabel',
-        'removeLabel',
-        'removeToggleLabel',
-        'matchLabel',
-      ]);
-      for (const [key, value] of Object.entries(labels)) {
-        expect(bar.props(key as keyof typeof labels)).toBe(value);
-      }
+      expect(Object.keys(labels), locale).toEqual(keys);
+      expect(
+        Object.values(labels).every((value) => value !== ''),
+        locale,
+      ).toBe(true);
+      expect(labels.matchLabel, locale).toContain('{matched}');
+      expect(labels.matchLabel, locale).toContain('{total}');
+      expect(labels.selectedLabel, locale).toContain('{count}');
+      expect(labels.removeLabel, locale).toContain('{facet}');
+      expect(labels.removeLabel, locale).toContain('{value}');
+      expect(labels.removeToggleLabel, locale).toContain('{facet}');
     }
-    expect(eventsFacetBarLabels('en').matchLabel).toBe('{matched} of {total}');
+    expect(eventsFilterLabels()).toEqual({
+      searchLabel: 'Search events',
+      searchPlaceholder: eventsFilterLabels('en').searchPlaceholder,
+      filtersLabel: 'Filters',
+      clearAllLabel: 'Clear all',
+      anyLabel: 'Any',
+      selectedLabel: '{count} selected',
+      removeLabel: 'Remove {facet}: {value}',
+      removeToggleLabel: 'Remove {facet}',
+      matchLabel: '{matched} of {total}',
+    });
+    expect(eventsFilterLabels('ru').removeToggleLabel).toBe('Убрать: {facet}');
   });
 
   it('builds the calendar window from every picked filter and ignores the date preset', async () => {
@@ -448,7 +477,7 @@ describe('the today preset (T11)', () => {
   });
 
   it('shows in the `when` facet, and a pick lists that day through the feed', async () => {
-    const { filters, requests, wrapper } = await mountPage(router());
+    const { filters, requests } = await mountPage(router());
     const when = filters.facetDefinitions.value.find((item) => item.key === 'when');
     expect(when && when.kind !== 'toggle' ? when.options.map((option) => [option.value, option.label]) : []).toEqual([
       ['upcoming', 'Upcoming'],
@@ -460,7 +489,7 @@ describe('the today preset (T11)', () => {
       ['custom', 'Custom range…'],
     ]);
 
-    wrapper.findComponent(FacetBar).vm.$emit('update:modelValue', { when: 'today' });
+    filters.selection.value = { when: 'today' };
     await flushPromises();
 
     const params = lastParams(listRequests(requests));

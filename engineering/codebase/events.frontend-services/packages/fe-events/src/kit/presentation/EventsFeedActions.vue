@@ -10,8 +10,8 @@ import { feedSortClass } from './EventsFeedStyles';
 
 /**
  * The feed's own controls: the custom range picker (the `custom` preset only), the sort (tracking only), the proposal
- * button and the overflow menu with the calendar download. `EventsFeed` renders them at the end of its toolbar, or, with
- * external `filters`, in its `events-actions` row.
+ * button and the overflow menu with the calendar download. `EventsFeed` renders them in its `events-actions` row, beside
+ * the page's own filter bar.
  */
 defineOptions({ name: 'EventsFeedActions' });
 
