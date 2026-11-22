@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import {
-  DateCertaintyValues,
-  DatePrecisionValues,
-  type DateCertainty,
-  type DatePrecision,
-  type EventWhen,
-} from '../../contracts';
+  SelectPicker,
+  SelectPickerContent,
+  SelectPickerItem,
+  SelectPickerTrigger,
+  SelectPickerValue,
+} from '@wow-two-beta/fe/presentation/forms';
+import { computed } from 'vue';
+import { DateCertaintyValues, DatePrecisionValues, type DatePrecision, type EventWhen } from '../../contracts';
 import { EventsLabels } from '../text/EventsLabels';
 import type { EventsLocale } from '../text/EventsLocale';
 import { eventsText } from '../text/EventsMessages';
@@ -47,26 +48,35 @@ function update(change: Partial<EventWhen>) {
   const next = { ...props.modelValue, ...change };
   emit('update:modelValue', next.precision === 'unknown' ? { ...next, value: null } : next);
 }
-const asPrecision = (value: string) => value as DatePrecision;
-const asCertainty = (value: string) => value as DateCertainty;
 </script>
 
 <template>
   <fieldset class="grid gap-2 sm:grid-cols-3" :disabled="disabled">
     <legend class="mb-1" :class="eventLabelClass">{{ label }}</legend>
-    <label class="flex flex-col gap-1">
+    <div class="flex flex-col gap-1">
       <span :class="eventLabelClass">{{ eventsText('precision', locale) }}</span>
-      <select
+      <SelectPicker
+        :model-value="modelValue.precision"
         :name="`${name}-precision`"
-        :class="eventFieldClass"
-        :value="modelValue.precision"
-        @change="update({ precision: asPrecision(($event.target as HTMLSelectElement).value) })"
+        :is-disabled="disabled"
+        @update:model-value="(key) => key && update({ precision: key })"
       >
-        <option v-for="item in DatePrecisionValues" :key="item" :value="item">
-          {{ EventsLabels.precision(item, locale) }}
-        </option>
-      </select>
-    </label>
+        <SelectPickerTrigger
+          v-bind="{ 'aria-label': eventsText('precision', locale) }"
+          :data-test="`${name}-precision`"
+        >
+          <SelectPickerValue />
+        </SelectPickerTrigger>
+        <SelectPickerContent>
+          <SelectPickerItem
+            v-for="item in DatePrecisionValues"
+            :key="item"
+            :item-key="item"
+            :label="EventsLabels.precision(item, locale)"
+          />
+        </SelectPickerContent>
+      </SelectPicker>
+    </div>
     <label class="flex flex-col gap-1">
       <span :class="eventLabelClass">{{ eventsText('date', locale) }}</span>
       <input
@@ -79,18 +89,29 @@ const asCertainty = (value: string) => value as DateCertainty;
         @input="update({ value: ($event.target as HTMLInputElement).value })"
       />
     </label>
-    <label class="flex flex-col gap-1">
+    <div class="flex flex-col gap-1">
       <span :class="eventLabelClass">{{ eventsText('certainty', locale) }}</span>
-      <select
+      <SelectPicker
+        :model-value="modelValue.certainty"
         :name="`${name}-certainty`"
-        :class="eventFieldClass"
-        :value="modelValue.certainty"
-        @change="update({ certainty: asCertainty(($event.target as HTMLSelectElement).value) })"
+        :is-disabled="disabled"
+        @update:model-value="(key) => key && update({ certainty: key })"
       >
-        <option v-for="item in DateCertaintyValues" :key="item" :value="item">
-          {{ EventsLabels.certainty(item, locale) }}
-        </option>
-      </select>
-    </label>
+        <SelectPickerTrigger
+          v-bind="{ 'aria-label': eventsText('certainty', locale) }"
+          :data-test="`${name}-certainty`"
+        >
+          <SelectPickerValue />
+        </SelectPickerTrigger>
+        <SelectPickerContent>
+          <SelectPickerItem
+            v-for="item in DateCertaintyValues"
+            :key="item"
+            :item-key="item"
+            :label="EventsLabels.certainty(item, locale)"
+          />
+        </SelectPickerContent>
+      </SelectPicker>
+    </div>
   </fieldset>
 </template>

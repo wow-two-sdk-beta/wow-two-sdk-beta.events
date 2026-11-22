@@ -120,6 +120,59 @@ async function renderAt(path: string) {
   return wrapper;
 }
 
+/** The open picker panel: the fe sdk's popover layer, teleported to the document body, holding a listbox. */
+const panelOptions = () => [
+  ...document.querySelectorAll<HTMLElement>('[role="dialog"] [role="listbox"] [role="option"]'),
+];
+
+async function openPicker(trigger: Element) {
+  (trigger as HTMLElement).click();
+  await flushPromises();
+}
+
+async function pickOption(label: string) {
+  const option = panelOptions().find((item) => item.textContent?.trim() === label);
+  if (!option) throw new Error(`No option "${label}" in [${panelOptions().map((item) => item.textContent?.trim())}]`);
+  option.click();
+  await flushPromises();
+  // The panel leaves after its exit frames, not at the click.
+  await vi.waitFor(() => {
+    if (document.querySelector('[role="dialog"]')) throw new Error('The picker panel is still open');
+  });
+}
+
+describe('console pickers', () => {
+  it('picks the catalog and the language from the sdk panel, with no native select', async () => {
+    const fashion = { ...catalogs[0], slug: 'ocharo-fashion', name: 'Ocharo fashion' };
+    serve(signedIn, (url) =>
+      url.pathname === '/api/events/v1/catalogs' ? Response.json({ data: [...catalogs, fashion] }) : undefined,
+    );
+    const wrapper = await renderAt('/');
+    const catalog = wrapper.get('[data-test="console-catalog"]');
+    const language = wrapper.get('[data-test="console-locale"]');
+
+    expect(wrapper.findAll('select')).toHaveLength(0);
+    expect(catalog.attributes('aria-label')).toBe('Catalog');
+    expect(language.attributes('aria-label')).toBe('Language');
+    expect(catalog.text()).toBe('Ocharo showcase');
+    expect(language.text()).toBe('en');
+
+    await openPicker(catalog.element);
+    expect(document.querySelector('[role="dialog"] [role="listbox"]')).not.toBeNull();
+    expect(document.querySelectorAll('select')).toHaveLength(0);
+    expect(panelOptions().map((item) => item.textContent?.trim())).toEqual(['Ocharo showcase', 'Ocharo fashion']);
+    await pickOption('Ocharo fashion');
+    expect(catalog.text()).toBe('Ocharo fashion');
+
+    await openPicker(language.element);
+    expect(panelOptions().map((item) => item.textContent?.trim())).toEqual(['en', 'ru', 'uz']);
+    await pickOption('ru');
+    expect(language.text()).toBe('ru');
+    expect(wrapper.get('[data-test="console-catalog"]').attributes('aria-label')).toBe('Каталог');
+    expect(document.querySelectorAll('select')).toHaveLength(0);
+  });
+});
+
 describe('sign-in', () => {
   it('offers the BFF sign-in back to the page when there is no session', async () => {
     const requests = serve({ isAuthenticated: false });
@@ -137,7 +190,7 @@ describe('sign-in', () => {
     const wrapper = await renderAt('/');
 
     expect(wrapper.get('[data-test="session"]').text()).toBe('Malika Karimova · Ocharo');
-    expect(wrapper.get('select[name="catalog"]').text()).toContain('Ocharo showcase');
+    expect(wrapper.get('[data-test="console-catalog"]').text()).toContain('Ocharo showcase');
     expect(wrapper.get('[aria-label="App version"]').text()).toBe('app test');
     expect(wrapper.get('[aria-label="API version"]').text()).toBe('api 0.1.4+abc1234');
   });
@@ -256,6 +309,6 @@ describe('console routes', () => {
     expect(wrapper.find('[data-test="digest-list"]').exists()).toBe(false);
     expect(wrapper.get('[data-test="digest-editor"] h2').text()).toBe('Ocharo weekly');
     expect(wrapper.get('[data-test="digest-next-run"]').text()).toContain('09:00 (Asia/Tashkent)');
-    expect(wrapper.find('select[name="channel"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="digest-channel"]').exists()).toBe(true);
   });
 });

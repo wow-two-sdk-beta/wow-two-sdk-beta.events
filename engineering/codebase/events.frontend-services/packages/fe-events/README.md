@@ -66,7 +66,8 @@ to the consumer's Tailwind sources:
   `attention`, `imageSrc` and `actionsTo`; whether it lists the organization's tracking, which stages stay hidden and
   how the list is sorted all come from `filters`. What it renders of its own:
   - an `events-actions` row (right-aligned, above the attention pills): the sort (`starts`, `added`, `deadline`;
-    tracking only), the fe sdk's `DateRangePicker` while the `custom` date preset is picked, the proposal button
+    tracking only; the fe sdk's `SelectPicker`, its trigger `data-test="feed-sort"` and a hidden `sort` input, its
+    panel the sdk's popover), the fe sdk's `DateRangePicker` while the `custom` date preset is picked, the proposal button
     (`canPropose`) and an overflow menu holding the calendar download. `actionsTo` (a CSS selector) moves the row into an
     element of the page's own card;
   - the list: `useAdaptiveList` loads the next cursor ahead of the reader, with no button, and starts over from no cursor
@@ -105,8 +106,9 @@ to the consumer's Tailwind sources:
     upcoming dates).
   - `eventsFilterLabels(locale)` writes the strings a bar needs (`searchLabel`, `searchPlaceholder`, `filtersLabel`,
     `clearAllLabel`, `anyLabel`, `selectedLabel`, `removeLabel`, `removeToggleLabel`, `matchLabel`) in `en`, `ru` or
-    `uz`, with `{count}`, `{facet}`, `{value}`, `{matched}` and `{total}` left for the bar to fill. `feedSortClass` and
-    `feedPillClass` (the actions row's sort select and an attention pill) export for a bar that wants the same heights.
+    `uz`, with `{count}`, `{facet}`, `{value}`, `{matched}` and `{total}` left for the bar to fill. `feedSortClass` (the
+    sort trigger's pill shape, `rounded-full`; the height and border come from the sdk's `SelectPickerTrigger`) and
+    `feedPillClass` (an attention pill) export for a bar that wants the same shapes.
   - Counts come from one `getTrackingFacets` call per query change (the list's own query, aborted when superseded; each
     facet from its own array) and a base query's total for `totalCount`, read on mount and after a tracking write; a
     facets failure leaves the facets without counts. The search is debounced (~250 ms). `eventDateRange(preset, today,
@@ -145,6 +147,13 @@ to the consumer's Tailwind sources:
   image falls back to the `url` (through `safeHttpUrl`), and when that fails too the card shows its date tile and the
   detail leaves the image out, the no-image state. With no resolver nothing changes. Images stay lazy and send no
   referrer. A consumer's `media` slot still replaces the image entirely, and its `image.url` is the source being tried.
+- No native `<select>` is left in the kit or the admin screens: every choice (the sort, the tracking stage and priority,
+  an event's kind, status and the precision and certainty of a date, the catalog events' review state, a digest's channel
+  and language) is the fe sdk's `SelectPicker`, composed where it is used, with the panel the sdk's popover. Each keeps
+  its `name` on a hidden input (a native form still reads it once a value is picked) and puts a `data-test` on the
+  trigger: `feed-sort`, `tracking-stage`, `tracking-priority`, `facts-kind`, `facts-status`, `{starts|ends}-precision`,
+  `{starts|ends}-certainty`, `events-review`, `digest-channel`, `digest-language`. A form's lock (`disabled`, a pending
+  save) disables its pickers.
 - `EventFactsFields` (and so `EventProposalForm` and the review editor) picks the country with the fe sdk's
   `CountryPicker`: a searchable list in the viewer's language that stores the alpha-2 code (`UZ`), clearable. With
   `regions`, their countries head the list. The free-text code and its "two-letter code" check are gone.

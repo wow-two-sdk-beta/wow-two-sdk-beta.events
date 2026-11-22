@@ -5,6 +5,7 @@ import type { EventImage, EventModel } from '../src/contracts';
 import { EventMediaCard, type EventCardDetailSlot } from '../src/kit';
 import { envelope, eventModel, facetsModel, fakeService, stubIntersectionObserver } from './Fixtures';
 import { mountFeed } from './FeedPage';
+import { pick } from './Picker';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -113,7 +114,7 @@ describe('events feed', () => {
     expect(wrapper.findAll('button').some((button) => button.text().startsWith('Filters'))).toBe(false);
     // What the feed does render of its own: the actions row (sort under tracking, proposal, overflow menu).
     const actions = wrapper.get('[data-test="events-actions"]');
-    expect(actions.find('select[name="sort"]').exists()).toBe(true);
+    expect(actions.find('[data-test="feed-sort"]').exists()).toBe(true);
     expect(actions.findAll('button').some((button) => button.text() === 'Propose an event')).toBe(true);
     expect(actions.find('[data-test="feed-overflow"]').exists()).toBe(true);
   });
@@ -128,7 +129,7 @@ describe('events feed', () => {
     );
 
     expect(requests.every((request) => !new URL(request.url).pathname.includes('/tracking'))).toBe(true);
-    expect(wrapper.find('select[name="sort"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="feed-sort"]').exists()).toBe(false);
     expect(filters.matchCount.value).toBeUndefined();
     const facets = filters.facetDefinitions.value;
     expect(facets.map((facet) => facet.key)).toEqual(['scope', 'kind', 'when']);
@@ -242,7 +243,7 @@ describe('events feed', () => {
       ?.click();
     await flushPromises();
     await wrapper.get('input[name="title"]').setValue('Show');
-    await wrapper.get('select[name="starts-precision"]').setValue('month');
+    await pick(wrapper.get('[data-test="starts-precision"]').element, 'Month');
     await wrapper.get('input[name="starts-value"]').setValue('14.03.2026');
     await wrapper.get('form').trigger('submit');
     await flushPromises();

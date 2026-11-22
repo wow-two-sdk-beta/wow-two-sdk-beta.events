@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatalogEventsTable } from '../src/admin';
 import { envelope, eventModel, fakeService } from './Fixtures';
+import { openPicker, panelLabels, pickOption, submitted } from './Picker';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -64,5 +65,27 @@ describe('catalog events table', () => {
     expect(confirm).toHaveBeenCalledOnce();
     expect(requests[1]!.url).toContain('/review/e3/reopen?expectedRevision=4');
     expect(requests).toHaveLength(3);
+  });
+
+  it('filters by review state from the sdk panel, with no native select, and asks the service for the picked state', async () => {
+    const event = eventModel('e4');
+    const { wrapper, requests } = await render(() => envelope({ items: [event], nextCursor: null }));
+    const trigger = wrapper.get('[data-test="events-review"]');
+
+    expect(wrapper.element.querySelectorAll('select')).toHaveLength(0);
+    expect(trigger.text()).toContain('All states');
+    expect(submitted(wrapper.element, 'review')).toBe('');
+    await openPicker(trigger.element);
+    expect(document.querySelector('[role="dialog"] [role="listbox"]')).not.toBeNull();
+    expect(document.querySelectorAll('select')).toHaveLength(0);
+    expect(panelLabels()).toEqual(['All states', 'Awaiting review', 'Published', 'Rejected', 'Archived']);
+    const before = requests.length;
+    await pickOption('Published');
+    await flushPromises();
+
+    expect(trigger.text()).toContain('Published');
+    expect(submitted(wrapper.element, 'review')).toBe('published');
+    expect(requests.length).toBe(before + 1);
+    expect(new URL(requests.at(-1)!.url).searchParams.get('review')).toBe('published');
   });
 });

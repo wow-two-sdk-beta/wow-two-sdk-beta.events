@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DigestsPanel, TelegramText } from '../src/admin';
 import type { DigestModel, DigestRunModel, WorkflowModel } from '../src/contracts';
 import { envelope, fakeService } from './Fixtures';
+import { openPicker, panelLabels, pick, pickOption, submitted } from './Picker';
 import { desktop, heightAt, phone, utilitiesAt } from './Viewport';
 
 const wrappers: ReturnType<typeof mount>[] = [];
@@ -151,6 +152,46 @@ describe('digests panel', () => {
       expectedRevision: null,
     });
     expect(create.headers.get('X-Csrf-Token')).toBe('csrf-1');
+  });
+
+  it('picks the channel and the language from the sdk panel, with no native select, and saves their stored values', async () => {
+    const { wrapper, requests } = await render(serve(), { channels: ['telegram', 'log'] });
+    const channel = wrapper.get('[data-test="digest-channel"]');
+    const language = wrapper.get('[data-test="digest-language"]');
+
+    expect(wrapper.element.querySelectorAll('select')).toHaveLength(0);
+    expect(channel.text()).toContain('Telegram');
+    expect(language.text()).toContain('O‘zbekcha');
+    await openPicker(channel.element);
+    expect(document.querySelector('[role="dialog"] [role="listbox"]')).not.toBeNull();
+    expect(document.querySelectorAll('select')).toHaveLength(0);
+    expect(panelLabels()).toEqual(['Telegram', 'Log only']);
+    await pickOption('Log only');
+    await openPicker(language.element);
+    expect(panelLabels()).toEqual(['O‘zbekcha', 'Русский', 'English']);
+    await pickOption('Русский');
+
+    expect(submitted(wrapper.element, 'channel')).toBe('log');
+    expect(submitted(wrapper.element, 'language')).toBe('ru');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    const update = requests.find((request) => request.method === 'PUT')!;
+    expect(await update.json()).toMatchObject({ channel: 'log', language: 'ru' });
+  });
+
+  it('keeps the pickers shut while the editor saves', async () => {
+    const { wrapper } = await render(serve(), { channels: ['telegram', 'log'] });
+
+    await wrapper.get('form').trigger('submit');
+    for (const hook of ['digest-channel', 'digest-language']) {
+      expect((wrapper.get(`[data-test="${hook}"]`).element as HTMLButtonElement).disabled, hook).toBe(true);
+    }
+    await flushPromises();
+    for (const hook of ['digest-channel', 'digest-language']) {
+      expect((wrapper.get(`[data-test="${hook}"]`).element as HTMLButtonElement).disabled, hook).toBe(false);
+    }
+    await pick(wrapper.get('[data-test="digest-channel"]').element, 'Log only');
+    expect(submitted(wrapper.element, 'channel')).toBe('log');
   });
 
   it('picks stages from the organization’s workflow, never one stage in both lists', async () => {
@@ -374,12 +415,16 @@ describe('digests panel on a phone and a desktop (events review #26-#29)', () =>
     );
     expect(buttons.map((button) => button.text())).toEqual(['Refresh', 'New digest', 'Refresh']);
     for (const button of buttons) expect(heightAt(button.element, phone)).toBeGreaterThanOrEqual(40);
+    // The fe sdk's pickers are fields too: their triggers count, their hidden form inputs do not.
     const fields = wrapper.findAll(
-      '[data-test="digest-editor"] input:not([type="checkbox"]), [data-test="digest-editor"] select, [data-test="digest-editor"] textarea',
+      '[data-test="digest-editor"] input:not([type="checkbox"]):not([type="hidden"]), [data-test="digest-editor"] button[role="combobox"], [data-test="digest-editor"] textarea',
     );
     expect(fields.length).toBeGreaterThan(8);
     for (const field of fields)
-      expect(heightAt(field.element, phone), field.attributes('name')).toBeGreaterThanOrEqual(40);
+      expect(
+        heightAt(field.element, phone),
+        field.attributes('name') ?? field.attributes('data-test'),
+      ).toBeGreaterThanOrEqual(40);
     expect(heightAt(wrapper.get('[data-test="digest-run"] button').element, phone)).toBeGreaterThanOrEqual(40);
   });
 

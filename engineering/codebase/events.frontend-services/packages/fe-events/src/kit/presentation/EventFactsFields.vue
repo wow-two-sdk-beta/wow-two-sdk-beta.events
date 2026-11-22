@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { CountryPicker, TextInput } from '@wow-two-beta/fe/presentation/forms';
+import {
+  CountryPicker,
+  SelectPicker,
+  SelectPickerContent,
+  SelectPickerItem,
+  SelectPickerTrigger,
+  SelectPickerValue,
+  TextInput,
+} from '@wow-two-beta/fe/presentation/forms';
 import { computed } from 'vue';
-import { EventStatusValues, type CatalogKindModel, type EventStatus } from '../../contracts';
+import { EventStatusValues, type CatalogKindModel } from '../../contracts';
 import type { EventFactsDraft } from '../facts/EventFactsDraft';
 import { countryName } from '../facts/EventFactsText';
 import { regionOfCountry, type EventRegion } from '../facts/EventRegions';
@@ -60,8 +68,6 @@ const preferred = computed(() => [
 ]);
 const country = computed(() => draft.value.country.trim().toUpperCase() || null);
 
-const asStatus = (value: string) => value as EventStatus;
-
 /** Replaces one field, so the parent's draft changes only through the model. */
 function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K]) {
   draft.value = { ...draft.value, [key]: value };
@@ -83,21 +89,28 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
     </label>
     <!-- Kind alone takes the full row, like the title; beside the status it shares the row. -->
     <div class="grid gap-4" :class="{ 'sm:grid-cols-2': withStatus }">
-      <label class="flex flex-col gap-1 text-sm">
+      <div class="flex flex-col gap-1 text-sm">
         <span :class="eventLabelClass">{{ eventsText('kind', locale) }}</span>
-        <select
+        <SelectPicker
           v-if="kinds?.length"
-          :value="draft.kind"
+          :model-value="draft.kind"
           name="kind"
-          :class="eventFieldClass"
-          :disabled="disabled"
-          @change="set('kind', ($event.target as HTMLSelectElement).value)"
+          :is-disabled="disabled"
+          @update:model-value="set('kind', $event ?? '')"
         >
-          <option value="">—</option>
-          <option v-for="item in kinds" :key="item.key" :value="item.key">
-            {{ pickText(item.label, locale) || item.key }}
-          </option>
-        </select>
+          <SelectPickerTrigger v-bind="{ 'aria-label': eventsText('kind', locale) }" data-test="facts-kind">
+            <SelectPickerValue />
+          </SelectPickerTrigger>
+          <SelectPickerContent>
+            <SelectPickerItem item-key="" label="—" />
+            <SelectPickerItem
+              v-for="item in kinds"
+              :key="item.key"
+              :item-key="item.key"
+              :label="pickText(item.label, locale) || item.key"
+            />
+          </SelectPickerContent>
+        </SelectPicker>
         <TextInput
           v-else
           :model-value="draft.kind"
@@ -106,21 +119,28 @@ function set<K extends keyof EventFactsDraft>(key: K, value: EventFactsDraft[K])
           :is-disabled="disabled"
           @update:model-value="set('kind', $event)"
         />
-      </label>
-      <label v-if="withStatus" class="flex flex-col gap-1 text-sm">
+      </div>
+      <div v-if="withStatus" class="flex flex-col gap-1 text-sm">
         <span :class="eventLabelClass">{{ eventsText('status', locale) }}</span>
-        <select
+        <SelectPicker
+          :model-value="draft.status"
           name="status"
-          :class="eventFieldClass"
-          :value="draft.status"
-          :disabled="disabled"
-          @change="set('status', asStatus(($event.target as HTMLSelectElement).value))"
+          :is-disabled="disabled"
+          @update:model-value="(key) => key && set('status', key)"
         >
-          <option v-for="item in EventStatusValues" :key="item" :value="item">
-            {{ EventsLabels.status(item, locale) }}
-          </option>
-        </select>
-      </label>
+          <SelectPickerTrigger v-bind="{ 'aria-label': eventsText('status', locale) }" data-test="facts-status">
+            <SelectPickerValue />
+          </SelectPickerTrigger>
+          <SelectPickerContent>
+            <SelectPickerItem
+              v-for="item in EventStatusValues"
+              :key="item"
+              :item-key="item"
+              :label="EventsLabels.status(item, locale)"
+            />
+          </SelectPickerContent>
+        </SelectPicker>
+      </div>
     </div>
     <WhenField
       :model-value="draft.starts"

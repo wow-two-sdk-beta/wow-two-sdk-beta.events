@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { Button } from '@wow-two-beta/fe/presentation/actions';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
-import { TextAreaInput } from '@wow-two-beta/fe/presentation/forms';
+import {
+  SelectPicker,
+  SelectPickerContent,
+  SelectPickerItem,
+  SelectPickerTrigger,
+  SelectPickerValue,
+  TextAreaInput,
+} from '@wow-two-beta/fe/presentation/forms';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import {
   EventsConstants,
@@ -156,7 +163,6 @@ async function stopTracking() {
   emit('removed');
 }
 
-const asPriority = (value: string) => value as TrackingPriority;
 watch(dirty, (value) => emit('dirty', value));
 const inputClass = 'rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground';
 
@@ -174,27 +180,51 @@ watch([() => props.catalog, () => props.eventId, () => props.client], load);
     <form v-else class="grid gap-4" novalidate @submit.prevent="submit">
       <p v-if="!tracking" class="text-sm text-muted-foreground">{{ eventsText('notTracked', locale) }}</p>
       <fieldset class="grid gap-4 sm:grid-cols-2" :disabled="!canEdit || save.pending.value">
-        <label class="flex flex-col gap-1 text-sm">
+        <div class="flex flex-col gap-1 text-sm">
           <span class="font-medium">{{ eventsText('stage', locale) }}</span>
-          <select v-model="stage" name="stage" :class="inputClass">
-            <option v-for="item in stages" :key="item.key" :value="item.key">
-              {{ EventsLabels.stage(item.key, stages, locale) }}
-            </option>
-          </select>
-        </label>
-        <label class="flex flex-col gap-1 text-sm">
-          <span class="font-medium">{{ eventsText('priority', locale) }}</span>
-          <select
-            name="priority"
-            :class="inputClass"
-            :value="priority"
-            @change="priority = asPriority(($event.target as HTMLSelectElement).value)"
+          <SelectPicker
+            :model-value="stage || null"
+            name="stage"
+            :is-disabled="!canEdit || save.pending.value"
+            @update:model-value="(key) => (stage = key ?? '')"
           >
-            <option v-for="item in TrackingPriorityValues" :key="item" :value="item">
-              {{ EventsLabels.priority(item, locale) }}
-            </option>
-          </select>
-        </label>
+            <SelectPickerTrigger v-bind="{ 'aria-label': eventsText('stage', locale) }" data-test="tracking-stage">
+              <SelectPickerValue />
+            </SelectPickerTrigger>
+            <SelectPickerContent>
+              <SelectPickerItem
+                v-for="item in stages"
+                :key="item.key"
+                :item-key="item.key"
+                :label="EventsLabels.stage(item.key, stages, locale)"
+              />
+            </SelectPickerContent>
+          </SelectPicker>
+        </div>
+        <div class="flex flex-col gap-1 text-sm">
+          <span class="font-medium">{{ eventsText('priority', locale) }}</span>
+          <SelectPicker
+            :model-value="priority"
+            name="priority"
+            :is-disabled="!canEdit || save.pending.value"
+            @update:model-value="(key) => key && (priority = key)"
+          >
+            <SelectPickerTrigger
+              v-bind="{ 'aria-label': eventsText('priority', locale) }"
+              data-test="tracking-priority"
+            >
+              <SelectPickerValue />
+            </SelectPickerTrigger>
+            <SelectPickerContent>
+              <SelectPickerItem
+                v-for="item in TrackingPriorityValues"
+                :key="item"
+                :item-key="item"
+                :label="EventsLabels.priority(item, locale)"
+              />
+            </SelectPickerContent>
+          </SelectPicker>
+        </div>
       </fieldset>
       <label class="flex flex-col gap-1 text-sm">
         <span class="font-medium">{{ eventsText('notes', locale) }}</span>

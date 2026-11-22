@@ -2,6 +2,13 @@
 import { Button } from '@wow-two-beta/fe/presentation/actions';
 import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
 import { SkeletonState } from '@wow-two-beta/fe/presentation/feedback';
+import {
+  SelectPicker,
+  SelectPickerContent,
+  SelectPickerItem,
+  SelectPickerTrigger,
+  SelectPickerValue,
+} from '@wow-two-beta/fe/presentation/forms';
 import { onMounted, onScopeDispose, shallowRef, watch } from 'vue';
 import {
   EventReviewStateValues,
@@ -113,7 +120,6 @@ watch([review, text, () => props.catalog, () => props.client], () => {
 onMounted(() => load());
 onScopeDispose(() => clearTimeout(timer));
 
-const asReview = (value: string) => value as EventReviewState | '';
 const reviewVariant = (state: EventReviewState) =>
   state === 'published'
     ? BadgeVariant.Success
@@ -139,20 +145,27 @@ const reviewVariant = (state: EventReviewState) =>
             autocomplete="off"
           />
         </label>
-        <label class="flex flex-col gap-1 text-sm">
+        <div class="flex flex-col gap-1 text-sm">
           <span class="text-muted-foreground">{{ eventsText('reviewState', locale) }}</span>
-          <select
-            name="review"
-            class="rounded-md border border-border bg-background px-3 py-2 text-sm"
-            :value="review"
-            @change="review = asReview(($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">{{ eventsText('allStates', locale) }}</option>
-            <option v-for="item in EventReviewStateValues" :key="item" :value="item">
-              {{ EventsLabels.review(item, locale) }}
-            </option>
-          </select>
-        </label>
+          <SelectPicker :model-value="review" name="review" @update:model-value="(key) => (review = key ?? '')">
+            <SelectPickerTrigger
+              width="11rem"
+              v-bind="{ 'aria-label': eventsText('reviewState', locale) }"
+              data-test="events-review"
+            >
+              <SelectPickerValue />
+            </SelectPickerTrigger>
+            <SelectPickerContent>
+              <SelectPickerItem item-key="" :label="eventsText('allStates', locale)" />
+              <SelectPickerItem
+                v-for="item in EventReviewStateValues"
+                :key="item"
+                :item-key="item"
+                :label="EventsLabels.review(item, locale)"
+              />
+            </SelectPickerContent>
+          </SelectPicker>
+        </div>
       </div>
     </div>
     <FailureNotice v-if="archiveFailure" :failure="archiveFailure" :locale="locale" context="review" />

@@ -3,6 +3,13 @@ import { useConfirmation } from '@wow-two-beta/fe/foundation/hooks';
 import { Button } from '@wow-two-beta/fe/presentation/actions';
 import { Badge, BadgeVariant } from '@wow-two-beta/fe/presentation/display';
 import {
+  SelectPicker,
+  SelectPickerContent,
+  SelectPickerItem,
+  SelectPickerTrigger,
+  SelectPickerValue,
+} from '@wow-two-beta/fe/presentation/forms';
+import {
   AlertModal,
   AlertModalAction,
   AlertModalCancel,
@@ -260,7 +267,7 @@ const channelKey = (channel: string): EventsMessageKey | null =>
       : null;
 const languageName: Readonly<Record<string, string>> = { 'uz-Latn': 'O‘zbekcha', ru: 'Русский', en: 'English' };
 const checked = (event: Event) => (event.target as HTMLInputElement).checked;
-const valueOf = (event: Event) => (event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
+const valueOf = (event: Event) => (event.target as HTMLInputElement | HTMLTextAreaElement).value;
 
 onMounted(() => {
   void reload();
@@ -299,14 +306,30 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
             @input="set('name', valueOf($event))"
           />
         </label>
-        <label v-if="showChannels" class="flex flex-col gap-1 text-sm">
+        <div v-if="showChannels" class="flex flex-col gap-1 text-sm">
           <span class="font-medium">{{ eventsText('digestChannel', locale) }}</span>
-          <select :class="inputClass" name="channel" :value="draft.channel" @change="set('channel', valueOf($event))">
-            <option v-for="channel in channels" :key="channel" :value="channel">
-              {{ channelKey(channel) ? eventsText(channelKey(channel)!, locale) : channel }}
-            </option>
-          </select>
-        </label>
+          <SelectPicker
+            :model-value="draft.channel"
+            name="channel"
+            :is-disabled="busy"
+            @update:model-value="(key) => key && set('channel', key)"
+          >
+            <SelectPickerTrigger
+              v-bind="{ 'aria-label': eventsText('digestChannel', locale) }"
+              data-test="digest-channel"
+            >
+              <SelectPickerValue />
+            </SelectPickerTrigger>
+            <SelectPickerContent>
+              <SelectPickerItem
+                v-for="channel in channels"
+                :key="channel"
+                :item-key="channel"
+                :label="channelKey(channel) ? eventsText(channelKey(channel)!, locale) : channel"
+              />
+            </SelectPickerContent>
+          </SelectPicker>
+        </div>
         <label :class="eventCheckRowClass">
           <input
             type="checkbox"
@@ -490,19 +513,30 @@ watch([() => props.client, () => props.workflow], loadWorkflow);
           ></textarea>
           <span class="text-xs text-muted-foreground">{{ eventsText('digestRecipientsHint', locale) }}</span>
         </label>
-        <label class="flex flex-col gap-1 text-sm">
+        <div class="flex flex-col gap-1 text-sm">
           <span class="text-muted-foreground">{{ eventsText('digestLanguage', locale) }}</span>
-          <select
-            :class="inputClass"
+          <SelectPicker
+            :model-value="draft.language"
             name="language"
-            :value="draft.language"
-            @change="set('language', valueOf($event) as DigestDraft['language'])"
+            :is-disabled="busy"
+            @update:model-value="(key) => key && set('language', key)"
           >
-            <option v-for="language in DigestLanguageValues" :key="language" :value="language">
-              {{ languageName[language] }}
-            </option>
-          </select>
-        </label>
+            <SelectPickerTrigger
+              v-bind="{ 'aria-label': eventsText('digestLanguage', locale) }"
+              data-test="digest-language"
+            >
+              <SelectPickerValue />
+            </SelectPickerTrigger>
+            <SelectPickerContent>
+              <SelectPickerItem
+                v-for="language in DigestLanguageValues"
+                :key="language"
+                :item-key="language"
+                :label="languageName[language] ?? language"
+              />
+            </SelectPickerContent>
+          </SelectPicker>
+        </div>
         <label class="flex flex-col gap-1 text-sm">
           <span class="text-muted-foreground">{{ eventsText('digestItemCap', locale) }}</span>
           <input

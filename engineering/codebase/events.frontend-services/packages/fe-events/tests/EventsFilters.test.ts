@@ -18,6 +18,7 @@ import {
 } from '../src/kit';
 import { envelope, eventModel, facetCount, facetsModel, fakeService, stubIntersectionObserver } from './Fixtures';
 import { filterBar, Host } from './FeedPage';
+import { pick } from './Picker';
 
 const wrappers: ReturnType<typeof mount>[] = [];
 afterEach(() => {
@@ -156,7 +157,7 @@ describe('shared filter state (T11)', () => {
     const { wrapper, requests, filters, feed } = await mountPage(router());
 
     const actions = feed.get('[data-test="events-actions"]');
-    expect(actions.find('select[name="sort"]').exists()).toBe(true);
+    expect(actions.find('[data-test="feed-sort"]').exists()).toBe(true);
     expect(actions.findAll('button').some((button) => button.text() === 'Propose an event')).toBe(true);
     expect(lastParams(listRequests(requests)).getAll('excludeStages')).toEqual(['skipped', 'rejected']);
 
@@ -174,7 +175,7 @@ describe('shared filter state (T11)', () => {
     expect(params.has('excludeStages')).toBe(false);
     expect(filters.filtered.value).toBe(true);
 
-    await feed.get('select[name="sort"]').setValue('added');
+    await pick(feed.get('[data-test="feed-sort"]').element, 'Recently added');
     await flushPromises();
 
     expect(filters.sort.value).toBe('added');
@@ -206,7 +207,7 @@ describe('shared filter state (T11)', () => {
 
     const row = document.querySelector('#card-actions [data-test="events-actions"]');
     expect(row).not.toBeNull();
-    expect(row!.querySelector('select[name="sort"]')).not.toBeNull();
+    expect(row!.querySelector('[data-test="feed-sort"]')).not.toBeNull();
     expect(
       [...row!.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Propose an event'),
     ).toBe(true);

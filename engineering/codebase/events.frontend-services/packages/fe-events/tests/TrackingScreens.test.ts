@@ -13,6 +13,7 @@ import {
   TrackingForm,
 } from '../src/kit';
 import { envelope, eventModel, fakeService } from './Fixtures';
+import { openPicker, panelLabels, pick, pickOption, submitted } from './Picker';
 import { columnsAt, desktop, heightAt, maxWidthAt, phone, utilitiesAt } from './Viewport';
 
 const wrappers: ReturnType<typeof mount>[] = [];
@@ -125,6 +126,69 @@ describe('tracking form (PG15)', () => {
     const body = await requests.find((request) => request.method === 'PUT')!.json();
     expect(body.fields).toEqual({ cost: '600 USD', sourceUrl: 'https://legacy.example.test/1', internal: 'keep' });
     expect(body.expectedRevision).toBe(3);
+  });
+});
+
+describe('tracking form pickers (fe sdk SelectPicker)', () => {
+  async function render(props: Record<string, unknown> = {}) {
+    const service = fakeService(router());
+    const wrapper = mount(TrackingForm, {
+      props: { client: service.client, catalog: 'ocharo', eventId: 'e1', ...props },
+    });
+    wrappers.push(wrapper);
+    await flushPromises();
+    return { ...service, wrapper };
+  }
+  const stage = (wrapper: Awaited<ReturnType<typeof render>>['wrapper']) => wrapper.get('[data-test="tracking-stage"]');
+  const priority = (wrapper: Awaited<ReturnType<typeof render>>['wrapper']) =>
+    wrapper.get('[data-test="tracking-priority"]');
+
+  it('opens the stage and the priority as the sdk panel, with no native select anywhere', async () => {
+    const { wrapper } = await render();
+
+    expect(wrapper.element.querySelectorAll('select')).toHaveLength(0);
+    expect(stage(wrapper).text()).toContain('Candidate');
+    expect(priority(wrapper).text()).toContain('Normal');
+
+    await openPicker(stage(wrapper).element);
+    expect(document.querySelector('[role="dialog"] [role="listbox"]')).not.toBeNull();
+    expect(document.querySelectorAll('select')).toHaveLength(0);
+    expect(panelLabels()).toEqual(['Candidate', 'Shortlisted']);
+    await pickOption('Shortlisted');
+
+    await openPicker(priority(wrapper).element);
+    expect(panelLabels()).toEqual(['High', 'Normal', 'Low']);
+    await pickOption('Low');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('keeps the stage and the priority as their stored values and sends them on save', async () => {
+    const { wrapper, requests } = await render();
+
+    await pick(stage(wrapper).element, 'Shortlisted');
+    await pick(priority(wrapper).element, 'High');
+
+    expect(stage(wrapper).text()).toContain('Shortlisted');
+    expect(priority(wrapper).text()).toContain('High');
+    expect(submitted(wrapper.element, 'stage')).toBe('shortlisted');
+    expect(submitted(wrapper.element, 'priority')).toBe('high');
+    expect(wrapper.emitted('dirty')).toEqual([[true]]);
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    const body = await requests.find((request) => request.method === 'PUT')!.json();
+    expect(body).toMatchObject({ stage: 'shortlisted', priority: 'high', expectedRevision: 3 });
+  });
+
+  it('locks both pickers while the person may not edit', async () => {
+    const { wrapper } = await render({ canEdit: false });
+
+    for (const trigger of [stage(wrapper), priority(wrapper)]) {
+      expect((trigger.element as HTMLButtonElement).disabled).toBe(true);
+      await openPicker(trigger.element);
+      expect(panelLabels()).toEqual([]);
+    }
+    expect(stage(wrapper).text()).toContain('Candidate');
   });
 });
 
@@ -365,6 +429,91 @@ describe('event facts country (CountryPicker)', () => {
   });
 });
 
+describe('event facts pickers (fe sdk SelectPicker)', () => {
+  const kinds = [
+    { key: 'runway', label: { en: 'Runway show' } },
+    { key: 'expo', label: { en: 'Expo' } },
+  ];
+  const facts = async () => {
+    const wrapper = mount(EventFactsFields, {
+      props: { modelValue: eventFactsDraft(undefined, 'en'), kinds, withStatus: true },
+    });
+    wrappers.push(wrapper);
+    await flushPromises();
+    return wrapper;
+  };
+  const lastDraft = (wrapper: Awaited<ReturnType<typeof facts>>) => wrapper.emitted('update:modelValue')!.at(-1)![0];
+
+  it('opens the kind, the status and both dates’ parts as the sdk panel, with no native select', async () => {
+    const wrapper = await facts();
+
+    expect(wrapper.element.querySelectorAll('select')).toHaveLength(0);
+    for (const hook of ['facts-kind', 'facts-status', 'starts-precision', 'starts-certainty', 'ends-precision']) {
+      await openPicker(wrapper.get(`[data-test="${hook}"]`).element);
+      expect(document.querySelector('[role="dialog"] [role="listbox"]'), hook).not.toBeNull();
+      expect(document.querySelectorAll('select'), hook).toHaveLength(0);
+      await pickOption(panelLabels().at(-1)!);
+    }
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('lists each choice in order and keeps the picked value as the draft stores it', async () => {
+    const wrapper = await facts();
+    const hook = (name: string) => wrapper.get(`[data-test="${name}"]`).element;
+
+    await openPicker(hook('facts-kind'));
+    expect(panelLabels()).toEqual(['—', 'Runway show', 'Expo']);
+    await pickOption('Expo');
+    expect(lastDraft(wrapper)).toMatchObject({ kind: 'expo' });
+
+    await openPicker(hook('facts-status'));
+    expect(panelLabels()).toEqual(['Scheduled', 'Postponed', 'Rescheduled', 'Cancelled', 'Moved online']);
+    await pickOption('Cancelled');
+    expect(lastDraft(wrapper)).toMatchObject({ status: 'cancelled' });
+
+    await pick(hook('starts-precision'), 'Day');
+    expect(lastDraft(wrapper)).toMatchObject({ starts: { precision: 'day' } });
+    await pick(hook('starts-certainty'), 'Confirmed');
+    expect(lastDraft(wrapper)).toMatchObject({ starts: { certainty: 'confirmed' } });
+    await pick(hook('ends-precision'), 'Year');
+    expect(lastDraft(wrapper)).toMatchObject({ ends: { precision: 'year' } });
+    // The picked keys are what a native form would submit: strings, as the draft keeps them.
+    expect(wrapper.get('[data-test="facts-kind"]').text()).toContain('Expo');
+    expect(submitted(wrapper.element, 'kind')).toBe('expo');
+    expect(submitted(wrapper.element, 'status')).toBe('cancelled');
+    expect(submitted(wrapper.element, 'starts-precision')).toBe('day');
+    expect(submitted(wrapper.element, 'starts-certainty')).toBe('confirmed');
+    expect(submitted(wrapper.element, 'ends-precision')).toBe('year');
+  });
+
+  it('labels the dates’ parts in the picker’s own language and leaves the kind clearable through its dash', async () => {
+    const withKind = mount(EventFactsFields, {
+      props: { modelValue: { ...eventFactsDraft(undefined, 'ru'), kind: 'runway' }, kinds, locale: 'ru' },
+    });
+    wrappers.push(withKind);
+    await flushPromises();
+
+    expect(withKind.get('[data-test="facts-kind"]').text()).toContain('Runway show');
+    expect(withKind.get('[data-test="starts-precision"]').text()).toContain('Не объявлено');
+    await pick(withKind.get('[data-test="facts-kind"]').element, '—');
+    expect(withKind.emitted('update:modelValue')!.at(-1)![0]).toMatchObject({ kind: '' });
+  });
+
+  it('locks every picker while the form is disabled', async () => {
+    const wrapper = mount(EventFactsFields, {
+      props: { modelValue: eventFactsDraft(undefined, 'en'), kinds, withStatus: true, disabled: true },
+    });
+    wrappers.push(wrapper);
+
+    for (const hook of ['facts-kind', 'facts-status', 'starts-precision', 'starts-certainty']) {
+      const trigger = wrapper.get(`[data-test="${hook}"]`);
+      expect((trigger.element as HTMLButtonElement).disabled, hook).toBe(true);
+      await openPicker(trigger.element);
+      expect(panelLabels(), hook).toEqual([]);
+    }
+  });
+});
+
 /** The event page at the two widths of the dev review (390 px and 1440 px): rows 19 to 23 of the Events app review. */
 describe('event detail on a phone and a desktop (events review #19-#23)', () => {
   const photo = { url: 'https://cdn.example.test/hall.jpg', fileRef: 'f-hall', attribution: 'Credit' };
@@ -531,7 +680,7 @@ describe('proposal form on a phone and a desktop (events review #30, #31)', () =
     expect(starts.attributes('placeholder')).toBe('Pick a precision first');
     expect(wrapper.get('input[name="ends-value"]').attributes('placeholder')).toBe('Pick a precision first');
 
-    await wrapper.get('select[name="starts-precision"]').setValue('day');
+    await pick(wrapper.get('[data-test="starts-precision"]').element, 'Day');
     expect(wrapper.get<HTMLInputElement>('input[name="starts-value"]').element.disabled).toBe(false);
     expect(wrapper.get('input[name="starts-value"]').attributes('placeholder')).toBe('2026-03-14');
   });
@@ -544,7 +693,7 @@ describe('proposal form on a phone and a desktop (events review #30, #31)', () =
     wrappers.push(beside);
 
     const rowOf = (wrapper: ReturnType<typeof mount>) =>
-      wrapper.get('select[name="kind"]').element.closest('div.grid')!;
+      wrapper.get('[data-test="facts-kind"]').element.closest('div.grid')!;
     expect(columnsAt(rowOf(alone), desktop)).toBe(1);
     expect(columnsAt(rowOf(alone), phone)).toBe(1);
     expect(columnsAt(rowOf(beside), desktop)).toBe(2);
@@ -553,12 +702,15 @@ describe('proposal form on a phone and a desktop (events review #30, #31)', () =
 
   it('#31: every field is at least 40 px high on a phone, native ones and the fe sdk’s alike', () => {
     const wrapper = open();
-    const fields = wrapper.findAll('input, select').filter((field) => field.attributes('type') !== 'hidden');
+    const fields = wrapper
+      .findAll('input, button[role="combobox"]')
+      .filter((field) => field.attributes('type') !== 'hidden');
 
-    expect(fields.map((field) => field.attributes('name'))).toEqual(
+    // A picker's trigger has no name: its hook stands in for it.
+    expect(fields.map((field) => field.attributes('name') ?? field.attributes('data-test'))).toEqual(
       expect.arrayContaining([
         'title',
-        'kind',
+        'facts-kind',
         'starts-precision',
         'starts-value',
         'starts-certainty',
@@ -572,7 +724,10 @@ describe('proposal form on a phone and a desktop (events review #30, #31)', () =
       ]),
     );
     for (const field of fields) {
-      expect(heightAt(field.element, phone), field.attributes('name')).toBeGreaterThanOrEqual(40);
+      expect(
+        heightAt(field.element, phone),
+        field.attributes('name') ?? field.attributes('data-test'),
+      ).toBeGreaterThanOrEqual(40);
     }
   });
 });

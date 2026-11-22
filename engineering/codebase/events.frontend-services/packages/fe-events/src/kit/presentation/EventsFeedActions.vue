@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Button } from '@wow-two-beta/fe/presentation/actions';
-import { DateRangePicker } from '@wow-two-beta/fe/presentation/forms';
+import {
+  DateRangePicker,
+  SelectPicker,
+  SelectPickerContent,
+  SelectPickerItem,
+  SelectPickerTrigger,
+  SelectPickerValue,
+} from '@wow-two-beta/fe/presentation/forms';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, MenuItem } from '@wow-two-beta/fe/presentation/nav';
 import type { TrackingSort } from '../../contracts';
 import type { EventsLocale } from '../text/EventsLocale';
@@ -40,6 +47,11 @@ const sortOptions: readonly { value: TrackingSort; key: EventsMessageKey }[] = [
   { value: 'added', key: 'sortAdded' },
   { value: 'deadline', key: 'sortDeadline' },
 ];
+
+/** Takes the picked sort; the picker offers no clear, so a null key is no pick. */
+function pickSort(key: TrackingSort | null) {
+  if (key) sort.value = key;
+}
 </script>
 
 <template>
@@ -49,14 +61,25 @@ const sortOptions: readonly { value: TrackingSort; key: EventsMessageKey }[] = [
     data-test="custom-range"
     @update:model-value="(range) => emit('range', range)"
   />
-  <label v-if="tracking" class="flex items-center max-sm:min-w-40 max-sm:grow">
-    <span class="sr-only">{{ eventsText('sort', locale) }}</span>
-    <select v-model="sort" name="sort" :class="feedSortClass">
-      <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-        {{ eventsText(option.key, locale) }}
-      </option>
-    </select>
-  </label>
+  <div v-if="tracking" class="max-sm:min-w-40 max-sm:grow sm:w-52">
+    <SelectPicker :model-value="sort" name="sort" @update:model-value="pickSort">
+      <SelectPickerTrigger
+        :class="feedSortClass"
+        v-bind="{ 'aria-label': eventsText('sort', locale) }"
+        data-test="feed-sort"
+      >
+        <SelectPickerValue />
+      </SelectPickerTrigger>
+      <SelectPickerContent>
+        <SelectPickerItem
+          v-for="option in sortOptions"
+          :key="option.value"
+          :item-key="option.value"
+          :label="eventsText(option.key, locale)"
+        />
+      </SelectPickerContent>
+    </SelectPicker>
+  </div>
   <Button v-if="proposable" size="md" variant="outline" class="max-sm:grow" @click="emit('propose')">
     {{ eventsText('proposeEvent', locale) }}
   </Button>

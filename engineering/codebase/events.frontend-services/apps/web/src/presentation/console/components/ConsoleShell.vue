@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Button } from '@wow-two-beta/fe/presentation/actions';
 import { Badge } from '@wow-two-beta/fe/presentation/display';
+import {
+  SelectPicker,
+  SelectPickerContent,
+  SelectPickerItem,
+  SelectPickerTrigger,
+  SelectPickerValue,
+} from '@wow-two-beta/fe/presentation/forms';
 import { EventsLocaleValues, FailureNotice, type EventsLocale } from '@wow-two-beta/fe-events/kit';
 import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
@@ -39,8 +46,8 @@ const links = computed(() =>
   })),
 );
 const text = (key: ConsoleMessageKey, params?: Record<string, string>) => consoleText(key, locale.value, params);
-function setLocale(value: string) {
-  locale.value = value as EventsLocale;
+function setLocale(value: EventsLocale | null) {
+  if (value) locale.value = value;
 }
 </script>
 
@@ -62,28 +69,44 @@ function setLocale(value: string) {
           </RouterLink>
         </nav>
         <div class="ml-auto flex flex-wrap items-center gap-3 text-sm">
-          <label v-if="app.catalogs.value?.length" class="flex items-center gap-2">
+          <div v-if="app.catalogs.value?.length" class="flex items-center gap-2">
             <span class="text-muted-foreground">{{ text('catalog') }}</span>
-            <select
+            <SelectPicker
+              :model-value="app.catalog.value?.slug ?? null"
               name="catalog"
-              class="rounded-md border border-border bg-background px-2 py-1"
-              :value="app.catalog.value?.slug"
-              @change="app.selectCatalog(($event.target as HTMLSelectElement).value)"
+              @update:model-value="(slug) => slug && app.selectCatalog(slug)"
             >
-              <option v-for="item in app.catalogs.value" :key="item.slug" :value="item.slug">{{ item.name }}</option>
-            </select>
-          </label>
-          <label class="flex items-center gap-2">
-            <span class="sr-only">{{ text('language') }}</span>
-            <select
-              name="locale"
-              class="rounded-md border border-border bg-background px-2 py-1"
-              :value="locale"
-              @change="setLocale(($event.target as HTMLSelectElement).value)"
+              <SelectPickerTrigger
+                size="sm"
+                width="14rem"
+                v-bind="{ 'aria-label': text('catalog') }"
+                data-test="console-catalog"
+              >
+                <SelectPickerValue />
+              </SelectPickerTrigger>
+              <SelectPickerContent>
+                <SelectPickerItem
+                  v-for="item in app.catalogs.value"
+                  :key="item.slug"
+                  :item-key="item.slug"
+                  :label="item.name"
+                />
+              </SelectPickerContent>
+            </SelectPicker>
+          </div>
+          <SelectPicker :model-value="locale" name="locale" @update:model-value="setLocale">
+            <SelectPickerTrigger
+              size="sm"
+              width="5rem"
+              v-bind="{ 'aria-label': text('language') }"
+              data-test="console-locale"
             >
-              <option v-for="item in EventsLocaleValues" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </label>
+              <SelectPickerValue />
+            </SelectPickerTrigger>
+            <SelectPickerContent>
+              <SelectPickerItem v-for="item in EventsLocaleValues" :key="item" :item-key="item" :label="item" />
+            </SelectPickerContent>
+          </SelectPicker>
           <template v-if="session">
             <span aria-label="Signed in" data-test="session">
               <span class="font-medium">{{ personLabel(session.person) }}</span>

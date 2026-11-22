@@ -18,6 +18,7 @@ import {
 } from '../src/kit';
 import { envelope, eventModel, facetCount, facetsModel, stubIntersectionObserver } from './Fixtures';
 import { mountFeed } from './FeedPage';
+import { openPicker, panelLabels, pick, pickOption, submitted } from './Picker';
 import { desktop, heightAt, phone, utilitiesAt } from './Viewport';
 
 const wrappers: ReturnType<typeof mount>[] = [];
@@ -307,6 +308,30 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
     expect(view.watching()).toBe(0);
   });
 
+  it('opens the sort as the sdk panel, as a pill, with no native select, and keeps the picked key', async () => {
+    const { wrapper, filters } = await render(ocharo, router());
+    const trigger = wrapper.get('[data-test="feed-sort"]');
+
+    expect(wrapper.element.querySelectorAll('select')).toHaveLength(0);
+    expect(trigger.attributes('aria-label')).toBe('Sort');
+    expect(trigger.classes()).toEqual(expect.arrayContaining(['h-10', 'rounded-full']));
+    expect(trigger.classes()).not.toContain('rounded-md');
+    expect(trigger.text()).toBe('Start date');
+    expect(submitted(wrapper.element, 'sort')).toBe('starts');
+
+    await openPicker(trigger.element);
+    const layer = document.querySelector('[role="dialog"]');
+    expect(layer?.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(wrapper.element.contains(layer)).toBe(false);
+    expect(document.querySelectorAll('select')).toHaveLength(0);
+    expect(layer?.querySelector('[role="option"][aria-selected="true"]')?.textContent?.trim()).toBe('Start date');
+    await pickOption('Nearest deadline');
+
+    expect(trigger.text()).toBe('Nearest deadline');
+    expect(submitted(wrapper.element, 'sort')).toBe('deadline');
+    expect(filters.sort.value).toBe('deadline');
+  });
+
   it('sends the sort with the list, starts the cursor over and drops the month dividers outside `starts`', async () => {
     const view = stubIntersectionObserver();
     const { wrapper, requests } = await render(
@@ -322,14 +347,11 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
     expect(lastParams(listRequests(requests)).get('cursor')).toBe('c2');
     const before = listRequests(requests).length;
 
-    await wrapper.get('select[name="sort"]').setValue('added');
+    await openPicker(wrapper.get('[data-test="feed-sort"]').element);
+    expect(panelLabels()).toEqual(['Start date', 'Recently added', 'Nearest deadline']);
+    await pickOption('Recently added');
     await flushPromises();
 
-    expect(wrapper.findAll('select[name="sort"] option').map((option) => option.text())).toEqual([
-      'Start date',
-      'Recently added',
-      'Nearest deadline',
-    ]);
     expect(listRequests(requests)).toHaveLength(before + 1);
     expect(lastParams(listRequests(requests)).get('sort')).toBe('added');
     expect(lastParams(listRequests(requests)).get('cursor')).toBeNull();
@@ -340,7 +362,7 @@ describe('tracking feed (PG01, PG02, PG03, PG05, PG06, PG11)', () => {
       'Fashion Week',
     ]);
 
-    await wrapper.get('select[name="sort"]').setValue('starts');
+    await pick(wrapper.get('[data-test="feed-sort"]').element, 'Start date');
     await flushPromises();
     expect(wrapper.findAll('[data-test="event-group"] > h3')).toHaveLength(2);
   });
@@ -685,7 +707,7 @@ describe('feed actions on a phone and a desktop (events review #12, #13, #15, #1
     wrapper.findAll('button').find((button) => button.text() === 'Propose an event')!;
   const proposalForm = (wrapper: Mounted) => wrapper.find('section[aria-label="Propose an event"]');
   const overflow = (wrapper: Mounted) => wrapper.get('[data-test="feed-overflow"]');
-  const sort = (wrapper: Mounted) => wrapper.get('select[name="sort"]');
+  const sort = (wrapper: Mounted) => wrapper.get('[data-test="feed-sort"]');
   const attentionPill = (wrapper: Mounted) => wrapper.get('[data-pill="past"]');
 
   it('#12: every control of the actions row and the attention pill is at least 40 px high on a phone', async () => {
@@ -735,7 +757,8 @@ describe('feed actions on a phone and a desktop (events review #12, #13, #15, #1
   it('#15: on a phone the sort and Propose an event grow to close their row, and the overflow button does not', async () => {
     const wrapper = await attached();
 
-    for (const control of [sort(wrapper).element.parentElement!, propose(wrapper).element]) {
+    // The sort's trigger sits in its own box, which is what grows.
+    for (const control of [sort(wrapper).element.closest('div')!, propose(wrapper).element]) {
       expect(utilitiesAt(control, phone)).toContain('grow');
       expect(utilitiesAt(control, desktop)).not.toContain('grow');
     }
