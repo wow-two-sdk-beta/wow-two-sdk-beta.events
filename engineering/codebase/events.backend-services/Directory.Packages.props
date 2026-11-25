@@ -8,7 +8,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <!-- The core pin; it is also each package's nuspec floor on WoW2.Sdk.Beta.Be and the kernel. -->
-    <BackendSdkVersion>10.0.112-beta</BackendSdkVersion>
+    <BackendSdkVersion>11.0.1-beta</BackendSdkVersion>
   </PropertyGroup>
 
   <!-- be sdk: one family, bumped together. The kernel (Result, AppError, IEvent) is the only package the contract takes. -->
@@ -22,10 +22,10 @@
   <!-- Identity, one way: the service and the tests take its consumer packages; the module takes its contract only (app
        notices for the Telegram digest channel, organization members for role recipients); the other packages read the kernel principal only. Bumped together. -->
   <ItemGroup>
-    <PackageVersion Include="WoW2.Sdk.Beta.Be.Identity.Abstractions" Version="10.0.32-beta" />
-    <PackageVersion Include="WoW2.Sdk.Beta.Be.Identity.Auth" Version="10.0.32-beta" />
-    <PackageVersion Include="WoW2.Sdk.Beta.Be.Identity.Client" Version="10.0.32-beta" />
-    <PackageVersion Include="WoW2.Sdk.Beta.Be.Identity.Testing" Version="10.0.32-beta" />
+    <PackageVersion Include="WoW2.Sdk.Beta.Be.Identity.Abstractions" Version="11.0.0-beta" />
+    <PackageVersion Include="WoW2.Sdk.Beta.Be.Identity.Auth" Version="11.0.0-beta" />
+    <PackageVersion Include="WoW2.Sdk.Beta.Be.Identity.Client" Version="11.0.0-beta" />
+    <PackageVersion Include="WoW2.Sdk.Beta.Be.Identity.Testing" Version="11.0.0-beta" />
   </ItemGroup>
 
   <!-- Tests. -->
